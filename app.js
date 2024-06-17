@@ -125,39 +125,6 @@ class Page {
 	height = window.innerHeight;
 }
 
-function getFaces(geometry) {
-    const positionAttribute = geometry.getAttribute('position');
-    const indexAttribute = geometry.getIndex();
-    const faces = [];
-
-    if (indexAttribute) {
-        // Indexed geometry
-        for (let i = 0; i < indexAttribute.count; i += 3) {
-            const a = indexAttribute.getX(i);
-            const b = indexAttribute.getX(i + 1);
-            const c = indexAttribute.getX(i + 2);
-
-            const vA = new THREE.Vector3().fromBufferAttribute(positionAttribute, a);
-            const vB = new THREE.Vector3().fromBufferAttribute(positionAttribute, b);
-            const vC = new THREE.Vector3().fromBufferAttribute(positionAttribute, c);
-
-            faces.push([vA, vB, vC]);
-        }
-    } else {
-        // Non-indexed geometry
-        for (let i = 0; i < positionAttribute.count; i += 3) {
-            const vA = new THREE.Vector3().fromBufferAttribute(positionAttribute, i);
-            const vB = new THREE.Vector3().fromBufferAttribute(positionAttribute, i + 1);
-            const vC = new THREE.Vector3().fromBufferAttribute(positionAttribute, i + 2);
-
-            faces.push([vA, vB, vC]);
-        }
-    }
-
-    return { faces, positionAttribute, indexAttribute };
-}
-
-
 let page = new Page();
 let devgrid = {};
 
@@ -218,7 +185,7 @@ class Creator {
 
 	    mesh.receiveShadow = true;
 	    mesh.castShadow = true;
-	    mesh.name = "touchable::box::" + JSON.stringify(vertices);
+	    mesh.name = "touchable::polygon::" + JSON.stringify(vertices);
 
 		// const itemBoundingBox = new THREE.Box3().setFromObject(mesh);
 
@@ -228,47 +195,6 @@ class Creator {
 		// // Add the BoxHelper to the scene
 		// scene.add(boxHelper);
 
-
-	    const { faces, positionAttribute } = getFaces(geometry)
-
-		// Create Thin Boxes for Each Face
-		faces.forEach(faceVertex => {
-
-		    const faceVertices = faceVertex.map(index => new THREE.Vector3().fromBufferAttribute(positionAttribute, index));
-		    const boxSize = 0.1;
-		    const boxGeometry = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
-
-		    // Compute face center
-		    const center = new THREE.Vector3();
-		    faceVertices.forEach(v => center.add(v));
-		    center.divideScalar(faceVertices.length);
-
-		    // Compute face normal
-		    const normal = new THREE.Vector3();
-		    const cb = new THREE.Vector3();
-		    const ab = new THREE.Vector3();
-		    cb.subVectors(faceVertices[2], faceVertices[1]);
-		    ab.subVectors(faceVertices[0], faceVertices[1]);
-		    cb.cross(ab).normalize();
-
-			const boundingPolygonVertices = faceVertices.map(v => new THREE.Vector3(v.x, v.y, v.z));
-
-			// Create a geometry for the bounding polygon
-			const boundingPolygonGeometry = new THREE.BufferGeometry().setFromPoints(boundingPolygonVertices);
-
-			// Close the polygon by adding the first vertex to the end
-			boundingPolygonVertices.push(boundingPolygonVertices[0]);
-
-			// Create a material for the bounding polygon
-			const boundingPolygonMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
-
-			// Create the bounding polygon
-			const boundingPolygon = new THREE.LineLoop(boundingPolygonGeometry, boundingPolygonMaterial);
-			boundingPolygon.name = "touchable::polygon::" + JSON.stringify(faceVertices);
-
-			// Add the bounding polygon to the scene
-			scene.add(boundingPolygon);
-		});
 
 	}
 
@@ -569,18 +495,21 @@ class Controller {
 	    
 	    var touchablePolygons = scene.children.filter(child => /^touchable::polygon/.test(child.name));
 
-	    if (!display.devGridDots && touchablePolygons.length) console.log(`${touchablePolygons.length} touchable polygons`);
 
 	    for (var i = 0; i < touchablePolygons.length; i++) {
-	    	if (display.devGridDots == false) debugger
-	    	var { faces, positionAttribute } = getFaces(touchablePolygons[i].geometry);
-	    	if (Math.random() < 0.0001) { console.log('faces', faces); }
-	    	for (var j = 0; j < faces.length; j++) {
-		    	var touches = undefined;
-		    	if (touches) {
-		    		console.log("touching ", faces[i])
+	    	var polygonV = touchablePolygons[i].geometry.attributes.position.array.map(n => Math.round(n * 100) / 100)
+	    	if (polygonV.length % 9 == 0) {
+	    		for (var j = 0; j < polygonV.length - 8; j += 9) {
+		    		var triangle = new THREE.Triangle(
+		    			new THREE.Vector3(polygonV[j], polygonV[j + 1], polygonV[j + 2]),
+		    			new THREE.Vector3(polygonV[j + 3], polygonV[j + 4], polygonV[j + 5]),
+		    			new THREE.Vector3(polygonV[j + 6], polygonV[j + 7], polygonV[j + 8])
+		    		);
+		    		if (cameraBoundingBox.intersectsTriangle(triangle)) {
+		    			console.log(i, j);
+		    		}
 		    	}
-		    }
+	    	}
 	    }
 	}
 
