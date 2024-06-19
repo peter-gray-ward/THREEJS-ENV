@@ -104,6 +104,7 @@ table {
 	outline: 1px solid teal;
 }
 
+
 #touched-objects .row {
 	outline: 1px solid red;
 }
@@ -117,10 +118,6 @@ table {
 	font-family: monospace;
 	word-wrap: anywhere;
 	outline: 1px solid maroon;
-}
-
-ul, li {
-	list-style: none;
 }
 
 

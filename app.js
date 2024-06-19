@@ -19,6 +19,14 @@ var axisLength = 100;
 var actives = [];
 
 
+// Function to calculate the normal of a triangle
+function calculateNormal(a, b, c) {
+    const edge1 = new THREE.Vector3().subVectors(b, a);
+    const edge2 = new THREE.Vector3().subVectors(c, a);
+    const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
+    return normal;
+}
+
 // Helper function to create a dotted axis line
 function createDottedAxis(color, start, end) {
     const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
@@ -405,6 +413,13 @@ class Creator {
 		    var triangleMesh = new THREE.Mesh(triangleGeometry, triangleMaterial);
 		    triangleMesh.castShadow = true;
 	    	triangleMesh.receiveShadow = true;
+	    	triangleMesh.triangle = new THREE.Triangle(
+	    		new THREE.Vector3(vertex1.x, vertex1.y, vertex1.z),
+	    		new THREE.Vector3(vertex2.x, vertex2.y, vertex2.z),
+	    		new THREE.Vector3(vertex3.x, vertex3.y, vertex3.z)
+	    	);
+	    	triangleMesh.triangle.normal = calculateNormal(triangleMesh.triangle.a, triangleMesh.triangle.b, triangleMesh.triangle.c)
+	    	triangleMesh.name = "touchable::triangle";
 		    scene.add(triangleMesh);
 
 		}
@@ -495,10 +510,10 @@ class Controller {
     a = false;
     s = false;
     d = false;
-    wS = 0.05;
-    aS = 0.05;
-    sS = 0.05;
-    dS = 0.05;
+    wS = 0.02;
+    aS = 0.02;
+    sS = 0.02;
+    dS = 0.02;
     space = false;
     ArrowUp = false;
     ArrowRight = false;
@@ -704,6 +719,7 @@ class Controller {
         }
     }
     touch() {
+    	user.touchedObjects = []
 
     	this.wS = 0.05;
 	    this.aS = 0.05;
@@ -722,7 +738,6 @@ class Controller {
 		} else if (display.camera.boxType == 'ediface-small') {
 			boxSize = new THREE.Vector3(1, 6, 3);
 		}
-		
 
 		// Create a bounding box around the camera
 		var cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(cameraPosition, boxSize);
@@ -752,28 +767,48 @@ class Controller {
 
 		}
 	    
-	    var touchablePlanes = scene.children.filter(child => /[^devdot]/.test(child.name));
+	    var touchablePlanes = scene.children.filter(child => /touchable/.test(child.name));
 
 
 	   	window.intersects = false
 	   	display.cyberpunkBoxMemory = false;
-		// Main loop
-		if (touchablePlanes.length) {
-			if (cameraBoundingBox.intersectsBox( new THREE.Box3().setFromBufferAttribute(touchablePlanes[0].geometry.attributes.position) )) {
-				
-				console.log(touchablePlanes[0].geometry.attributes.position, touchablePlanes[0].triangles);
 
-				for (var i = 0; i < touchablePlanes[0].triangles.length; i++) {
-					const triangle = touchablePlanes[0].triangles[i];
-    
-				    if (cameraBoundingBox.intersectsTriangle(triangle)) {
-				        display.cyberpunkBoxMemory = true;
+		// Assuming touchablePlanes is an array of objects with a 'triangle' property
+if (touchablePlanes.length) {
+	for (var k = 0; k < touchablePlanes.length; k++) {
+		var o = touchablePlanes[k];
 
+		if (o.triangle && cameraBoundingBox.intersectsTriangle(o.triangle)) {
+			user.touchedObjects.push(o);
+			display.cyberpunkBoxMemory = true;
+			setTimeout(function() { display.cyberpunkBoxMemory = false }, 300);
 
-				    }
+			// Find the intersection point using raycasting
+			const rays = [
+				new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(1, 0, 0)),
+				new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 1, 0)),
+				new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 0, 1)),
+				new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(-1, 0, 0)),
+				new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, -1, 0)),
+				new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, 0, -1))
+			];
+
+			for (let i = 0; i < rays.length; i++) {
+				const intersectionPoint = new THREE.Vector3();
+				const intersects = rays[i].intersectTriangle(o.triangle.a, o.triangle.b, o.triangle.c, false, intersectionPoint);
+				if (intersects) {
+					// Use the intersection point
+					// If the triangle is slanted less than 45 degrees, the user can walk on it
+					if (Math.abs(o.triangle.normal.y) > Math.cos(Math.PI / 4)) {
+						camera.position.y = intersectionPoint.y + 0.5
+					}
+					break; // Exit loop after the first intersection
 				}
 			}
 		}
+	}
+}
+
 
 	}
 
