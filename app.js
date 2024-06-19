@@ -18,74 +18,15 @@ var axisLength = 100;
 
 var actives = [];
 
-function Intersects(Camera, Triangle) {
-    var cameraMinX = Camera.position.x - 0.1;
-    var cameraMaxX = Camera.position.x + 0.1;
-    var cameraMinY = Camera.position.y - 0.25;
-    var cameraMaxY = Camera.position.y + 0.25;
-    var cameraMinZ = Camera.position.z - 0.01;
-    var cameraMaxZ = Camera.position.z + 0.01;
-
-    function isVertexInBox(vertex) {
-        return vertex.x >= cameraMinX && vertex.x <= cameraMaxX &&
-               vertex.y >= cameraMinY && vertex.y <= cameraMaxY &&
-               vertex.z >= cameraMinZ && vertex.z <= cameraMaxZ;
-    }
-
-    function isEdgeIntersectingBox(v1, v2, min, max) {
-        var tmin = (min - v1) / (v2 - v1);
-        var tmax = (max - v1) / (v2 - v1);
-
-        if (tmin > tmax) [tmin, tmax] = [tmax, tmin];
-
-        if (tmax < 0 || tmin > 1) return false;
-
-        return true;
-    }
-
-    function isTriangleIntersectingBox(vertices, min, max) {
-        for (var i = 0; i < 3; i++) {
-            for (var j = i + 1; j < 3; j++) {
-                if (isEdgeIntersectingBox(vertices[i].x, vertices[j].x, cameraMinX, cameraMaxX) &&
-                    isEdgeIntersectingBox(vertices[i].y, vertices[j].y, cameraMinY, cameraMaxY) &&
-                    isEdgeIntersectingBox(vertices[i].z, vertices[j].z, cameraMinZ, cameraMaxZ)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    // Check if any of the triangle's vertices are within the camera's bounding box
-    var triangleVertices = [Triangle.a, Triangle.b, Triangle.c];
-    for (var i = 0; i < triangleVertices.length; i++) {
-        if (isVertexInBox(triangleVertices[i])) {
-            return true;
-        }
-    }
-
-    // Check if any of the triangle's edges intersect the camera's bounding box
-    if (isTriangleIntersectingBox(triangleVertices, cameraMinX, cameraMaxX) ||
-        isTriangleIntersectingBox(triangleVertices, cameraMinY, cameraMaxY) ||
-        isTriangleIntersectingBox(triangleVertices, cameraMinZ, cameraMaxZ)) {
-        return true;
-    }
-
-    // You can add additional logic here to check if the triangle's plane intersects the bounding box
-
-    return false;
-}
-
-
 
 // Helper function to create a dotted axis line
 function createDottedAxis(color, start, end) {
     const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
     const material = new THREE.LineDashedMaterial({
         color: color,
-        dashSize: 2, // size of the dashes
-        gapSize: 0.5, // size of the gaps
-        linewidth: 5
+        dashSize: .1, // size of the dashes
+        gapSize: 0.05, // size of the gaps
+        linewidth: 1
     });
 
     const line = new THREE.Line(geometry, material);
@@ -93,19 +34,157 @@ function createDottedAxis(color, start, end) {
     scene.add(line);
 }
 
+function calculatePlane(triangle) {
+    const edge1 = new THREE.Vector3().subVectors(triangle.b, triangle.a);
+    const edge2 = new THREE.Vector3().subVectors(triangle.c, triangle.a);
+    const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
+    const d = -normal.dot(triangle.a);
+    return { normal, d };
+}
+
+function intersectLinePlane(p0, p1, plane) {
+    const lineDir = new THREE.Vector3().subVectors(p1, p0);
+    const t = -(plane.normal.dot(p0) + plane.d) / plane.normal.dot(lineDir);
+
+    if (t >= 0 && t <= 1) {
+        const intersection = new THREE.Vector3().addVectors(p0, lineDir.multiplyScalar(t));
+        return intersection;
+    }
+    return null;
+}
+
+function isPointInBoundingBox(point, min, max) {
+    return point.x >= min.x && point.x <= max.x &&
+           point.y >= min.y && point.y <= max.y &&
+           point.z >= min.z && point.z <= max.z;
+}
+
+function isPointInTriangle(point, triangle) {
+    const v0 = new THREE.Vector3().subVectors(triangle.c, triangle.a);
+    const v1 = new THREE.Vector3().subVectors(triangle.b, triangle.a);
+    const v2 = new THREE.Vector3().subVectors(point, triangle.a);
+
+    const dot00 = v0.dot(v0);
+    const dot01 = v0.dot(v1);
+    const dot02 = v0.dot(v2);
+    const dot11 = v1.dot(v1);
+    const dot12 = v1.dot(v2);
+
+    const invDenom = 1 / (dot00 * dot11 - dot01 * dot01);
+    const u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+    const v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+
+    return (u >= 0) && (v >= 0) && (u + v <= 1);
+}
+
+function getBoxEdges(min, max) {
+    const vertices = [
+        new THREE.Vector3(min.x, min.y, min.z),
+        new THREE.Vector3(min.x, min.y, max.z),
+        new THREE.Vector3(min.x, max.y, min.z),
+        new THREE.Vector3(min.x, max.y, max.z),
+        new THREE.Vector3(max.x, min.y, min.z),
+        new THREE.Vector3(max.x, min.y, max.z),
+        new THREE.Vector3(max.x, max.y, min.z),
+        new THREE.Vector3(max.x, max.y, max.z)
+    ];
+
+    return [
+        [vertices[0], vertices[1]], [vertices[0], vertices[2]], [vertices[0], vertices[4]],
+        [vertices[1], vertices[3]], [vertices[1], vertices[5]],
+        [vertices[2], vertices[3]], [vertices[2], vertices[6]],
+        [vertices[3], vertices[7]],
+        [vertices[4], vertices[5]], [vertices[4], vertices[6]],
+        [vertices[5], vertices[7]],
+        [vertices[6], vertices[7]]
+    ];
+}
+
+function getIntersectionPoint(cameraBoundingBox, triangle) {
+    const { min: cameraMin, max: cameraMax } = cameraBoundingBox;
+
+    const v0 = triangle.a;
+    const v1 = triangle.b;
+    const v2 = triangle.c;
+
+    const axes = [
+        1, 0, 0,  // X-axis
+        0, 1, 0,  // Y-axis
+        0, 0, 1   // Z-axis
+    ];
+
+    const extents = new THREE.Vector3(
+        (cameraMax.x - cameraMin.x) / 2,
+        (cameraMax.y - cameraMin.y) / 2,
+        (cameraMax.z - cameraMin.z) / 2
+    );
+
+    const center = new THREE.Vector3(
+        (cameraMax.x + cameraMin.x) / 2,
+        (cameraMax.y + cameraMin.y) / 2,
+        (cameraMax.z + cameraMin.z) / 2
+    );
+
+    const v0c = new THREE.Vector3().subVectors(v0, center);
+    const v1c = new THREE.Vector3().subVectors(v1, center);
+    const v2c = new THREE.Vector3().subVectors(v2, center);
+
+    if (!satForAxes(axes, v0c, v1c, v2c, extents)) {
+        return null;
+    }
+
+    // Find intersection points on the bounding box edges with the triangle plane
+    const plane = calculatePlane(triangle);
+    const boxEdges = getBoxEdges(cameraMin, cameraMax);
+
+    let intersectionPoints = [];
+    for (const edge of boxEdges) {
+        const intersection = intersectLinePlane(edge[0], edge[1], plane);
+        if (intersection && isPointInBoundingBox(intersection, cameraMin, cameraMax) && isPointInTriangle(intersection, triangle)) {
+            intersectionPoints.push(intersection);
+        }
+    }
+
+    if (intersectionPoints.length === 0) {
+        return null;
+    }
+
+    // Calculate the center of the line of intersection
+    let sumX = 0, sumY = 0, sumZ = 0;
+    for (const point of intersectionPoints) {
+        sumX += point.x;
+        sumY += point.y;
+        sumZ += point.z;
+    }
+
+    const centerPoint = new THREE.Vector3(sumX / intersectionPoints.length, sumY / intersectionPoints.length, sumZ / intersectionPoints.length);
+    return centerPoint;
+}
+
+function satForAxes(axes, v0, v1, v2, extents) {
+    const _testAxis = new THREE.Vector3();
+
+    for (let i = 0, j = axes.length - 3; i <= j; i += 3) {
+        _testAxis.fromArray(axes, i);
+        const r = extents.x * Math.abs(_testAxis.x) + extents.y * Math.abs(_testAxis.y) + extents.z * Math.abs(_testAxis.z);
+        const p0 = v0.dot(_testAxis);
+        const p1 = v1.dot(_testAxis);
+        const p2 = v2.dot(_testAxis);
+        if (Math.max(-Math.max(p0, p1, p2), Math.min(p0, p1, p2)) > r) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
 // Create dotted axes with different colors
 createDottedAxis('red', new THREE.Vector3(0, 0, 0), new THREE.Vector3(axisLength, 0, 0)); // X-axis
 createDottedAxis('yellow', new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, axisLength, 0)); // Y-axis
 createDottedAxis('green', new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, axisLength)); // Z-axis
 
 
-
-// var _camera_ = new THREE.Mesh(
-// 	new THREE.BoxGeometry(.5, 1, 0.2),
-// 	new THREE.MeshBasicMaterial({ color: 'red', transparent: true, opacity: 0.5})
-// );
-// _camera_.position.set(3, 0.5, 3);
-// scene.add(_camera_);
 var renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth * 0.75, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -170,7 +249,6 @@ class User {
 }
 
 
-
 let user = new User();
 
 function BoxHelper(object, boxSize = new THREE.Vector3()) {
@@ -219,6 +297,16 @@ class Creator {
 	activePolygonVerticesIndex = -1;
 	polygonVertices = [];
 	ConnectTheDotsWithPolygons() {
+
+		/**
+		 * 
+		  	Vertices: Collect vertex positions and store them in a Float32Array.
+			Indices: Define the order in which vertices form triangles.
+			Normals: Calculate normals for proper shading.
+			Material: Create a material for the mesh.
+			Mesh: Create the mesh with the geometry and material, and add it to the scene.
+		*
+		*/
 	    const geometry = new THREE.BufferGeometry();
 
 	    // Create an array for the vertices
@@ -250,8 +338,14 @@ class Creator {
 	    // Define faces from the vertices (triangulate the this.polygonVertices)
 	    // Here we'll assume the this.polygonVertices are ordered and form a convex polygon
 	    for (let i = 1; i < this.polygonVertices[this.activePolygonVerticesIndex].length - 1; i++) {
-	        indices.push(0, i, i + 1);
+	        if (true || Math.random() < 0.5) {
+	        	indices.push(i - 1, i, i + 1);
+	        } else {
+	        	indices.push(0, i, i + 1);
+	        }
 	    }
+
+	    console.log(indices);
 
 	    // Set the indices to the BufferGeometry
 	    geometry.setIndex(indices);
@@ -267,21 +361,67 @@ class Creator {
 
 	    // Create the mesh
 	    const mesh = new THREE.Mesh(geometry, material);
-	    scene.add(mesh);
+	    
 
 	    mesh.receiveShadow = true;
 	    mesh.castShadow = true;
 	    mesh.name = "touchable::polygon::" + JSON.stringify(vertices);
 
-		// const itemBoundingBox = new THREE.Box3().setFromObject(mesh);
+	    const triangles = [];
+		const positions = geometry.attributes.position.array;
 
-		// // Create a BoxHelper to visualize the bounding box
-		// const boxHelper = new THREE.BoxHelper(mesh, 0xff0000);
+		for (let i = 0; i < indices.length; i += 3) {
+		    const vertex1 = new THREE.Vector3(
+		        positions[indices[i] * 3],
+		        positions[indices[i] * 3 + 1],
+		        positions[indices[i] * 3 + 2]
+		    );
+		    const vertex2 = new THREE.Vector3(
+		        positions[indices[i + 1] * 3],
+		        positions[indices[i + 1] * 3 + 1],
+		        positions[indices[i + 1] * 3 + 2]
+		    );
+		    const vertex3 = new THREE.Vector3(
+		        positions[indices[i + 2] * 3],
+		        positions[indices[i + 2] * 3 + 1],
+		        positions[indices[i + 2] * 3 + 2]
+		    );
 
-		// // Add the BoxHelper to the scene
-		// scene.add(boxHelper);
+		    // triangles.push({ a: vertex1, b: vertex2, c: vertex3 });
 
+	        const vertices = new Float32Array([
+		        vertex1.x, vertex1.y, vertex1.z,
+		        vertex2.x, vertex2.y, vertex2.z,
+		        vertex3.x, vertex3.y, vertex3.z
+		    ]);
 
+		    const triangleGeometry = new THREE.BufferGeometry();
+		    triangleGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+			triangleGeometry.computeVertexNormals();
+		    var triangleMaterial = new THREE.MeshStandardMaterial({ 
+		    	color: new THREE.Color(Math.random(),Math.random(),Math.random()),
+		    	side: THREE.DoubleSide
+		    });
+		    var triangleMesh = new THREE.Mesh(triangleGeometry, triangleMaterial);
+		    triangleMesh.castShadow = true;
+	    	triangleMesh.receiveShadow = true;
+		    scene.add(triangleMesh);
+
+		}
+
+		// mesh.triangles = triangles;
+
+		console.log(triangles)
+
+		const itemBoundingBox = new THREE.Box3().setFromObject(mesh);
+
+		// Create a BoxHelper to visualize the bounding box
+		const boxHelper = new THREE.BoxHelper(mesh, 0xff0000);
+
+		// Add the BoxHelper to the scene
+		scene.add(boxHelper);
+
+		// scene.add(mesh);
 	}
 
 	AddFloor() {}
@@ -292,8 +432,6 @@ class Creator {
 	AddStairs() {}
 
 	selectPointGroup(event) {
-		
-
 		var src = event.srcElement;
 		var activeIndex = this.activePolygonVerticesIndex;
 
@@ -342,6 +480,7 @@ class Creator {
 
 		document.getElementById('touched-objects').innerHTML = user.touchedObjects.map(to => `<div class="row"><div>${to.name}</div><div>${JSON.stringify(to.center, null, 1)}</div><div>${to.cameraFaceTouched}</div></div>`).join('')
 		
+		document.getElementById('intersection-points').innerHTML = JSON.stringify(user.intersectionPoint, null, 1);
 		// xhr({
 		// 	method: 'POST',
 		// 	url: `/items?user=${user.name}&space=${user.space}`,
@@ -613,69 +752,29 @@ class Controller {
 
 		}
 	    
-	    var touchablePolygons = scene.children.filter(child => /[^devdot]/.test(child.name));
+	    var touchablePlanes = scene.children.filter(child => /[^devdot]/.test(child.name));
 
 
 	   	window.intersects = false
+	   	display.cyberpunkBoxMemory = false;
 		// Main loop
-		for (var i = 0; i < touchablePolygons.length; i++) {
-		    var polygon = touchablePolygons[i];
-		    var positionAttribute = polygon.geometry.attributes.position;
-		    var indexAttribute = polygon.geometry.index;
+		if (touchablePlanes.length) {
+			if (cameraBoundingBox.intersectsBox( new THREE.Box3().setFromBufferAttribute(touchablePlanes[0].geometry.attributes.position) )) {
+				
+				console.log(touchablePlanes[0].geometry.attributes.position, touchablePlanes[0].triangles);
 
-		    if (indexAttribute) {
-		        for (var j = 0; j < indexAttribute.count; j += 3) {
-		            var a = indexAttribute.getX(j);
-		            var b = indexAttribute.getX(j + 1);
-		            var c = indexAttribute.getX(j + 2);
-
-		            var triangle = new THREE.Triangle(
-		                new THREE.Vector3(positionAttribute.getX(a), positionAttribute.getY(a), positionAttribute.getZ(a)),
-		                new THREE.Vector3(positionAttribute.getX(b), positionAttribute.getY(b), positionAttribute.getZ(b)),
-		                new THREE.Vector3(positionAttribute.getX(c), positionAttribute.getY(c), positionAttribute.getZ(c))
-		            );
+				for (var i = 0; i < touchablePlanes[0].triangles.length; i++) {
+					const triangle = touchablePlanes[0].triangles[i];
+    
+				    if (cameraBoundingBox.intersectsTriangle(triangle)) {
+				        display.cyberpunkBoxMemory = true;
 
 
-		            if (Intersects(camera, triangle)) {
-		            	display.cyberpunkBoxMemory = true;
-		            	user.addTouchedObject({
-		            		name: polygon.name + '::' + j,
-		            		center: {
-		            			x: (triangle.a.x + triangle.b.x + triangle.c.x) / 3,
-		            			y: (triangle.a.y + triangle.b.y + triangle.c.y) / 3,
-		            			z: (triangle.a.z + triangle.b.z + triangle.c.z) / 3
-		            		},
-		            		cameraFaceTouched: undefined
-		            	})
-
-						if (this.w) this.wS = 0;
-						if (this.a) this.aS = 0;
-						if (this.s) this.sS = 0;
-						if (this.d) this.dS = 0;
-
-						if (camera.isJumping) {
-							camera.floor = camera.position.y;
-							camera.isJumping = false;
-							camera.velocity.y = 0;
-						}
-
-		            	var geometry = new THREE.BufferGeometry().setFromPoints([triangle.a, triangle.b, triangle.c, triangle.a]);
-		                var material = new THREE.MeshBasicMaterial({ color: 'lawngreen' });
-		                var viz = new THREE.Line(geometry, material);
-		                scene.add(viz);
-		                actives.push(viz);
-
-
-		            } else {
-		            	display.cyberpunkBoxMemory = false
-		            	user.removeTouchedObject({ name: polygon.name + '::' + j })
-		            }
-
-
-	                this.creator.update();
-		        }	
-		    }
+				    }
+				}
+			}
 		}
+
 	}
 
     navigate() {
@@ -739,6 +838,7 @@ function Control() {
 	candidatePoints.classList.add('active');
 	candidatePoints.classList.add('generate-polygon');
 	candidatePoints.innerHTML = `<div id="touch">
+	<pre id="intersection-points"></pre>
 		<div class="header"><div>name</div><div>center</div><div>camera face touched</div></div>
 		<div id="touched-objects">${
 			user.touchedObjects.map(to => `<div class="row"><div>${to.name}</div><div>${JSON.stringify(to.center, null, 1)}</div><div>${to.cameraFaceTouched}</div></div>`).join('')
