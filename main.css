@@ -100,4 +100,27 @@ table {
 	background: lightyellow;
 }
 
+#touched-objects {
+	outline: 1px solid teal;
+}
+
+#touched-objects .row {
+	outline: 1px solid red;
+}
+
+
+#touched-objects > .row > div {
+	width: calc(100% / 3);
+	font-size: 0.25rem;
+	display: flex;
+	flex-wrap: wrap;
+	font-family: monospace;
+	word-wrap: anywhere;
+	outline: 1px solid maroon;
+}
+
+ul, li {
+	list-style: none;
+}
+
 

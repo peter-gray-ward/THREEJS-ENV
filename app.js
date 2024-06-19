@@ -1,12 +1,82 @@
 import * as THREE from '/three';
 
-
 var scene = new THREE.Scene();
 var origin = new THREE.Mesh(new THREE.SphereGeometry(0.08, 20, 20), new THREE.MeshStandardMaterial({ color: 'turquoise' }));
 origin.position.set(0, 0, 0);
 scene.add(origin);
 
+var camera = new THREE.PerspectiveCamera(75, (window.innerWidth * 0.75) / window.innerHeight, 0.1, 100000);
+scene.add(camera);
+camera.floor = 0;
+camera.position.set(3, 0.5, 3);
+camera.up = new THREE.Vector3(0, 1, 0);
+camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+var priorPosition = camera.position.clone();
+
 var axisLength = 100;
+
+var actives = [];
+
+function Intersects(Camera, Triangle) {
+    var cameraMinX = Camera.position.x - 0.1;
+    var cameraMaxX = Camera.position.x + 0.1;
+    var cameraMinY = Camera.position.y - 0.25;
+    var cameraMaxY = Camera.position.y + 0.25;
+    var cameraMinZ = Camera.position.z - 0.01;
+    var cameraMaxZ = Camera.position.z + 0.01;
+
+    function isVertexInBox(vertex) {
+        return vertex.x >= cameraMinX && vertex.x <= cameraMaxX &&
+               vertex.y >= cameraMinY && vertex.y <= cameraMaxY &&
+               vertex.z >= cameraMinZ && vertex.z <= cameraMaxZ;
+    }
+
+    function isEdgeIntersectingBox(v1, v2, min, max) {
+        var tmin = (min - v1) / (v2 - v1);
+        var tmax = (max - v1) / (v2 - v1);
+
+        if (tmin > tmax) [tmin, tmax] = [tmax, tmin];
+
+        if (tmax < 0 || tmin > 1) return false;
+
+        return true;
+    }
+
+    function isTriangleIntersectingBox(vertices, min, max) {
+        for (var i = 0; i < 3; i++) {
+            for (var j = i + 1; j < 3; j++) {
+                if (isEdgeIntersectingBox(vertices[i].x, vertices[j].x, cameraMinX, cameraMaxX) &&
+                    isEdgeIntersectingBox(vertices[i].y, vertices[j].y, cameraMinY, cameraMaxY) &&
+                    isEdgeIntersectingBox(vertices[i].z, vertices[j].z, cameraMinZ, cameraMaxZ)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Check if any of the triangle's vertices are within the camera's bounding box
+    var triangleVertices = [Triangle.a, Triangle.b, Triangle.c];
+    for (var i = 0; i < triangleVertices.length; i++) {
+        if (isVertexInBox(triangleVertices[i])) {
+            return true;
+        }
+    }
+
+    // Check if any of the triangle's edges intersect the camera's bounding box
+    if (isTriangleIntersectingBox(triangleVertices, cameraMinX, cameraMaxX) ||
+        isTriangleIntersectingBox(triangleVertices, cameraMinY, cameraMaxY) ||
+        isTriangleIntersectingBox(triangleVertices, cameraMinZ, cameraMaxZ)) {
+        return true;
+    }
+
+    // You can add additional logic here to check if the triangle's plane intersects the bounding box
+
+    return false;
+}
+
+
 
 // Helper function to create a dotted axis line
 function createDottedAxis(color, start, end) {
@@ -29,17 +99,13 @@ createDottedAxis('yellow', new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, axis
 createDottedAxis('green', new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, axisLength)); // Z-axis
 
 
-var camera = new THREE.PerspectiveCamera(75, (window.innerWidth * 0.75) / window.innerHeight, 0.1, 100000);
-scene.add(camera);
-camera.position.set(3, 0.5, 3);
-camera.up = new THREE.Vector3(0, 1, 0);
-camera.lookAt(new THREE.Vector3(0, 0, 0));
-var _camera_ = new THREE.Mesh(
-	new THREE.BoxGeometry(.5, 1, 0.2),
-	new THREE.MeshBasicMaterial({ color: 'red', transparent: true, opacity: 0.5})
-);
-_camera_.position.set(3, 0.5, 3);
-scene.add(_camera_);
+
+// var _camera_ = new THREE.Mesh(
+// 	new THREE.BoxGeometry(.5, 1, 0.2),
+// 	new THREE.MeshBasicMaterial({ color: 'red', transparent: true, opacity: 0.5})
+// );
+// _camera_.position.set(3, 0.5, 3);
+// scene.add(_camera_);
 var renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth * 0.75, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -73,17 +139,37 @@ function getChildIndex(child) {
     return childrenArray.indexOf(child);
 }
 
+
 class User {
 	name = "Peter";
 	space = "Playground";
+	touchedObjects = [];
+	addTouchedObject(to) {
+		var exists = false
+		for (var i = 0; i < this.touchedObjects.length; i++) {
+			if (this.touchedObjects[i].name == to.name) {
+				exists = true;
+				for (var key in to) {
+					this.touchedObjects[i][key] = to[key];
+				}
+				break;
+			}
+		}
+		if (!exists) {
+			this.touchedObjects.push(to);
+		}
+	}
+	removeTouchedObject(pto) {
+		for (var i = 0; i < this.touchedObjects.length; i++) {
+			if (this.touchedObjects[i].name == pto.name) {
+				this.touchedObjects.splice(i, 1);
+				return;
+			}
+		}
+	}
 }
 
-class Item {
-	image = [];
-	points = [];
-	space = "Playground";
-	boxHelper = []
-}
+
 
 let user = new User();
 
@@ -251,6 +337,11 @@ class Creator {
 				pre.innerHTML = JSON.stringify(this.polygonVertices[i], null, 2);
 			});
 		}
+
+
+
+		document.getElementById('touched-objects').innerHTML = user.touchedObjects.map(to => `<div class="row"><div>${to.name}</div><div>${JSON.stringify(to.center, null, 1)}</div><div>${to.cameraFaceTouched}</div></div>`).join('')
+		
 		// xhr({
 		// 	method: 'POST',
 		// 	url: `/items?user=${user.name}&space=${user.space}`,
@@ -265,6 +356,10 @@ class Controller {
     a = false;
     s = false;
     d = false;
+    wS = 0.05;
+    aS = 0.05;
+    sS = 0.05;
+    dS = 0.05;
     space = false;
     ArrowUp = false;
     ArrowRight = false;
@@ -272,8 +367,8 @@ class Controller {
     ArrowLeft = false;
     isJumping = false;
     velocity = new THREE.Vector3();
-    gravity = -0.05;
-    jumpStrength = .3;
+    gravity = -0.01;
+    jumpStrength = .2;
     mouse = {
     	x: 0,
     	y: 0
@@ -291,9 +386,27 @@ class Controller {
         window.addEventListener('keyup', this.unlisten.bind(this));
         window.addEventListener('click', this.click.bind(this))
     }
-    update() {
+    calculateTrajectory(prior, current) {
+	    const dx = current.x - prior.x;
+	    const dy = current.y - prior.y;
 
-    }
+	    let direction = '';
+
+	    if (dy > 0) {
+	        direction += 'w';
+	    } else if (dy < 0) {
+	        direction += 's';
+	    }
+
+	    if (dx > 0) {
+	        direction += 'd';
+	    } else if (dx < 0) {
+	        direction += 'a';
+	    }
+
+	    return direction || 'idle';
+	}
+
     click(e) {
     	if (this.creator.activePolygonVerticesIndex == -1) return;
 
@@ -379,45 +492,46 @@ class Controller {
         }
     }
     activate() {
+    	priorPosition = camera.position;
         if (this.w) {
             var direction = new THREE.Vector3();
             camera.getWorldDirection(direction);
-            direction.multiplyScalar(0.1);
+            direction.multiplyScalar(this.wS);
             camera.position.add(direction);
-            _camera_.position.add(direction);
+            // _camera_.position.add(direction);
         }
         if (this.a) {
             var direction = new THREE.Vector3();
             var right = new THREE.Vector3();
             camera.getWorldDirection(direction);
             right.crossVectors(camera.up, direction).normalize();
-            right.multiplyScalar(0.1);
+            right.multiplyScalar(this.aS);
             camera.position.add(right);
-            _camera_.position.add(right);
+            // _camera_.position.add(right);
         }
         if (this.s) {
             var direction = new THREE.Vector3();
             camera.getWorldDirection(direction);
-            direction.multiplyScalar(-0.1);
+            direction.multiplyScalar(-this.sS);
             camera.position.add(direction);
-            _camera_.position.add(direction);
+            // _camera_.position.add(direction);
         }
         if (this.d) {
             var direction = new THREE.Vector3();
             var right = new THREE.Vector3();
             camera.getWorldDirection(direction);
             right.crossVectors(camera.up, direction).normalize();
-            right.multiplyScalar(-0.1);
+            right.multiplyScalar(-this.dS);
             camera.position.add(right);
-            _camera_.position.add(right);
+            // _camera_.position.add(right);
         }
         if (this.ArrowUp) {
             camera.rotateX(0.1);
-            _camera_.rotateX(0.1);
+            // _camera_.rotateX(0.1);
         }
         if (this.ArrowDown) {
             camera.rotateX(-0.1);
-            _camera_.rotateX(-0.1);
+            // _camera_.rotateX(-0.1);
         }
         if (this.ArrowLeft || this.ArrowRight) {
             let quaternionY = new THREE.Quaternion();
@@ -433,7 +547,7 @@ class Controller {
 	        }
 
 	        camera.quaternion.multiplyQuaternions(quaternionY, camera.quaternion);
-	        _camera_.quaternion.multiplyQuaternions(quaternionY, camera.quaternion);
+	        // _camera_.quaternion.multiplyQuaternions(quaternionY, camera.quaternion);
         }
 
         if (this.space && !this.isJumping) {
@@ -443,16 +557,22 @@ class Controller {
 
         this.velocity.y += this.gravity;
         camera.position.y += this.velocity.y;
-        _camera_.position.y += this.velocity.y;
 
-        if (camera.position.y <= 0.5) {
+        if (camera.position.y <= camera.floor + 0.5) {
             this.velocity.y = 0;
-            camera.position.y = 0.5;
-            _camera_.position.y = 0.5;
+            camera.position.y = camera.floor + 0.5;
             this.isJumping = false;
         }
     }
     touch() {
+
+    	this.wS = 0.05;
+	    this.aS = 0.05;
+	    this.sS = 0.05;
+	    this.dS = 0.05;
+
+    	actives.forEach(atc => scene.remove(atc));
+    	actives = [];
 		let boxSize;
 		var cameraPosition = camera.position.clone();
 		
@@ -493,24 +613,69 @@ class Controller {
 
 		}
 	    
-	    var touchablePolygons = scene.children.filter(child => /^touchable::polygon/.test(child.name));
+	    var touchablePolygons = scene.children.filter(child => /[^devdot]/.test(child.name));
 
 
-	    for (var i = 0; i < touchablePolygons.length; i++) {
-	    	var polygonV = touchablePolygons[i].geometry.attributes.position.array.map(n => Math.round(n * 100) / 100)
-	    	if (polygonV.length % 9 == 0) {
-	    		for (var j = 0; j < polygonV.length - 8; j += 9) {
-		    		var triangle = new THREE.Triangle(
-		    			new THREE.Vector3(polygonV[j], polygonV[j + 1], polygonV[j + 2]),
-		    			new THREE.Vector3(polygonV[j + 3], polygonV[j + 4], polygonV[j + 5]),
-		    			new THREE.Vector3(polygonV[j + 6], polygonV[j + 7], polygonV[j + 8])
-		    		);
-		    		if (cameraBoundingBox.intersectsTriangle(triangle)) {
-		    			console.log(i, j);
-		    		}
-		    	}
-	    	}
-	    }
+	   	window.intersects = false
+		// Main loop
+		for (var i = 0; i < touchablePolygons.length; i++) {
+		    var polygon = touchablePolygons[i];
+		    var positionAttribute = polygon.geometry.attributes.position;
+		    var indexAttribute = polygon.geometry.index;
+
+		    if (indexAttribute) {
+		        for (var j = 0; j < indexAttribute.count; j += 3) {
+		            var a = indexAttribute.getX(j);
+		            var b = indexAttribute.getX(j + 1);
+		            var c = indexAttribute.getX(j + 2);
+
+		            var triangle = new THREE.Triangle(
+		                new THREE.Vector3(positionAttribute.getX(a), positionAttribute.getY(a), positionAttribute.getZ(a)),
+		                new THREE.Vector3(positionAttribute.getX(b), positionAttribute.getY(b), positionAttribute.getZ(b)),
+		                new THREE.Vector3(positionAttribute.getX(c), positionAttribute.getY(c), positionAttribute.getZ(c))
+		            );
+
+
+		            if (Intersects(camera, triangle)) {
+		            	display.cyberpunkBoxMemory = true;
+		            	user.addTouchedObject({
+		            		name: polygon.name + '::' + j,
+		            		center: {
+		            			x: (triangle.a.x + triangle.b.x + triangle.c.x) / 3,
+		            			y: (triangle.a.y + triangle.b.y + triangle.c.y) / 3,
+		            			z: (triangle.a.z + triangle.b.z + triangle.c.z) / 3
+		            		},
+		            		cameraFaceTouched: undefined
+		            	})
+
+						if (this.w) this.wS = 0;
+						if (this.a) this.aS = 0;
+						if (this.s) this.sS = 0;
+						if (this.d) this.dS = 0;
+
+						if (camera.isJumping) {
+							camera.floor = camera.position.y;
+							camera.isJumping = false;
+							camera.velocity.y = 0;
+						}
+
+		            	var geometry = new THREE.BufferGeometry().setFromPoints([triangle.a, triangle.b, triangle.c, triangle.a]);
+		                var material = new THREE.MeshBasicMaterial({ color: 'lawngreen' });
+		                var viz = new THREE.Line(geometry, material);
+		                scene.add(viz);
+		                actives.push(viz);
+
+
+		            } else {
+		            	display.cyberpunkBoxMemory = false
+		            	user.removeTouchedObject({ name: polygon.name + '::' + j })
+		            }
+
+
+	                this.creator.update();
+		        }	
+		    }
+		}
 	}
 
     navigate() {
@@ -527,106 +692,122 @@ class Controller {
 }
 
 
-var controller = new Controller();
+function Control() {
+	var controller = new Controller();
 
 
-/********/ /********/ /********/
-/********/ /********/ /********/
-/********/ /********/ /********/
+	/********/ /********/ /********/
+	/********/ /********/ /********/
+	/********/ /********/ /********/
 
-var c = document.createElement('section');
-c.id = 'controller';
-document.body.appendChild(c);
+	var c = document.createElement('section');
+	c.id = 'controller';
+	document.body.appendChild(c);
 
-var controllerTabs = document.createElement('div');
-controllerTabs.id = 'controller-tabs';
-controllerTabs.innerHTML = `<button id="create-outside">Nature</button><button id="generate-polygon" class="active">Build Objects</button><button id="apply-images">Search Images</button><button id="manage-spaces">Manage Spaces</button>`
+	var controllerTabs = document.createElement('div');
+	controllerTabs.id = 'controller-tabs';
+	controllerTabs.innerHTML = `<button id="create-outside">Nature</button><button id="generate-polygon" class="active">Build Objects</button><button id="apply-images">Search Images</button><button id="manage-spaces">Manage Spaces</button>`
 
-document.getElementById('controller').appendChild(controllerTabs);
-document.querySelectorAll('#controller-tabs > button').forEach(button => {
-	button.addEventListener('click', function(e) {
-		for (var i = 0; i < controller.tabs.length; i++) {
-			if (e.srcElement.id == controller.tabs[i]) {
-				document.getElementById(controller.tabs[i]).classList.add('active');
-				document.querySelector('.' + controller.tabs[i]).classList.add('active');
-			} else {
-				document.getElementById(controller.tabs[i]).classList.remove('active');
-				document.querySelector('.' + controller.tabs[i]).classList.remove('active');
+	document.getElementById('controller').appendChild(controllerTabs);
+	document.querySelectorAll('#controller-tabs > button').forEach(button => {
+		button.addEventListener('click', function(e) {
+			for (var i = 0; i < controller.tabs.length; i++) {
+				if (e.srcElement.id == controller.tabs[i]) {
+					document.getElementById(controller.tabs[i]).classList.add('active');
+					document.querySelector('.' + controller.tabs[i]).classList.add('active');
+				} else {
+					document.getElementById(controller.tabs[i]).classList.remove('active');
+					document.querySelector('.' + controller.tabs[i]).classList.remove('active');
+				}
 			}
-		}
-		controller.page = e.srcElement.id;
-		controller.navigate();
-	});
-})
+			controller.page = e.srcElement.id;
+			controller.navigate();
+		});
+	})
 
 
-var createOutside = document.createElement('section');
-createOutside.classList.add('page');
-createOutside.classList.add('create-outside');
-createOutside.innerHTML = `?`;
+	var createOutside = document.createElement('section');
+	createOutside.classList.add('page');
+	createOutside.classList.add('create-outside');
+	createOutside.innerHTML = `?`;
 
-c.appendChild(createOutside);
-
-
-var candidatePoints = document.createElement('section');
-candidatePoints.classList.add('page');
-candidatePoints.classList.add('active');
-candidatePoints.classList.add('generate-polygon');
-candidatePoints.innerHTML = `<div class="header"><div>Points</div><div>Actions</div></div>
-<div id="add-polygon-row" class="row"><button id="add-polygon">+</button></div>`;
-
-c.appendChild(candidatePoints);
-
-document.getElementById('add-polygon').addEventListener('click', (e) => {
-	e.preventDefault();
+	c.appendChild(createOutside);
 
 
-	var id = controller.creator.polygonVertices.length;
-	controller.creator.polygonVertices.push([]);
+	var candidatePoints = document.createElement('section');
+	candidatePoints.classList.add('page');
+	candidatePoints.classList.add('active');
+	candidatePoints.classList.add('generate-polygon');
+	candidatePoints.innerHTML = `<div id="touch">
+		<div class="header"><div>name</div><div>center</div><div>camera face touched</div></div>
+		<div id="touched-objects">${
+			user.touchedObjects.map(to => `<div class="row"><div>${to.name}</div><div>${JSON.stringify(to.center, null, 1)}</div><div>${to.cameraFaceTouched}</div></div>`).join('')
+		}</div>
+	</div>
+	<div class="header"><div>Points</div><div>Actions</div></div>
+	<div id="add-polygon-row" class="row"><button id="add-polygon">+</button></div>`;
 
-	var pg = document.createElement('div');
-	['row', 'three', 'polygonpoints'].forEach(c => pg.classList.add(c));
-	pg.innerHTML = `<pre class="point-group" data-id="${id}"></pre>
-		<div>
-			<button class="generate-polygon">Make Polygon Path</button>
-			<button class="add-floor">Add a Floor</button>
-			<button class="add-door">Add a Door</button>
-			<button class="add-ceiling">Add a Ceiling</button>
-			<button class="add-wall">Add a Wall</button>
-			<button class="add-window">Add a Window</button>
-		</div>`;
+	c.appendChild(candidatePoints);
 
-	document.getElementById('add-polygon-row').insertAdjacentElement('beforebegin', pg);
-	
-	pg.children[0].addEventListener('click', controller.creator.selectPointGroup.bind(controller.creator));
-
-	pg.children[1].children[0].addEventListener('click', e => {
-		controller.creator.addChild = true;
-		controller.creator.ConnectTheDotsWithPolygons.bind(controller.creator);
-		controller.creator.ConnectTheDotsWithPolygons();
-		controller.creator.addChild = false;
-	});
-
-	pg.children[1].children[1].addEventListener('click', controller.creator.AddFloor.bind(controller.creator));
-})	
+	document.getElementById('add-polygon').addEventListener('click', (e) => {
+		e.preventDefault();
 
 
-var applyImages = document.createElement('section');
-applyImages.classList.add('page');
-applyImages.classList.add('apply-images');
-applyImages.innerHTML = `?`;
+		var id = controller.creator.polygonVertices.length;
+		controller.creator.polygonVertices.push([]);
+
+		var pg = document.createElement('div');
+		['row', 'three', 'polygonpoints'].forEach(c => pg.classList.add(c));
+		pg.innerHTML = `<pre class="point-group" data-id="${id}"></pre>
+			<div>
+				<button class="generate-polygon">Make Polygon Path</button>
+				<button class="add-floor">Add a Floor</button>
+				<button class="add-door">Add a Door</button>
+				<button class="add-ceiling">Add a Ceiling</button>
+				<button class="add-wall">Add a Wall</button>
+				<button class="add-window">Add a Window</button>
+			</div>`;
+
+		document.getElementById('add-polygon-row').insertAdjacentElement('beforebegin', pg);
+		
+		pg.children[0].addEventListener('click', controller.creator.selectPointGroup.bind(controller.creator));
+
+		pg.children[1].children[0].addEventListener('click', e => {
+			controller.creator.addChild = true;
+			controller.creator.ConnectTheDotsWithPolygons.bind(controller.creator);
+			controller.creator.ConnectTheDotsWithPolygons();
+			controller.creator.addChild = false;
+		});
+
+		pg.children[1].children[1].addEventListener('click', controller.creator.AddFloor.bind(controller.creator));
+	})	
 
 
-c.appendChild(applyImages);
-
-var manageSpaces = document.createElement('section');
-manageSpaces.classList.add('page');
-manageSpaces.classList.add('manage-spaces');
-manageSpaces.innerHTML = `?`;
+	var applyImages = document.createElement('section');
+	applyImages.classList.add('page');
+	applyImages.classList.add('apply-images');
+	applyImages.innerHTML = `?`;
 
 
-c.appendChild(manageSpaces);
+	c.appendChild(applyImages);
 
+	var manageSpaces = document.createElement('section');
+	manageSpaces.classList.add('page');
+	manageSpaces.classList.add('manage-spaces');
+	manageSpaces.innerHTML = `<pre>
+${JSON.stringify(camera.intersects, null, 1)}
+	</pre>`;
+
+
+	c.appendChild(manageSpaces);
+
+
+	controller.Self();
+
+	return controller
+}
+
+var controller = Control()
 
 /********/ /********/ /********/
 /********/ /********/ /********/
@@ -776,7 +957,6 @@ function RenderAll() {
 
 RenderAll();
 
-controller.Self();
 
 function Animate() { 
     window.requestAnimationFrame(() => Animate());
