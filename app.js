@@ -8,6 +8,7 @@ scene.add(origin);
 var camera = new THREE.PerspectiveCamera(75, (window.innerWidth * 0.75) / window.innerHeight, 0.1, 100000);
 scene.add(camera);
 camera.floor = 0;
+camera.floorDiff = 0;
 camera.position.set(3, 0.5, 3);
 camera.up = new THREE.Vector3(0, 1, 0);
 camera.lookAt(new THREE.Vector3(0, 0, 0));
@@ -15,9 +16,9 @@ camera.lookAt(new THREE.Vector3(0, 0, 0));
 var priorPosition = camera.position.clone();
 
 var axisLength = 100;
-
+const P = 100
 var actives = [];
-
+const N = 2;
 
 // Function to calculate the normal of a triangle
 function calculateNormal(a, b, c) {
@@ -211,7 +212,6 @@ function xhr(options = { body: {} }) {
 	x.send(JSON.stringify(options.body));
 }
 
-const N = 3;
 var display = {
 	devGridDots: true,
 	cyberpunkBoxMemory: false,
@@ -231,6 +231,7 @@ class User {
 	name = "Peter";
 	space = "Playground";
 	touchedObjects = [];
+	onFloor = true
 	addTouchedObject(to) {
 		var exists = false
 		for (var i = 0; i < this.touchedObjects.length; i++) {
@@ -493,9 +494,20 @@ class Creator {
 
 
 
-		document.getElementById('touched-objects').innerHTML = user.touchedObjects.map(to => `<div class="row"><div>${to.name}</div><div>${JSON.stringify(to.center, null, 1)}</div><div>${to.cameraFaceTouched}</div></div>`).join('')
+		document.getElementById('touched-objects').innerHTML = user.touchedObjects.map(to => `<div class="row">
+			<div>${to.name}</div>
+			<div>${JSON.stringify(to.center, null, 1)}</div>
+			<div>${to.cameraFaceTouched}</div>
+		</div>`).join('')
 		
-		document.getElementById('intersection-points').innerHTML = JSON.stringify(user.intersectionPoint, null, 1);
+		document.getElementById('intersection-points').innerHTML = `
+		<span>floor: ${camera.floor}</span> <br />
+		<pre>
+			x: ${camera.position.x}
+			y: ${camera.position.y}
+			z: ${camera.position.z}
+		</pre>
+		`
 		// xhr({
 		// 	method: 'POST',
 		// 	url: `/items?user=${user.name}&space=${user.space}`,
@@ -503,6 +515,8 @@ class Creator {
 		// });
 	}
 }
+
+
 
 
 class Controller {
@@ -521,8 +535,8 @@ class Controller {
     ArrowLeft = false;
     isJumping = false;
     velocity = new THREE.Vector3();
-    gravity = -0.01;
-    jumpStrength = .2;
+    gravity = -0.009;
+    jumpStrength = .1;
     mouse = {
     	x: 0,
     	y: 0
@@ -711,106 +725,260 @@ class Controller {
 
         this.velocity.y += this.gravity;
         camera.position.y += this.velocity.y;
+    	camera.position.y = Math.round(camera.position.y * P) / P;
 
         if (camera.position.y <= camera.floor + 0.5) {
             this.velocity.y = 0;
             camera.position.y = camera.floor + 0.5;
             this.isJumping = false;
         }
+
+        this.creator.update()
     }
-    touch() {
-    	user.touchedObjects = []
+    // touch() {
+    // 	user.touchedObjects = []
 
-    	this.wS = 0.05;
-	    this.aS = 0.05;
-	    this.sS = 0.05;
-	    this.dS = 0.05;
+    // 	this.wS = 0.05;
+	//     this.aS = 0.05;
+	//     this.sS = 0.05;
+	//     this.dS = 0.05;
 
-    	actives.forEach(atc => scene.remove(atc));
-    	actives = [];
-		let boxSize;
-		var cameraPosition = camera.position.clone();
+    // 	actives.forEach(atc => scene.remove(atc));
+    // 	actives = [];
+	// 	let boxSize;
+	// 	var cameraPosition = camera.position.clone();
 		
 
-		if (display.camera.boxType == 'person') {
-			boxSize = new THREE.Vector3(.2, .5, .01); // Adjust the size as needed
-			cameraPosition.y -= .2;
-		} else if (display.camera.boxType == 'ediface-small') {
-			boxSize = new THREE.Vector3(1, 6, 3);
-		}
+	// 	if (display.camera.boxType == 'person') {
+	// 		boxSize = new THREE.Vector3(.2, .5, .01); // Adjust the size as needed
+	// 		cameraPosition.y -= .2;
+	// 	} else if (display.camera.boxType == 'ediface-small') {
+	// 		boxSize = new THREE.Vector3(1, 6, 3);
+	// 	}
 
-		// Create a bounding box around the camera
-		var cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(cameraPosition, boxSize);
+	// 	// Create a bounding box around the camera
+	// 	var cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(cameraPosition, boxSize);
 
-		if (display.cyberpunkBoxMemory) {
+	// 	if (display.cyberpunkBoxMemory) {
 
-			// Apply rotation to the bounding box
-			const matrix = new THREE.Matrix4().makeRotationFromQuaternion(camera.quaternion);
-			const vertices = [
-			    new THREE.Vector3(boxSize.x / 2, boxSize.y / 2, boxSize.z / 2),
-			    new THREE.Vector3(-boxSize.x / 2, boxSize.y / 2, boxSize.z / 2),
-			    new THREE.Vector3(boxSize.x / 2, -boxSize.y / 2, boxSize.z / 2),
-			    new THREE.Vector3(-boxSize.x / 2, -boxSize.y / 2, boxSize.z / 2),
-			    new THREE.Vector3(boxSize.x / 2, boxSize.y / 2, -boxSize.z / 2),
-			    new THREE.Vector3(-boxSize.x / 2, boxSize.y / 2, -boxSize.z / 2),
-			    new THREE.Vector3(boxSize.x / 2, -boxSize.y / 2, -boxSize.z / 2),
-			    new THREE.Vector3(-boxSize.x / 2, -boxSize.y / 2, -boxSize.z / 2),
-			];
+	// 		// Apply rotation to the bounding box
+	// 		const matrix = new THREE.Matrix4().makeRotationFromQuaternion(camera.quaternion);
+	// 		const vertices = [
+	// 		    new THREE.Vector3(boxSize.x / 2, boxSize.y / 2, boxSize.z / 2),
+	// 		    new THREE.Vector3(-boxSize.x / 2, boxSize.y / 2, boxSize.z / 2),
+	// 		    new THREE.Vector3(boxSize.x / 2, -boxSize.y / 2, boxSize.z / 2),
+	// 		    new THREE.Vector3(-boxSize.x / 2, -boxSize.y / 2, boxSize.z / 2),
+	// 		    new THREE.Vector3(boxSize.x / 2, boxSize.y / 2, -boxSize.z / 2),
+	// 		    new THREE.Vector3(-boxSize.x / 2, boxSize.y / 2, -boxSize.z / 2),
+	// 		    new THREE.Vector3(boxSize.x / 2, -boxSize.y / 2, -boxSize.z / 2),
+	// 		    new THREE.Vector3(-boxSize.x / 2, -boxSize.y / 2, -boxSize.z / 2),
+	// 		];
 
-			vertices.forEach(v => v.applyMatrix4(matrix).add(cameraPosition));
+	// 		vertices.forEach(v => v.applyMatrix4(matrix).add(cameraPosition));
 
-			const rotatedBoundingBox = new THREE.Box3().setFromPoints(vertices);
-			// Optionally visualize the bounding box for debugging
-			const boxHelper = new THREE.Box3Helper(rotatedBoundingBox, 0xffff00);
+	// 		const rotatedBoundingBox = new THREE.Box3().setFromPoints(vertices);
+	// 		// Optionally visualize the bounding box for debugging
+	// 		const boxHelper = new THREE.Box3Helper(rotatedBoundingBox, 0xffff00);
 
-			scene.add(boxHelper);
+	// 		scene.add(boxHelper);
 
-		}
+	// 	}
 	    
-	    var touchablePlanes = scene.children.filter(child => /touchable/.test(child.name));
+	//     var touchablePlanes = scene.children.filter(child => /touchable/.test(child.name));
 
 
-	   	window.intersects = false
-	   	display.cyberpunkBoxMemory = false;
+	//    	window.intersects = false
+	//    	display.cyberpunkBoxMemory = false;
 
-		// Assuming touchablePlanes is an array of objects with a 'triangle' property
-if (touchablePlanes.length) {
-	for (var k = 0; k < touchablePlanes.length; k++) {
-		var o = touchablePlanes[k];
 
-		if (o.triangle && cameraBoundingBox.intersectsTriangle(o.triangle)) {
-			user.touchedObjects.push(o);
-			display.cyberpunkBoxMemory = true;
-			setTimeout(function() { display.cyberpunkBoxMemory = false }, 300);
+	// 	if (touchablePlanes.length) {
+	// 		var hasFloor = false
+	// 		for (var k = 0; k < touchablePlanes.length; k++) {
+	// 			var o = touchablePlanes[k];
 
-			// Find the intersection point using raycasting
-			const rays = [
-				new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(1, 0, 0)),
-				new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 1, 0)),
-				new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 0, 1)),
-				new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(-1, 0, 0)),
-				new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, -1, 0)),
-				new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, 0, -1))
-			];
+	// 			if (o.triangle && cameraBoundingBox.intersectsTriangle(o.triangle)) {
+			
+	// 				display.cyberpunkBoxMemory = true;
+	// 				setTimeout(function() { display.cyberpunkBoxMemory = false }, 300);
 
-			for (let i = 0; i < rays.length; i++) {
-				const intersectionPoint = new THREE.Vector3();
-				const intersects = rays[i].intersectTriangle(o.triangle.a, o.triangle.b, o.triangle.c, false, intersectionPoint);
-				if (intersects) {
-					// Use the intersection point
-					// If the triangle is slanted less than 45 degrees, the user can walk on it
-					if (Math.abs(o.triangle.normal.y) > Math.cos(Math.PI / 4)) {
-						camera.position.y = intersectionPoint.y + 0.5
-					}
-					break; // Exit loop after the first intersection
-				}
-			}
-		}
-	}
+	// 				// Find the intersection point using raycasting
+	// 				const rays = [
+	// 					new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(1, 0, 0)),
+	// 					new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 1, 0)),
+	// 					new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 0, 1)),
+	// 					new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(-1, 0, 0)),
+	// 					new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, -1, 0)),
+	// 					new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, 0, -1))
+	// 				];
+
+	// 				const triangleNormal = calculateNormal(o.triangle.a, o.triangle.b, o.triangle.c);
+
+
+	// 				for (let i = 0; i < rays.length; i++) {
+	// 					const intersectionPoint = new THREE.Vector3();
+	// 					const intersects = rays[i].intersectTriangle(o.triangle.a, o.triangle.b, o.triangle.c, false, intersectionPoint);
+	// 					if (intersects) {
+	// 						let center = new THREE.Vector3()
+	// 						user.touchedObjects.push({
+	// 							name: o.name,
+	// 							center: center.addVectors(o.triangle.a, o.triangle.b).add(o.triangle.c).divideScalar(3)
+
+	// 						})
+	// 						const cameraToIntersection = new THREE.Vector3().subVectors(intersectionPoint, camera.position).normalize();
+
+	// 						['x','y','z'].forEach(xyz => {
+	// 							intersectionPoint[xyz] = Math.round(intersectionPoint[xyz] * P) / P;
+	// 						});
+
+
+	// 						if (Math.abs(o.triangle.normal.y) > Math.cos(Math.PI / 4)) {
+	// 							let thisYFloor = Math.floor(intersectionPoint.y * P) / P;
+	// 							camera.floorDiff = Math.abs(thisYFloor - camera.floor);
+	// 							camera.floor = thisYFloor
+	// 							hasFloor = true;
+
+	// 							if (camera.floorDiff > 0.05 && camera.floorDiff < 0.5) {
+
+    // 								controller.creator.update();
+    // 								camera.position.y = thisYFloor + 0.5
+	// 							}
+	// 						} else {
+	// 							if (this.w) this.wS = 0.0;
+	// 						    if (this.a) this.aS = 0.0;
+	// 						    if (this.s) this.sS = 0.0;
+	// 						    if (this.d) this.dS = 0.0; 
+	// 						}
+
+	// 					} else {
+	// 						hasFloor = true
+	// 					}
+	// 				}
+	// 			}
+	// 		}
+	// 		if (!hasFloor) {
+	// 			camera.floor = 0;
+	// 		}
+	// 	}
+
+
+	// }
+	touch() {
+    user.touchedObjects = [];
+    this.wS = 0.05;
+    this.aS = 0.05;
+    this.sS = 0.05;
+    this.dS = 0.05;
+
+    actives.forEach(atc => scene.remove(atc));
+    actives = [];
+    let boxSize;
+    var cameraPosition = camera.position.clone();
+
+    if (display.camera.boxType == 'person') {
+        boxSize = new THREE.Vector3(.2, .5, .01);
+        cameraPosition.y -= .2;
+    } else if (display.camera.boxType == 'ediface-small') {
+        boxSize = new THREE.Vector3(1, 6, 3);
+    }
+
+    var cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(cameraPosition, boxSize);
+
+    if (display.cyberpunkBoxMemory) {
+        const matrix = new THREE.Matrix4().makeRotationFromQuaternion(camera.quaternion);
+        const vertices = [
+            new THREE.Vector3(boxSize.x / 2, boxSize.y / 2, boxSize.z / 2),
+            new THREE.Vector3(-boxSize.x / 2, boxSize.y / 2, boxSize.z / 2),
+            new THREE.Vector3(boxSize.x / 2, -boxSize.y / 2, boxSize.z / 2),
+            new THREE.Vector3(-boxSize.x / 2, -boxSize.y / 2, boxSize.z / 2),
+            new THREE.Vector3(boxSize.x / 2, boxSize.y / 2, -boxSize.z / 2),
+            new THREE.Vector3(-boxSize.x / 2, boxSize.y / 2, -boxSize.z / 2),
+            new THREE.Vector3(boxSize.x / 2, -boxSize.y / 2, -boxSize.z / 2),
+            new THREE.Vector3(-boxSize.x / 2, -boxSize.y / 2, -boxSize.z / 2),
+        ];
+
+        vertices.forEach(v => v.applyMatrix4(matrix).add(cameraPosition));
+
+        const rotatedBoundingBox = new THREE.Box3().setFromPoints(vertices);
+        const boxHelper = new THREE.Box3Helper(rotatedBoundingBox, 0xffff00);
+        scene.add(boxHelper);
+    }
+
+    var touchablePlanes = scene.children.filter(child => /touchable/.test(child.name));
+    window.intersects = false;
+    display.cyberpunkBoxMemory = false;
+
+    let intersectionPoints = [];
+
+    if (touchablePlanes.length) {
+        for (var k = 0; k < touchablePlanes.length; k++) {
+            var o = touchablePlanes[k];
+
+            if (o.triangle && cameraBoundingBox.intersectsTriangle(o.triangle)) {
+                display.cyberpunkBoxMemory = true;
+                setTimeout(function() { display.cyberpunkBoxMemory = false }, 300);
+
+                const rays = [
+                    new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(1, 0, 0)),
+                    new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 1, 0)),
+                    new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 0, 1)),
+                    new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(-1, 0, 0)),
+                    new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, -1, 0)),
+                    new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, 0, -1))
+                ];
+
+                const triangleNormal = calculateNormal(o.triangle.a, o.triangle.b, o.triangle.c);
+
+                for (let i = 0; i < rays.length; i++) {
+                    const intersectionPoint = new THREE.Vector3();
+                    const intersects = rays[i].intersectTriangle(o.triangle.a, o.triangle.b, o.triangle.c, false, intersectionPoint);
+                    if (intersects) {
+                        let center = new THREE.Vector3();
+                        user.touchedObjects.push({
+                            name: o.name,
+                            center: center.addVectors(o.triangle.a, o.triangle.b).add(o.triangle.c).divideScalar(3)
+                        });
+
+                        intersectionPoint.x = Math.round(intersectionPoint.x * 1000) / 1000;
+                        intersectionPoint.y = Math.round(intersectionPoint.y * 1000) / 1000;
+                        intersectionPoint.z = Math.round(intersectionPoint.z * 1000) / 1000;
+
+                        intersectionPoints.push({ point: intersectionPoint, normal: o.triangle.normal });
+                    }
+                }
+            }
+        }
+    }
+
+    if (intersectionPoints.length) {
+        // Find the most relevant intersection point
+        let relevantIntersection = intersectionPoints[0];
+
+        for (let i = 1; i < intersectionPoints.length; i++) {
+            if (intersectionPoints[i].point.y < relevantIntersection.point.y) {
+                relevantIntersection = intersectionPoints[i];
+            }
+        }
+
+        if (Math.abs(relevantIntersection.normal.y) > Math.cos(Math.PI / 4)) {
+            let thisYFloor = Math.floor(relevantIntersection.point.y * 1000) / 1000;
+            camera.floorDiff = Math.abs(thisYFloor - camera.floor);
+            camera.floor = thisYFloor;
+
+            if (camera.floorDiff > 0.05 && camera.floorDiff < 0.5) {
+                controller.creator.update();
+                camera.position.y = thisYFloor + 0.5;
+            }
+        } else {
+            if (this.w) this.wS = 0.0;
+            if (this.a) this.aS = 0.0;
+            if (this.s) this.sS = 0.0;
+            if (this.d) this.dS = 0.0;
+        }
+    } else {
+        camera.floor = 0;
+    }
 }
 
-
-	}
 
     navigate() {
     	this.tabs.forEach(tab => {
@@ -840,7 +1008,7 @@ function Control() {
 
 	var controllerTabs = document.createElement('div');
 	controllerTabs.id = 'controller-tabs';
-	controllerTabs.innerHTML = `<button id="create-outside">Nature</button><button id="generate-polygon" class="active">Build Objects</button><button id="apply-images">Search Images</button><button id="manage-spaces">Manage Spaces</button>`
+	controllerTabs.innerHTML = `<button id="create-outside">Self</button><button id="generate-polygon" class="active">Build Objects</button><button id="apply-images">Search Images</button><button id="manage-spaces">Manage Spaces</button>`
 
 	document.getElementById('controller').appendChild(controllerTabs);
 	document.querySelectorAll('#controller-tabs > button').forEach(button => {
@@ -863,9 +1031,16 @@ function Control() {
 	var createOutside = document.createElement('section');
 	createOutside.classList.add('page');
 	createOutside.classList.add('create-outside');
-	createOutside.innerHTML = `?`;
+	createOutside.innerHTML = `<div id="self-control">
+		<input type="number" id="gravity" value="${controller.gravity}" />
+		<input type="number" id="jumpStrength" value="${controller.jumpStrength}" />
+	</div>`;
 
 	c.appendChild(createOutside);
+
+	document.getElementById('gravity').addEventListener('change', e => controller.gravity = +e.srcElement.value);
+
+	document.getElementById('jumpStrength').addEventListener('change', e => controller.jumpStrength = +e.srcElement.value);
 
 
 	var candidatePoints = document.createElement('section');
@@ -896,10 +1071,10 @@ function Control() {
 		pg.innerHTML = `<pre class="point-group" data-id="${id}"></pre>
 			<div>
 				<button class="generate-polygon">Make Polygon Path</button>
-				<button class="add-floor">Add a Floor</button>
-				<button class="add-door">Add a Door</button>
-				<button class="add-ceiling">Add a Ceiling</button>
-				<button class="add-wall">Add a Wall</button>
+				<button class="add-floor">Make Flat Floor</button>
+				<button class="add-door">Make Flatish Ground</button>
+				<button class="add-ceiling">Make Slightly-Rolling Ground</button>
+				<button class="add-wall">Make Rugged Incline</button>
 				<button class="add-window">Add a Window</button>
 			</div>`;
 
@@ -956,10 +1131,10 @@ function DevGrid(radius, display) {
 	});
 	window.devGridDots = [];
 	if (display) {
-		var gridstep = .45// 0.75;
-	    for (var x = -radius; x < radius; x += gridstep) {
-	        for (var y = -radius; y < radius; y += gridstep) {
-	            for (var z = -radius; z < radius; z += gridstep) {
+		var gridstep = .35// 0.75;
+	    for (var x = 0; x < radius * 2; x += gridstep) {
+	        for (var y = 0; y < radius * 2; y += gridstep) {
+	            for (var z = 0; z < radius * 2; z += gridstep) {
 	            	let _x = Math.round(x * 100) / 100; 
 	            	let _y = Math.round(y * 100) / 100;
 	            	let _z = Math.round(z * 100) / 100;
@@ -1088,6 +1263,15 @@ function RenderAll() {
 	Sun();
 
 	Animate();
+
+	document.getElementById('intersection-points').innerHTML = `
+		<span>floor: ${camera.floor}</span> <br />
+		<pre>
+			x: ${camera.position.x}
+			y: ${camera.position.y}
+			z: ${camera.position.z}
+		</pre>
+		`
 }
 
 RenderAll();
