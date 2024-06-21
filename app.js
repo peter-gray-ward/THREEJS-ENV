@@ -15,10 +15,226 @@ camera.lookAt(new THREE.Vector3(0, 0, 0));
 
 var priorPosition = camera.position.clone();
 
+var display = {
+	devGridDots: true,
+	cyberpunkBoxMemory: false,
+	camera: {
+		boxType: 'person'
+	}
+}
+var far = 10000;
+
+const distanceToSunInInches = 588768000000;
+
+/**
+ * Calculates a vertex position at a specified range (distance) from a given center point.
+ * 
+ * @param {number} range - The distance from the center point to the new vertex.
+ * @param {number} x - The x-coordinate of the original point.
+ * @param {number} y - The y-coordinate of the original point.
+ * @param {number} z - The z-coordinate of the original point.
+ * @param {THREE.Vector3} center - The center point from which the distance is measured.
+ * @returns {THREE.Vector3} The new vertex position.
+ */
+
+function vertexFromPointAtRangeFromCenterAtDistance(range, x, y, z, center) {
+   const point = new Vector3(x, y, z);
+   const direction = new Vector3().subVectors(point, center).normalize();
+   const alteredPosition = new Vector3().addVectors(center, direction.multiplyScalar(range));
+   return alteredPosition;
+}
+
+const prefixes = ['Al', 'Bran', 'Cer', 'Dra', 'El', 'Fen', 'Gor', 'Hyl', 'Ira', 'Jen'];
+const suffixes = ['dor', 'wen', 'mar', 'ral', 'tan', 'vin', 'lor', 'mus', 'rid', 'sor'];
+
+function generateName() {
+   const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+   const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+   return prefix + suffix;
+}
+
+function secondFlooredDivisibleBy(date, factor) {
+   const seconds = date.getSeconds();
+   return seconds % factor === 0;
+};
+
+
+function randomInRange(from, to, startDistance = 0) {
+   const min = Math.min(from, to) + startDistance;
+   const max = Math.max(from, to) + startDistance;
+   const val = Math.random() * (max - min) + min;
+   return val;
+}
+
+function randomInRange2(min, max) {
+   return Math.random() * (max - min) + min;
+ }
+ 
+ // Function to generate a random position within a sphere
+function randomPositionInSphere(radius) {
+   let u = Math.random();
+   let v = Math.random();
+   let theta = 2 * Math.PI * u;
+   let phi = Math.acos(2 * v - 1);
+   let r = Math.cbrt(Math.random()) * radius;
+   let x = r * Math.sin(phi) * Math.cos(theta);
+   let y = r * Math.sin(phi) * Math.sin(theta);
+   let z = r * Math.cos(phi);
+   return new Vector3(x, y, z);
+ }
+
+
+function randomColorInRange(fromColor, toColor) {
+ const color1 = new Color(fromColor);
+ const color2 = new Color(toColor);
+ const factor = Math.random();
+ const interpolatedColor = color1.clone().lerp(color2, factor);
+ return interpolatedColor;
+}
+
+
+function width3rd() {
+ return window.innerWidth * 0.3333333;
+}
+
+function height3rd() {
+ return window.innerHeight * 0.333333;
+}
+
+function isStar(name) {
+   const starRegex = /^Star/;
+   return starRegex.test(name);
+}
+
+
+function sortScene(scene, user) {
+   scene.children.sort((a, b) => user.position.distanceTo(a.position) - user.position.distanceTo(b.position));
+}
+
+function getStatus(meshName) {
+   return meshName.split('::')[1];
+}
+
+function nameBase(meshName) {
+   return meshName.split("::")[0];
+}
+
+function isActive(mesh) {
+   return /::active/.test(mesh.name);
+}
+
+function get2DPosition(star, user, id) {
+   const __vector__ = star.position.clone().project(user);
+   const vector = new Vector2(__vector__.x, __vector__.y);
+
+   // Center the coordinates within the div
+   const div = document.querySelector(id);
+
+   if (div && div instanceof HTMLElement) {
+      const css = getComputedStyle(div);
+      const width = +css.width.replace('px', '');
+      const height = +css.height.replace('px', '');
+      const divCenterX = width / 2;
+      const divCenterY = height / 2;
+
+      // Convert normalized device coordinates to screen coordinates
+      const xNDC = vector.x; // Normalized device coordinate x
+      const yNDC = vector.y; // Normalized device coordinate y
+
+      // Map NDC (-1 to 1) to range (0 to div width and height)
+      const x = (xNDC * divCenterX) + divCenterX;
+      const y = -(yNDC * divCenterY) + divCenterY; // Invert y-axis
+
+      return {
+         x,
+         y
+      };
+   } else {
+      return {
+         x: 0,
+         y: 0
+      };
+   }
+}
+
+
+// Assuming `this` is the camera
+function getOffsetVector(user, forwardAmount, upAmount, rightAmount) {
+   // Get the camera's direction vectors
+   const forward = new Vector3();
+   user.getWorldDirection(forward);
+
+   const up = user.up.clone().normalize();
+
+   const right = new Vector3();
+   right.crossVectors(up, forward).normalize();
+
+   // Create the offset vector in the local coordinate system
+   const offset = new Vector3()
+       .addScaledVector(forward, forwardAmount)
+       .addScaledVector(up, upAmount)
+       .addScaledVector(right, rightAmount);
+
+   // Get the new position by adding the offset to the camera's current position
+   const newPosition = user.position.clone().add(offset);
+
+   return newPosition;
+}
+
+
+
+
+
+function Candy(mesh) {
+   var i = 0;
+   
+   const { array, itemSize } = mesh.geometry.attributes['position'];
+   for (var j = 0; j < array.length; j += 3) {
+      array[j] += randomInRange(0.3, 1.5);
+      array[j + 1] += randomInRange(0.3, 1.5);
+      array[j + 2] += randomInRange(0.3, 1.5);
+   }
+
+   mesh.geometry.attributes['position'].needsUpdate = true;
+   mesh.geometry.computeBoundingSphere()
+   return mesh;
+}
+
+
+
+function getCurrentTime() {
+    // Parameters for the Earth's orbit and rotation
+    const semiMajorAxis = 1000; // Distance from the Sun in inches
+    const orbitalPeriod = 3600; // Orbit period in seconds (1 hour)
+    const rotationPeriod = 3600; // Rotation period in seconds (1 hour)
+
+    // Current time in seconds
+    const time = performance.now() / 1000; 
+
+    // Calculate the angle in the orbit (in radians)
+    const orbitAngle = (time / orbitalPeriod) * 2 * Math.PI;
+
+    // Calculate days out of 365
+    const daysOutOf365 = Math.floor((orbitAngle / (2 * Math.PI)) * 365);
+
+    // Calculate the angle for the Earth's rotation (in radians)
+    const rotationAngle = (time / rotationPeriod) * 2 * Math.PI;
+
+    // Calculate hours and minutes
+    const totalMinutes = (rotationAngle / (2 * Math.PI)) * 144000; // 1440 minutes in a day
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = Math.floor(totalMinutes % 60);
+
+    return { daysOutOf365, hours, minutes };
+}
+
+
+
+
 var axisLength = 100;
 const P = 100
 var actives = [];
-const N = 2;
+const N = 3;
 
 // Function to calculate the normal of a triangle
 function calculateNormal(a, b, c) {
@@ -26,6 +242,12 @@ function calculateNormal(a, b, c) {
     const edge2 = new THREE.Vector3().subVectors(c, a);
     const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
     return normal;
+}
+
+HTMLElement.prototype.css = function(obj) {
+	for (var key in obj) {
+		this.style[key] = obj[key];
+	}
 }
 
 // Helper function to create a dotted axis line
@@ -204,6 +426,7 @@ document.body.appendChild(renderer.domElement);
 var al = new THREE.AmbientLight(0xffffce, .03);
 al.position.set(0, 0, 0);
 scene.add(al);
+var imageModal = document.createElement('div');
 
 function xhr(options = { body: {} }) {
 	var x = new XMLHttpRequest();
@@ -212,13 +435,6 @@ function xhr(options = { body: {} }) {
 	x.send(JSON.stringify(options.body));
 }
 
-var display = {
-	devGridDots: true,
-	cyberpunkBoxMemory: false,
-	camera: {
-		boxType: 'person'
-	}
-}
 
 function getChildIndex(child) {
     const parent = child.parentNode;
@@ -299,7 +515,26 @@ class Page {
 }
 
 let page = new Page();
-let devgrid = {};
+function convertPlaneToTriangles(geometry) {
+    const triangles = [];
+    const positionAttribute = geometry.attributes.position;
+    const indexAttribute = geometry.index;
+
+    for (let i = 0; i < indexAttribute.count; i += 3) {
+        const a = indexAttribute.getX(i);
+        const b = indexAttribute.getX(i + 1);
+        const c = indexAttribute.getX(i + 2);
+
+        const vertexA = new THREE.Vector3().fromBufferAttribute(positionAttribute, a);
+        const vertexB = new THREE.Vector3().fromBufferAttribute(positionAttribute, b);
+        const vertexC = new THREE.Vector3().fromBufferAttribute(positionAttribute, c);
+
+        triangles.push([vertexA, vertexB, vertexC]);
+    }
+
+    return triangles;
+}
+
 
 class Creator {
 	addChild = false;
@@ -430,22 +665,75 @@ class Creator {
 		console.log(triangles)
 
 		const itemBoundingBox = new THREE.Box3().setFromObject(mesh);
-
-		// Create a BoxHelper to visualize the bounding box
 		const boxHelper = new THREE.BoxHelper(mesh, 0xff0000);
-
-		// Add the BoxHelper to the scene
 		scene.add(boxHelper);
 
 		// scene.add(mesh);
 	}
 
-	AddFloor() {}
+	MakeFlatFloor() {}
 	AddDoor() {}
 	AddWall() {}
 	AddWindow() {}
 	AddCeiling() {}
 	AddStairs() {}
+
+	MakeFlatishGround() {
+    if (this.polygonVertices[this.activePolygonVerticesIndex].length == 4) {
+        var v0 = this.polygonVertices[this.activePolygonVerticesIndex][0];
+        var v1 = this.polygonVertices[this.activePolygonVerticesIndex][1];
+        var v2 = this.polygonVertices[this.activePolygonVerticesIndex][2];
+        var v3 = this.polygonVertices[this.activePolygonVerticesIndex][3];
+
+        var segments = 10; // Number of segments along each axis
+
+        var vertices = [];
+        var indices = [];
+
+        function randomInRange(min, max) {
+            return Math.random() * (max - min) + min;
+        }
+
+        // Create vertices with random vertical adjustments
+        for (let i = 0; i <= segments; i++) {
+            for (let j = 0; j <= segments; j++) {
+                let x = (1 - i / segments) * ((1 - j / segments) * v0.x + (j / segments) * v3.x) + 
+                        (i / segments) * ((1 - j / segments) * v1.x + (j / segments) * v2.x);
+                let z = (1 - i / segments) * ((1 - j / segments) * v0.z + (j / segments) * v3.z) + 
+                        (i / segments) * ((1 - j / segments) * v1.z + (j / segments) * v2.z);
+                let y = (1 - i / segments) * ((1 - j / segments) * v0.y + (j / segments) * v3.y) + 
+                        (i / segments) * ((1 - j / segments) * v1.y + (j / segments) * v2.y);
+                y += randomInRange(-0.05, 0.05); // Random vertical adjustment
+                vertices.push(x, y, z);
+            }
+        }
+
+        // Create indices for the plane
+        for (let i = 0; i < segments; i++) {
+            for (let j = 0; j < segments; j++) {
+                let a = i * (segments + 1) + j;
+                let b = i * (segments + 1) + (j + 1);
+                let c = (i + 1) * (segments + 1) + (j + 1);
+                let d = (i + 1) * (segments + 1) + j;
+
+                // Two triangles per segment
+                indices.push(a, b, d);
+                indices.push(b, c, d);
+            }
+        }
+
+        var planeGeometry = new THREE.BufferGeometry();
+        planeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        planeGeometry.setIndex(indices);
+        planeGeometry.computeVertexNormals();
+
+        var material = new THREE.MeshStandardMaterial({ color: new THREE.Color(Math.random(), Math.random(), Math.random()), side: THREE.DoubleSide });
+        var mesh = new THREE.Mesh(planeGeometry, material);
+
+        scene.add(mesh);
+    }
+}
+
 
 	selectPointGroup(event) {
 		var src = event.srcElement;
@@ -501,18 +789,20 @@ class Creator {
 		</div>`).join('')
 		
 		document.getElementById('intersection-points').innerHTML = `
-		<span>floor: ${camera.floor}</span> <br />
-		<pre>
-			x: ${camera.position.x}
-			y: ${camera.position.y}
-			z: ${camera.position.z}
-		</pre>
+<span>floor: ${camera.floor}</span> <br />
+<pre>
+x: ${camera.position.x}
+y: ${camera.position.y}
+z: ${camera.position.z}
+</pre>
 		`
 		// xhr({
 		// 	method: 'POST',
 		// 	url: `/items?user=${user.name}&space=${user.space}`,
 		// 	body: this.polygonVertices
 		// });
+
+
 	}
 }
 
@@ -598,12 +888,27 @@ class Controller {
 						
 					} else {
 						target.material.color.set('red');
-						this.creator.polygonVertices[this.creator.activePolygonVerticesIndex].push({ 
-							x: target.position.x, 
-							y: target.position.y, 
-							z: target.position.z 
-						});
+						
 					}
+
+					this.creator.polygonVertices[this.creator.activePolygonVerticesIndex].push({ 
+						x: target.position.x, 
+						y: target.position.y, 
+						z: target.position.z 
+					});
+				} else {
+					imageModal.innerHTML = '';
+					imageModal.css({
+						position: 'absolute',
+						top: e.clientY + 'px',
+						left: e.clientX + 'px',
+						width: '30vw',
+						height: '55vh',
+						padding: '0.1rem',
+						backgroundColor: 'white'
+					});
+					document.body.appendChild(imageModal);
+					loadTags(imageModal)
 				}
 				
 				this.creator.update();
@@ -660,13 +965,14 @@ class Controller {
         }
     }
     activate() {
+    	var active = false;
     	priorPosition = camera.position;
         if (this.w) {
             var direction = new THREE.Vector3();
             camera.getWorldDirection(direction);
             direction.multiplyScalar(this.wS);
             camera.position.add(direction);
-            // _camera_.position.add(direction);
+        	active = true;
         }
         if (this.a) {
             var direction = new THREE.Vector3();
@@ -675,14 +981,14 @@ class Controller {
             right.crossVectors(camera.up, direction).normalize();
             right.multiplyScalar(this.aS);
             camera.position.add(right);
-            // _camera_.position.add(right);
+        	active = true;
         }
         if (this.s) {
             var direction = new THREE.Vector3();
             camera.getWorldDirection(direction);
             direction.multiplyScalar(-this.sS);
             camera.position.add(direction);
-            // _camera_.position.add(direction);
+        	active = true;
         }
         if (this.d) {
             var direction = new THREE.Vector3();
@@ -691,15 +997,15 @@ class Controller {
             right.crossVectors(camera.up, direction).normalize();
             right.multiplyScalar(-this.dS);
             camera.position.add(right);
-            // _camera_.position.add(right);
+        	active = true;
         }
         if (this.ArrowUp) {
             camera.rotateX(0.1);
-            // _camera_.rotateX(0.1);
+        	active = true;
         }
         if (this.ArrowDown) {
             camera.rotateX(-0.1);
-            // _camera_.rotateX(-0.1);
+        	active = true;
         }
         if (this.ArrowLeft || this.ArrowRight) {
             let quaternionY = new THREE.Quaternion();
@@ -715,12 +1021,13 @@ class Controller {
 	        }
 
 	        camera.quaternion.multiplyQuaternions(quaternionY, camera.quaternion);
-	        // _camera_.quaternion.multiplyQuaternions(quaternionY, camera.quaternion);
+	        active = true;
         }
 
         if (this.space && !this.isJumping) {
             this.velocity.y = this.jumpStrength;
             this.isJumping = true;
+            active = true;
         }
 
         this.velocity.y += this.gravity;
@@ -734,252 +1041,125 @@ class Controller {
         }
 
         this.creator.update()
+
+        if (active && imageModal) imageModal.remove();
     }
-    // touch() {
-    // 	user.touchedObjects = []
-
-    // 	this.wS = 0.05;
-	//     this.aS = 0.05;
-	//     this.sS = 0.05;
-	//     this.dS = 0.05;
-
-    // 	actives.forEach(atc => scene.remove(atc));
-    // 	actives = [];
-	// 	let boxSize;
-	// 	var cameraPosition = camera.position.clone();
-		
-
-	// 	if (display.camera.boxType == 'person') {
-	// 		boxSize = new THREE.Vector3(.2, .5, .01); // Adjust the size as needed
-	// 		cameraPosition.y -= .2;
-	// 	} else if (display.camera.boxType == 'ediface-small') {
-	// 		boxSize = new THREE.Vector3(1, 6, 3);
-	// 	}
-
-	// 	// Create a bounding box around the camera
-	// 	var cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(cameraPosition, boxSize);
-
-	// 	if (display.cyberpunkBoxMemory) {
-
-	// 		// Apply rotation to the bounding box
-	// 		const matrix = new THREE.Matrix4().makeRotationFromQuaternion(camera.quaternion);
-	// 		const vertices = [
-	// 		    new THREE.Vector3(boxSize.x / 2, boxSize.y / 2, boxSize.z / 2),
-	// 		    new THREE.Vector3(-boxSize.x / 2, boxSize.y / 2, boxSize.z / 2),
-	// 		    new THREE.Vector3(boxSize.x / 2, -boxSize.y / 2, boxSize.z / 2),
-	// 		    new THREE.Vector3(-boxSize.x / 2, -boxSize.y / 2, boxSize.z / 2),
-	// 		    new THREE.Vector3(boxSize.x / 2, boxSize.y / 2, -boxSize.z / 2),
-	// 		    new THREE.Vector3(-boxSize.x / 2, boxSize.y / 2, -boxSize.z / 2),
-	// 		    new THREE.Vector3(boxSize.x / 2, -boxSize.y / 2, -boxSize.z / 2),
-	// 		    new THREE.Vector3(-boxSize.x / 2, -boxSize.y / 2, -boxSize.z / 2),
-	// 		];
-
-	// 		vertices.forEach(v => v.applyMatrix4(matrix).add(cameraPosition));
-
-	// 		const rotatedBoundingBox = new THREE.Box3().setFromPoints(vertices);
-	// 		// Optionally visualize the bounding box for debugging
-	// 		const boxHelper = new THREE.Box3Helper(rotatedBoundingBox, 0xffff00);
-
-	// 		scene.add(boxHelper);
-
-	// 	}
-	    
-	//     var touchablePlanes = scene.children.filter(child => /touchable/.test(child.name));
-
-
-	//    	window.intersects = false
-	//    	display.cyberpunkBoxMemory = false;
-
-
-	// 	if (touchablePlanes.length) {
-	// 		var hasFloor = false
-	// 		for (var k = 0; k < touchablePlanes.length; k++) {
-	// 			var o = touchablePlanes[k];
-
-	// 			if (o.triangle && cameraBoundingBox.intersectsTriangle(o.triangle)) {
-			
-	// 				display.cyberpunkBoxMemory = true;
-	// 				setTimeout(function() { display.cyberpunkBoxMemory = false }, 300);
-
-	// 				// Find the intersection point using raycasting
-	// 				const rays = [
-	// 					new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(1, 0, 0)),
-	// 					new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 1, 0)),
-	// 					new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 0, 1)),
-	// 					new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(-1, 0, 0)),
-	// 					new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, -1, 0)),
-	// 					new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, 0, -1))
-	// 				];
-
-	// 				const triangleNormal = calculateNormal(o.triangle.a, o.triangle.b, o.triangle.c);
-
-
-	// 				for (let i = 0; i < rays.length; i++) {
-	// 					const intersectionPoint = new THREE.Vector3();
-	// 					const intersects = rays[i].intersectTriangle(o.triangle.a, o.triangle.b, o.triangle.c, false, intersectionPoint);
-	// 					if (intersects) {
-	// 						let center = new THREE.Vector3()
-	// 						user.touchedObjects.push({
-	// 							name: o.name,
-	// 							center: center.addVectors(o.triangle.a, o.triangle.b).add(o.triangle.c).divideScalar(3)
-
-	// 						})
-	// 						const cameraToIntersection = new THREE.Vector3().subVectors(intersectionPoint, camera.position).normalize();
-
-	// 						['x','y','z'].forEach(xyz => {
-	// 							intersectionPoint[xyz] = Math.round(intersectionPoint[xyz] * P) / P;
-	// 						});
-
-
-	// 						if (Math.abs(o.triangle.normal.y) > Math.cos(Math.PI / 4)) {
-	// 							let thisYFloor = Math.floor(intersectionPoint.y * P) / P;
-	// 							camera.floorDiff = Math.abs(thisYFloor - camera.floor);
-	// 							camera.floor = thisYFloor
-	// 							hasFloor = true;
-
-	// 							if (camera.floorDiff > 0.05 && camera.floorDiff < 0.5) {
-
-    // 								controller.creator.update();
-    // 								camera.position.y = thisYFloor + 0.5
-	// 							}
-	// 						} else {
-	// 							if (this.w) this.wS = 0.0;
-	// 						    if (this.a) this.aS = 0.0;
-	// 						    if (this.s) this.sS = 0.0;
-	// 						    if (this.d) this.dS = 0.0; 
-	// 						}
-
-	// 					} else {
-	// 						hasFloor = true
-	// 					}
-	// 				}
-	// 			}
-	// 		}
-	// 		if (!hasFloor) {
-	// 			camera.floor = 0;
-	// 		}
-	// 	}
-
-
-	// }
 	touch() {
-    user.touchedObjects = [];
-    this.wS = 0.05;
-    this.aS = 0.05;
-    this.sS = 0.05;
-    this.dS = 0.05;
+	    user.touchedObjects = [];
+	    this.wS = 0.05;
+	    this.aS = 0.05;
+	    this.sS = 0.05;
+	    this.dS = 0.05;
 
-    actives.forEach(atc => scene.remove(atc));
-    actives = [];
-    let boxSize;
-    var cameraPosition = camera.position.clone();
+	    actives.forEach(atc => scene.remove(atc));
+	    actives = [];
+	    let boxSize;
+	    var cameraPosition = camera.position.clone();
 
-    if (display.camera.boxType == 'person') {
-        boxSize = new THREE.Vector3(.2, .5, .01);
-        cameraPosition.y -= .2;
-    } else if (display.camera.boxType == 'ediface-small') {
-        boxSize = new THREE.Vector3(1, 6, 3);
-    }
+	    if (display.camera.boxType == 'person') {
+	        boxSize = new THREE.Vector3(.2, .5, .01);
+	        cameraPosition.y -= .2;
+	    } else if (display.camera.boxType == 'ediface-small') {
+	        boxSize = new THREE.Vector3(1, 6, 3);
+	    }
 
-    var cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(cameraPosition, boxSize);
+	    var cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(cameraPosition, boxSize);
 
-    if (display.cyberpunkBoxMemory) {
-        const matrix = new THREE.Matrix4().makeRotationFromQuaternion(camera.quaternion);
-        const vertices = [
-            new THREE.Vector3(boxSize.x / 2, boxSize.y / 2, boxSize.z / 2),
-            new THREE.Vector3(-boxSize.x / 2, boxSize.y / 2, boxSize.z / 2),
-            new THREE.Vector3(boxSize.x / 2, -boxSize.y / 2, boxSize.z / 2),
-            new THREE.Vector3(-boxSize.x / 2, -boxSize.y / 2, boxSize.z / 2),
-            new THREE.Vector3(boxSize.x / 2, boxSize.y / 2, -boxSize.z / 2),
-            new THREE.Vector3(-boxSize.x / 2, boxSize.y / 2, -boxSize.z / 2),
-            new THREE.Vector3(boxSize.x / 2, -boxSize.y / 2, -boxSize.z / 2),
-            new THREE.Vector3(-boxSize.x / 2, -boxSize.y / 2, -boxSize.z / 2),
-        ];
+	    if (display.cyberpunkBoxMemory) {
+	        const matrix = new THREE.Matrix4().makeRotationFromQuaternion(camera.quaternion);
+	        const vertices = [
+	            new THREE.Vector3(boxSize.x / 2, boxSize.y / 2, boxSize.z / 2),
+	            new THREE.Vector3(-boxSize.x / 2, boxSize.y / 2, boxSize.z / 2),
+	            new THREE.Vector3(boxSize.x / 2, -boxSize.y / 2, boxSize.z / 2),
+	            new THREE.Vector3(-boxSize.x / 2, -boxSize.y / 2, boxSize.z / 2),
+	            new THREE.Vector3(boxSize.x / 2, boxSize.y / 2, -boxSize.z / 2),
+	            new THREE.Vector3(-boxSize.x / 2, boxSize.y / 2, -boxSize.z / 2),
+	            new THREE.Vector3(boxSize.x / 2, -boxSize.y / 2, -boxSize.z / 2),
+	            new THREE.Vector3(-boxSize.x / 2, -boxSize.y / 2, -boxSize.z / 2),
+	        ];
 
-        vertices.forEach(v => v.applyMatrix4(matrix).add(cameraPosition));
+	        vertices.forEach(v => v.applyMatrix4(matrix).add(cameraPosition));
 
-        const rotatedBoundingBox = new THREE.Box3().setFromPoints(vertices);
-        const boxHelper = new THREE.Box3Helper(rotatedBoundingBox, 0xffff00);
-        scene.add(boxHelper);
-    }
+	        const rotatedBoundingBox = new THREE.Box3().setFromPoints(vertices);
+	        const boxHelper = new THREE.Box3Helper(rotatedBoundingBox, 0xffff00);
+	        scene.add(boxHelper);
+	    }
 
-    var touchablePlanes = scene.children.filter(child => /touchable/.test(child.name));
-    window.intersects = false;
-    display.cyberpunkBoxMemory = false;
+	    var touchablePlanes = scene.children.filter(child => /touchable/.test(child.name));
+	    window.intersects = false;
+	    display.cyberpunkBoxMemory = false;
 
-    let intersectionPoints = [];
+	    let intersectionPoints = [];
 
-    if (touchablePlanes.length) {
-        for (var k = 0; k < touchablePlanes.length; k++) {
-            var o = touchablePlanes[k];
+	    if (touchablePlanes.length) {
+	        for (var k = 0; k < touchablePlanes.length; k++) {
+	            var o = touchablePlanes[k];
 
-            if (o.triangle && cameraBoundingBox.intersectsTriangle(o.triangle)) {
-                display.cyberpunkBoxMemory = true;
-                setTimeout(function() { display.cyberpunkBoxMemory = false }, 300);
+	            if (o.triangle && cameraBoundingBox.intersectsTriangle(o.triangle)) {
+	                display.cyberpunkBoxMemory = true;
+	                setTimeout(function() { display.cyberpunkBoxMemory = false }, 300);
 
-                const rays = [
-                    new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(1, 0, 0)),
-                    new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 1, 0)),
-                    new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 0, 1)),
-                    new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(-1, 0, 0)),
-                    new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, -1, 0)),
-                    new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, 0, -1))
-                ];
+	                const rays = [
+	                    new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(1, 0, 0)),
+	                    new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 1, 0)),
+	                    new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 0, 1)),
+	                    new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(-1, 0, 0)),
+	                    new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, -1, 0)),
+	                    new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, 0, -1))
+	                ];
 
-                const triangleNormal = calculateNormal(o.triangle.a, o.triangle.b, o.triangle.c);
+	                const triangleNormal = calculateNormal(o.triangle.a, o.triangle.b, o.triangle.c);
 
-                for (let i = 0; i < rays.length; i++) {
-                    const intersectionPoint = new THREE.Vector3();
-                    const intersects = rays[i].intersectTriangle(o.triangle.a, o.triangle.b, o.triangle.c, false, intersectionPoint);
-                    if (intersects) {
-                        let center = new THREE.Vector3();
-                        user.touchedObjects.push({
-                            name: o.name,
-                            center: center.addVectors(o.triangle.a, o.triangle.b).add(o.triangle.c).divideScalar(3)
-                        });
+	                for (let i = 0; i < rays.length; i++) {
+	                    const intersectionPoint = new THREE.Vector3();
+	                    const intersects = rays[i].intersectTriangle(o.triangle.a, o.triangle.b, o.triangle.c, false, intersectionPoint);
+	                    if (intersects) {
+	                        let center = new THREE.Vector3();
+	                        user.touchedObjects.push({
+	                            name: o.name,
+	                            center: center.addVectors(o.triangle.a, o.triangle.b).add(o.triangle.c).divideScalar(3)
+	                        });
 
-                        intersectionPoint.x = Math.round(intersectionPoint.x * 1000) / 1000;
-                        intersectionPoint.y = Math.round(intersectionPoint.y * 1000) / 1000;
-                        intersectionPoint.z = Math.round(intersectionPoint.z * 1000) / 1000;
+	                        intersectionPoint.x = Math.round(intersectionPoint.x * 1000) / 1000;
+	                        intersectionPoint.y = Math.round(intersectionPoint.y * 1000) / 1000;
+	                        intersectionPoint.z = Math.round(intersectionPoint.z * 1000) / 1000;
 
-                        intersectionPoints.push({ point: intersectionPoint, normal: o.triangle.normal });
-                    }
-                }
-            }
-        }
-    }
+	                        intersectionPoints.push({ point: intersectionPoint, normal: o.triangle.normal });
+	                    }
+	                }
+	            }
+	        }
+	    }
 
-    if (intersectionPoints.length) {
-        // Find the most relevant intersection point
-        let relevantIntersection = intersectionPoints[0];
+	    if (intersectionPoints.length) {
+	        // Find the most relevant intersection point
+	        let relevantIntersection = intersectionPoints[0];
 
-        for (let i = 1; i < intersectionPoints.length; i++) {
-            if (intersectionPoints[i].point.y < relevantIntersection.point.y) {
-                relevantIntersection = intersectionPoints[i];
-            }
-        }
+	        for (let i = 1; i < intersectionPoints.length; i++) {
+	            if (intersectionPoints[i].point.y < relevantIntersection.point.y) {
+	                relevantIntersection = intersectionPoints[i];
+	            }
+	        }
 
-        if (Math.abs(relevantIntersection.normal.y) > Math.cos(Math.PI / 4)) {
-            let thisYFloor = Math.floor(relevantIntersection.point.y * 1000) / 1000;
-            camera.floorDiff = Math.abs(thisYFloor - camera.floor);
-            camera.floor = thisYFloor;
+	        if (Math.abs(relevantIntersection.normal.y) > Math.cos(Math.PI / 4)) {
+	            let thisYFloor = Math.floor(relevantIntersection.point.y * 1000) / 1000;
+	            camera.floorDiff = Math.abs(thisYFloor - camera.floor);
+	            camera.floor = thisYFloor;
 
-            if (camera.floorDiff > 0.05 && camera.floorDiff < 0.5) {
-                controller.creator.update();
-                camera.position.y = thisYFloor + 0.5;
-            }
-        } else {
-            if (this.w) this.wS = 0.0;
-            if (this.a) this.aS = 0.0;
-            if (this.s) this.sS = 0.0;
-            if (this.d) this.dS = 0.0;
-        }
-    } else {
-        camera.floor = 0;
-    }
-}
-
-
+	            if (camera.floorDiff > 0.05 && camera.floorDiff < 0.5) {
+	                controller.creator.update();
+	                camera.position.y = thisYFloor + 0.5;
+	            }
+	        } else {
+	            if (this.w) this.wS = 0.0;
+	            if (this.a) this.aS = 0.0;
+	            if (this.s) this.sS = 0.0;
+	            if (this.d) this.dS = 0.0;
+	        }
+	    } else {
+	        camera.floor = 0;
+	    }
+	}
     navigate() {
     	this.tabs.forEach(tab => {
     		if (tab !== this.page) {
@@ -1070,12 +1250,9 @@ function Control() {
 		['row', 'three', 'polygonpoints'].forEach(c => pg.classList.add(c));
 		pg.innerHTML = `<pre class="point-group" data-id="${id}"></pre>
 			<div>
-				<button class="generate-polygon">Make Polygon Path</button>
-				<button class="add-floor">Make Flat Floor</button>
-				<button class="add-door">Make Flatish Ground</button>
-				<button class="add-ceiling">Make Slightly-Rolling Ground</button>
-				<button class="add-wall">Make Rugged Incline</button>
-				<button class="add-window">Add a Window</button>
+				<button class="generate-polygon">Triangle Path</button>
+				<button class="flatish-ground">Flatish Ground</button>
+				<button class="flatish-triangle">Flatish Triangle Path</button>
 			</div>`;
 
 		document.getElementById('add-polygon-row').insertAdjacentElement('beforebegin', pg);
@@ -1089,7 +1266,8 @@ function Control() {
 			controller.creator.addChild = false;
 		});
 
-		pg.children[1].children[1].addEventListener('click', controller.creator.AddFloor.bind(controller.creator));
+
+		pg.children[1].children[1].addEventListener('click', controller.creator.MakeFlatishGround.bind(controller.creator));
 	})	
 
 
@@ -1119,9 +1297,9 @@ ${JSON.stringify(camera.intersects, null, 1)}
 
 var controller = Control()
 
-/********/ /********/ /********/
-/********/ /********/ /********/
-/********/ /********/ /********/
+/********| |********| |********/
+/********| |********| |********/
+/********| |********| |********/
 window.devGridDots = [];
 function DevGrid(radius, display) {
 	window.devGridDots.forEach(function(dgd) {
@@ -1257,11 +1435,8 @@ function RenderAll() {
 
 	devGridDots.forEach(dgd => scene.remove(dgd));
 	devGridDots = [];
-
-	DevGrid(N, true);
-	
+	DevGrid(N, display.devGridDots);
 	Sun();
-
 	Animate();
 
 	document.getElementById('intersection-points').innerHTML = `
@@ -1284,5 +1459,34 @@ function Animate() {
     controller.touch();
 
     renderer.render(scene, camera);
+}
+
+
+function loadTags(div) {
+	xhr({
+		method: "GET",
+		url: "/image-tags",
+		load: function() {
+			var tags = JSON.parse(this.response);
+			imageModal.innerHTML = `
+			<div class="breadcrumbs">tags</div>
+			<div>
+				${
+					tags.map(tag => `<button class="tag" data-tag="${tag}">${tag}</div>`).join('')
+				}
+			</div>
+			`;
+			document.querySelectorAll('.tag').forEach(function(button) {
+				button.addEventListener('click', function() {
+					var tag = this.dataset.id;
+					loadImages(tag);
+				});
+			})
+		}
+	})
+}
+
+function loadImages(tag) {
+
 }
 

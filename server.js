@@ -21,6 +21,27 @@ app
 	console.log(fp)
 	res.sendFile(fp)
 })
-
+.get('/image-tags', (req, res) => {
+  connection.query(`
+    select distinct tag, count(tag) as countOf from fun.images 
+    group by tag
+    order by countOf desc`, (err, results) => {
+    if (results && results.length) {
+      res.jsonp(results)
+    }
+  })
+})
+// .get('/images', (req, res) => {
+//   var tag = req.query.tag;
+//   var offset = req.query.offset;
+//   connection.query(`
+//     select distinct tag, count(tag) as countOf from fun.images 
+//     group by tag
+//     order by countOf desc`, (err, results) => {
+//     if (results && results.length) {
+//       res.jsonp(results)
+//     }
+//   })
+// })
 .get('/:filename', (req, res) => res.sendFile(dir(req.params.filename)))
 .listen(4200, () => console.log('http://localhost:4200'));
