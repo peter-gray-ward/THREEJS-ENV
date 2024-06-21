@@ -444,6 +444,11 @@ function getChildIndex(child) {
 }
 
 
+function round(n, k) {
+	let ok = k * 10;
+	return Math.round(n * ok) / ok;
+}
+
 class User {
 	name = "Peter";
 	space = "Playground";
@@ -686,7 +691,8 @@ class Creator {
 	        var v2 = this.polygonVertices[this.activePolygonVerticesIndex][2];
 	        var v3 = this.polygonVertices[this.activePolygonVerticesIndex][3];
 
-	        var segments = 10; // Number of segments along each axis
+	        var segments = Math.floor(randomInRange(10, 20)); // Number of segments along each axis
+	        var terrain = {};
 
 	        var vertices = [];
 	        var indices = [];
@@ -704,8 +710,9 @@ class Creator {
 	                        (i / segments) * ((1 - j / segments) * v1.z + (j / segments) * v2.z);
 	                let y = (1 - i / segments) * ((1 - j / segments) * v0.y + (j / segments) * v3.y) + 
 	                        (i / segments) * ((1 - j / segments) * v1.y + (j / segments) * v2.y);
-	                y += randomInRange(-0.05, 0.09); // Random vertical adjustment
+	                y += randomInRange(randomInRange(-0.05, -0.01), randomInRange(0.01, 0.09)); // Random vertical adjustment
 	                vertices.push(x, y, z);
+	                terrain[round(x, 2) + '_' + round(z, 2)] = y;
 	            }
 	        }
 
@@ -741,6 +748,7 @@ class Creator {
 	        });
 	        var mesh = new THREE.Mesh(planeGeometry, material);
 	        mesh.name = "touchable::plane";
+	        mesh.terrain = terrain;
 
 	        scene.add(mesh);
 	    }
@@ -1119,20 +1127,19 @@ class Controller {
 	            	if (cameraBoundingBox.intersectsBox(o.geometry.boundingBox)) {
 	            		let foot = camera.position.clone();
 	            		foot.y -= 0.5;
-	            		var closest = new THREE.Vector3(Infinity, Infinity, Infinity);
-	            		for (var l = 0; l < o.geometry.attributes.position.array.length; l += 3) {
-	            			var vector = new THREE.Vector3(
-	            				o.geometry.attributes.position.array[l],
-	            				o.geometry.attributes.position.array[l + 1], 
-	            				o.geometry.attributes.position.array[l + 2]
-	            			);
-	            			if (foot.distanceTo(vector) < foot.distanceTo(closest)) {
-	            				closest = vector;
+	            		var closestDist = Infinity;
+	            		var closestY = 0;
+	            		for (var key in o.terrain) {
+	            			var xz = key.split("_").map(Number);
+	            			let dist = Math.sqrt(Math.pow(xz[0] - camera.position.z, 2) + Math.pow(xz[1] - camera.position.z, 2));
+	            			if (dist < closestDist) {
+	            				closestDist = dist;
+	            				closestY = o.terrain[key];
 	            			}
 	            		}
-	            		camera.floor = vector.y;
+	            		camera.floor = closestY;
 	            		camera.floorDiff = Math.abs(camera.position.y - camera.floor);
-	                	camera.position.y = camera.floor;
+	                	camera.position.y = camera.floor + 0.5;
 	            		controller.creator.update();
 	            	}
 	            } else if (o.triangle && cameraBoundingBox.intersectsTriangle(o.triangle)) {
