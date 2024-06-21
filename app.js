@@ -8,6 +8,7 @@ scene.add(origin);
 var camera = new THREE.PerspectiveCamera(75, (window.innerWidth * 0.75) / window.innerHeight, 0.1, 100000);
 scene.add(camera);
 camera.floor = 0;
+camera.touchingFloor = true;
 camera.floorDiff = 0;
 camera.position.set(3, 0.5, 3);
 camera.up = new THREE.Vector3(0, 1, 0);
@@ -17,7 +18,7 @@ var priorPosition = camera.position.clone();
 
 var display = {
 	devGridDots: true,
-	cyberpunkBoxMemory: false,
+	userBoxFrame: false,
 	camera: {
 		boxType: 'person'
 	}
@@ -679,60 +680,71 @@ class Creator {
 	AddStairs() {}
 
 	MakeFlatishGround() {
-    if (this.polygonVertices[this.activePolygonVerticesIndex].length == 4) {
-        var v0 = this.polygonVertices[this.activePolygonVerticesIndex][0];
-        var v1 = this.polygonVertices[this.activePolygonVerticesIndex][1];
-        var v2 = this.polygonVertices[this.activePolygonVerticesIndex][2];
-        var v3 = this.polygonVertices[this.activePolygonVerticesIndex][3];
+	    if (this.polygonVertices[this.activePolygonVerticesIndex].length == 4) {
+	        var v0 = this.polygonVertices[this.activePolygonVerticesIndex][0];
+	        var v1 = this.polygonVertices[this.activePolygonVerticesIndex][1];
+	        var v2 = this.polygonVertices[this.activePolygonVerticesIndex][2];
+	        var v3 = this.polygonVertices[this.activePolygonVerticesIndex][3];
 
-        var segments = 10; // Number of segments along each axis
+	        var segments = 10; // Number of segments along each axis
 
-        var vertices = [];
-        var indices = [];
+	        var vertices = [];
+	        var indices = [];
 
-        function randomInRange(min, max) {
-            return Math.random() * (max - min) + min;
-        }
+	        function randomInRange(min, max) {
+	            return Math.random() * (max - min) + min;
+	        }
 
-        // Create vertices with random vertical adjustments
-        for (let i = 0; i <= segments; i++) {
-            for (let j = 0; j <= segments; j++) {
-                let x = (1 - i / segments) * ((1 - j / segments) * v0.x + (j / segments) * v3.x) + 
-                        (i / segments) * ((1 - j / segments) * v1.x + (j / segments) * v2.x);
-                let z = (1 - i / segments) * ((1 - j / segments) * v0.z + (j / segments) * v3.z) + 
-                        (i / segments) * ((1 - j / segments) * v1.z + (j / segments) * v2.z);
-                let y = (1 - i / segments) * ((1 - j / segments) * v0.y + (j / segments) * v3.y) + 
-                        (i / segments) * ((1 - j / segments) * v1.y + (j / segments) * v2.y);
-                y += randomInRange(-0.05, 0.05); // Random vertical adjustment
-                vertices.push(x, y, z);
-            }
-        }
+	        // Create vertices with random vertical adjustments
+	        for (let i = 0; i <= segments; i++) {
+	            for (let j = 0; j <= segments; j++) {
+	                let x = (1 - i / segments) * ((1 - j / segments) * v0.x + (j / segments) * v3.x) + 
+	                        (i / segments) * ((1 - j / segments) * v1.x + (j / segments) * v2.x);
+	                let z = (1 - i / segments) * ((1 - j / segments) * v0.z + (j / segments) * v3.z) + 
+	                        (i / segments) * ((1 - j / segments) * v1.z + (j / segments) * v2.z);
+	                let y = (1 - i / segments) * ((1 - j / segments) * v0.y + (j / segments) * v3.y) + 
+	                        (i / segments) * ((1 - j / segments) * v1.y + (j / segments) * v2.y);
+	                y += randomInRange(-0.05, 0.09); // Random vertical adjustment
+	                vertices.push(x, y, z);
+	            }
+	        }
 
-        // Create indices for the plane
-        for (let i = 0; i < segments; i++) {
-            for (let j = 0; j < segments; j++) {
-                let a = i * (segments + 1) + j;
-                let b = i * (segments + 1) + (j + 1);
-                let c = (i + 1) * (segments + 1) + (j + 1);
-                let d = (i + 1) * (segments + 1) + j;
+	        // Create indices for the plane
+	        for (let i = 0; i < segments; i++) {
+	            for (let j = 0; j < segments; j++) {
+	                let a = i * (segments + 1) + j;
+	                let b = i * (segments + 1) + (j + 1);
+	                let c = (i + 1) * (segments + 1) + (j + 1);
+	                let d = (i + 1) * (segments + 1) + j;
 
-                // Two triangles per segment
-                indices.push(a, b, d);
-                indices.push(b, c, d);
-            }
-        }
+	                // Two triangles per segment
+	                indices.push(a, b, d);
+	                indices.push(b, c, d);
+	            }
+	        }
 
-        var planeGeometry = new THREE.BufferGeometry();
-        planeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        planeGeometry.setIndex(indices);
-        planeGeometry.computeVertexNormals();
+	        var planeGeometry = new THREE.BufferGeometry();
+	        planeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+	        planeGeometry.setIndex(indices);
+	        planeGeometry.computeVertexNormals();
+	        planeGeometry.computeBoundingBox();
 
-        var material = new THREE.MeshStandardMaterial({ color: new THREE.Color(Math.random(), Math.random(), Math.random()), side: THREE.DoubleSide });
-        var mesh = new THREE.Mesh(planeGeometry, material);
+	        planeGeometry.boundingBox.min.y -= 0.5;
+	        planeGeometry.boundingBox.max.y += 0.5;
 
-        scene.add(mesh);
-    }
-}
+
+	        var material = new THREE.MeshStandardMaterial({ 
+	        	// color: new THREE.Color(Math.random(), Math.random(), Math.random()),
+	        	color: 0xffffff,
+	        	wireframe: true, 
+	        	side: THREE.DoubleSide 
+	        });
+	        var mesh = new THREE.Mesh(planeGeometry, material);
+	        mesh.name = "touchable::plane";
+
+	        scene.add(mesh);
+	    }
+	}
 
 
 	selectPointGroup(event) {
@@ -839,11 +851,13 @@ class Controller {
 	creator = new Creator();
 
     constructor() {}
+
     Self() {
         window.addEventListener('keydown', this.listen.bind(this));
         window.addEventListener('keyup', this.unlisten.bind(this));
         window.addEventListener('click', this.click.bind(this))
     }
+
     calculateTrajectory(prior, current) {
 	    const dx = current.x - prior.x;
 	    const dy = current.y - prior.y;
@@ -916,6 +930,7 @@ class Controller {
 
 		}
     }
+
     listen(e) {
         if (e.key == 'w') {
             this.w = true;
@@ -939,10 +954,11 @@ class Controller {
         	display.devGridDots = !display.devGridDots;
         	DevGrid(N, display.devGridDots);
         } else if (e.key == 'y') {
-        	display.cyberpunkBoxMemory = !display.cyberpunkBoxMemory;
-        	//DevGrid(N, display.cyberpunkBoxMemory);
+        	display.userBoxFrame = !display.userBoxFrame;
+        	//DevGrid(N, display.userBoxFrame);
         }
     }
+
     unlisten(e) {
         if (e.key == 'w') {
             this.w = false;
@@ -964,6 +980,7 @@ class Controller {
             this.ArrowRight = false;
         }
     }
+
     activate() {
     	var active = false;
     	priorPosition = camera.position;
@@ -1030,6 +1047,8 @@ class Controller {
             active = true;
         }
 
+
+
         this.velocity.y += this.gravity;
         camera.position.y += this.velocity.y;
     	camera.position.y = Math.round(camera.position.y * P) / P;
@@ -1044,6 +1063,7 @@ class Controller {
 
         if (active && imageModal) imageModal.remove();
     }
+
 	touch() {
 	    user.touchedObjects = [];
 	    this.wS = 0.05;
@@ -1065,7 +1085,7 @@ class Controller {
 
 	    var cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(cameraPosition, boxSize);
 
-	    if (display.cyberpunkBoxMemory) {
+	    if (display.userBoxFrame) {
 	        const matrix = new THREE.Matrix4().makeRotationFromQuaternion(camera.quaternion);
 	        const vertices = [
 	            new THREE.Vector3(boxSize.x / 2, boxSize.y / 2, boxSize.z / 2),
@@ -1087,7 +1107,7 @@ class Controller {
 
 	    var touchablePlanes = scene.children.filter(child => /touchable/.test(child.name));
 	    window.intersects = false;
-	    display.cyberpunkBoxMemory = false;
+	    display.userBoxFrame = false;
 
 	    let intersectionPoints = [];
 
@@ -1095,9 +1115,29 @@ class Controller {
 	        for (var k = 0; k < touchablePlanes.length; k++) {
 	            var o = touchablePlanes[k];
 
-	            if (o.triangle && cameraBoundingBox.intersectsTriangle(o.triangle)) {
-	                display.cyberpunkBoxMemory = true;
-	                setTimeout(function() { display.cyberpunkBoxMemory = false }, 300);
+	            if (o.name == "touchable::plane") {
+	            	if (cameraBoundingBox.intersectsBox(o.geometry.boundingBox)) {
+	            		let foot = camera.position.clone();
+	            		foot.y -= 0.5;
+	            		var closest = new THREE.Vector3(Infinity, Infinity, Infinity);
+	            		for (var l = 0; l < o.geometry.attributes.position.array.length; l += 3) {
+	            			var vector = new THREE.Vector3(
+	            				o.geometry.attributes.position.array[l],
+	            				o.geometry.attributes.position.array[l + 1], 
+	            				o.geometry.attributes.position.array[l + 2]
+	            			);
+	            			if (foot.distanceTo(vector) < foot.distanceTo(closest)) {
+	            				closest = vector;
+	            			}
+	            		}
+	            		camera.floor = vector.y;
+	            		camera.floorDiff = Math.abs(camera.position.y - camera.floor);
+	                	camera.position.y = camera.floor;
+	            		controller.creator.update();
+	            	}
+	            } else if (o.triangle && cameraBoundingBox.intersectsTriangle(o.triangle)) {
+	                //display.userBoxFrame = true;
+	                //setTimeout(function() { display.userBoxFrame = false }, 300);
 
 	                const rays = [
 	                    new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(1, 0, 0)),
@@ -1160,6 +1200,7 @@ class Controller {
 	        camera.floor = 0;
 	    }
 	}
+
     navigate() {
     	this.tabs.forEach(tab => {
     		if (tab !== this.page) {
