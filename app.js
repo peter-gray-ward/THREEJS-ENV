@@ -16,6 +16,12 @@ camera.lookAt(new THREE.Vector3(0, 0, 0));
 
 var priorPosition = camera.position.clone();
 
+var levels = [];
+var level = {
+	name: 'first level',
+	objects: []
+}
+
 var display = {
 	devGridDots: true,
 	userBoxFrame: false,
@@ -26,6 +32,32 @@ var display = {
 var far = 10000;
 
 const distanceToSunInInches = 588768000000;
+
+
+function Load() {
+	xhr({
+		method: 'GET',
+		url: '/load',
+		load: function() {
+
+		},
+		body: JSON.parse(level)
+	})
+}
+
+window.Load = Load;
+
+function Save() {
+	xhr({
+		method: 'POST',
+		url: '/save',
+		load: function() {
+			level = JSON.parse(this.response);
+		}
+	})
+}
+
+window.Save = Save;
 
 /**
  * Calculates a vertex position at a specified range (distance) from a given center point.
@@ -428,6 +460,7 @@ var al = new THREE.AmbientLight(0xffffce, .03);
 al.position.set(0, 0, 0);
 scene.add(al);
 var imageModal = document.createElement('div');
+imageModal.id = 'image-modal';
 
 function xhr(options = { body: {} }) {
 	var x = new XMLHttpRequest();
@@ -507,13 +540,6 @@ function BoxHelper(object, boxSize = new THREE.Vector3()) {
 	return boxHelper;
 }
 
-class Level {
-	PhysicalObjects = {}
-	sun = undefined;
-	floorGroup = new THREE.Group();
-}
-
-let level = new Level();
 
 class Page {
 	width = window.innerWidth * 0.75;
@@ -546,7 +572,10 @@ class Creator {
 	addChild = false;
 	activePolygonVerticesIndex = -1;
 	polygonVertices = [];
+	uuid = undefined;
 	ConnectTheDotsWithPolygons() {
+		let points = this.polygonVertices[this.activePolygonVerticesIndex];
+
 
 		/**
 		 * 
@@ -563,7 +592,7 @@ class Creator {
 	    const vertices = [];
 
 	    // Add vertices to the array
-	    this.polygonVertices[this.activePolygonVerticesIndex].forEach(p => {
+	    points.forEach(p => {
 			add2DText(
 				scene, 
 				`(${p.x}, ${p.y}, ${p.z})`, 
@@ -582,12 +611,15 @@ class Creator {
 	    // Set the vertices to the BufferGeometry
 	    geometry.setAttribute('position', new THREE.BufferAttribute(verticesArray, 3));
 
+        // Compute the bounding box for UV mapping
+    	geometry.computeBoundingBox();
+
 	    // Create an array for the indices
 	    const indices = [];
 
 	    // Define faces from the vertices (triangulate the this.polygonVertices)
 	    // Here we'll assume the this.polygonVertices are ordered and form a convex polygon
-	    for (let i = 1; i < this.polygonVertices[this.activePolygonVerticesIndex].length - 1; i++) {
+	    for (let i = 1; i < points.length - 1; i++) {
 	        if (true || Math.random() < 0.5) {
 	        	indices.push(i - 1, i, i + 1);
 	        } else {
@@ -595,30 +627,18 @@ class Creator {
 	        }
 	    }
 
-	    console.log(indices);
-
 	    // Set the indices to the BufferGeometry
 	    geometry.setIndex(indices);
 
 	    // Compute normals for shading
 	    geometry.computeVertexNormals();
 
-	    // Create a material for the mesh
-	    const material = new THREE.MeshStandardMaterial({ 
-	    	color: new THREE.Color(Math.random(), Math.random(), Math.random()), 
-	    	side: THREE.DoubleSide 
-	    });
 
-	    // Create the mesh
-	    const mesh = new THREE.Mesh(geometry, material);
-	    
-
-	    mesh.receiveShadow = true;
-	    mesh.castShadow = true;
-	    mesh.name = "touchable::polygon::" + JSON.stringify(vertices);
-
+       
 	    const triangles = [];
 		const positions = geometry.attributes.position.array;
+
+		let uuid = undefined;
 
 		for (let i = 0; i < indices.length; i += 3) {
 		    const vertex1 = new THREE.Vector3(
@@ -648,6 +668,19 @@ class Creator {
 		    const triangleGeometry = new THREE.BufferGeometry();
 		    triangleGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
 			triangleGeometry.computeVertexNormals();
+			triangleGeometry.computeBoundingBox();
+
+			 // Create UV coordinates
+		    const uvs = [];
+		    points.forEach(p => {
+		        uvs.push((p.x - triangleGeometry.boundingBox.min.x) / triangleGeometry.boundingBox.max.x, 
+		                 (p.y - triangleGeometry.boundingBox.min.y) / triangleGeometry.boundingBox.max.y);
+		    });
+		    const uvsArray = new Float32Array(uvs);
+		    triangleGeometry.setAttribute('uv', new THREE.BufferAttribute(uvsArray, 2));
+
+
+
 		    var triangleMaterial = new THREE.MeshStandardMaterial({ 
 		    	color: new THREE.Color(Math.random(),Math.random(),Math.random()),
 		    	side: THREE.DoubleSide
@@ -664,38 +697,44 @@ class Creator {
 	    	triangleMesh.name = "touchable::triangle";
 		    scene.add(triangleMesh);
 
+		    if (!i) {
+		    	uuid = triangleMesh.uuid
+		    } else {
+		    	triangleMesh.uuid = uuid;
+		    }
+
+		    level.objects.push({
+		    	type: 'triangle',
+		    	points: points,
+		    	imageId: undefined,
+		    	uuid: uuid
+		    });
+
 		}
 
-		// mesh.triangles = triangles;
 
-		console.log(triangles)
 
 		const itemBoundingBox = new THREE.Box3().setFromObject(mesh);
 		const boxHelper = new THREE.BoxHelper(mesh, 0xff0000);
 		scene.add(boxHelper);
 
-		// scene.add(mesh);
 	}
 
-	MakeFlatFloor() {}
-	AddDoor() {}
-	AddWall() {}
-	AddWindow() {}
-	AddCeiling() {}
-	AddStairs() {}
+	MakeFlatishGround(object) {
+		let points = this.polygonVertices[this.activePolygonVerticesIndex]
 
-	MakeFlatishGround() {
-	    if (this.polygonVertices[this.activePolygonVerticesIndex].length == 4) {
-	        var v0 = this.polygonVertices[this.activePolygonVerticesIndex][0];
-	        var v1 = this.polygonVertices[this.activePolygonVerticesIndex][1];
-	        var v2 = this.polygonVertices[this.activePolygonVerticesIndex][2];
-	        var v3 = this.polygonVertices[this.activePolygonVerticesIndex][3];
+	    if (points.length == 4) {
+	        var v0 = points[0];
+	        var v1 = points[1];
+	        var v2 = points[2];
+	        var v3 = points[3];
 
 	        var segments = Math.floor(randomInRange(10, 20)); // Number of segments along each axis
 	        var terrain = {};
 
 	        var vertices = [];
 	        var indices = [];
+	        var uvs = [];
 
 	        function randomInRange(min, max) {
 	            return Math.random() * (max - min) + min;
@@ -712,6 +751,7 @@ class Creator {
 	                        (i / segments) * ((1 - j / segments) * v1.y + (j / segments) * v2.y);
 	                y += randomInRange(randomInRange(-0.05, -0.01), randomInRange(0.01, 0.09)); // Random vertical adjustment
 	                vertices.push(x, y, z);
+	                uvs.push(i / segments, j / segments); // Adding UV coordinates
 	                terrain[round(x, 2) + '_' + round(z, 2)] = y;
 	            }
 	        }
@@ -732,6 +772,7 @@ class Creator {
 
 	        var planeGeometry = new THREE.BufferGeometry();
 	        planeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+	        planeGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); // Adding UVs to geometry
 	        planeGeometry.setIndex(indices);
 	        planeGeometry.computeVertexNormals();
 	        planeGeometry.computeBoundingBox();
@@ -749,6 +790,13 @@ class Creator {
 	        var mesh = new THREE.Mesh(planeGeometry, material);
 	        mesh.name = "touchable::plane";
 	        mesh.terrain = terrain;
+
+	        level.objects.push({
+		    	type: 'plane',
+		    	points: points,
+		    	imageId: undefined,
+		    	uuid: mesh.uuid
+		    });
 
 	        scene.add(mesh);
 	    }
@@ -809,6 +857,7 @@ class Creator {
 		</div>`).join('')
 		
 		document.getElementById('intersection-points').innerHTML = `
+<button onclick="Save()">Save</button>
 <span>floor: ${camera.floor}</span> <br />
 <pre>
 x: ${camera.position.x}
@@ -889,6 +938,9 @@ class Controller {
 
     click(e) {
     	if (this.creator.activePolygonVerticesIndex == -1) return;
+    	var isIM = e.srcElement;
+    	while (isIM && isIM.id !== 'image-modal') isIM = isIM.parentElement;
+    	if (isIM) return;
 
     	this.mouse.x = (e.clientX / page.width) * 2 - 1;
 		this.mouse.y = - (e.clientY / page.height) * 2 + 1;
@@ -919,13 +971,18 @@ class Controller {
 						z: target.position.z 
 					});
 				} else {
+					this.creator.uuid = target.uuid;
+					let top = e.clientY;
+					if (e.clientY + 200 > window.innerHeight) {
+						top -= window.innerHeight - e.clientY + 200;
+					}
 					imageModal.innerHTML = '';
 					imageModal.css({
 						position: 'absolute',
-						top: e.clientY + 'px',
+						top: top + 'px',
 						left: e.clientX + 'px',
 						width: '30vw',
-						height: '55vh',
+						height: '25vh',
 						padding: '0.1rem',
 						backgroundColor: 'white'
 					});
@@ -1123,7 +1180,7 @@ class Controller {
 	        for (var k = 0; k < touchablePlanes.length; k++) {
 	            var o = touchablePlanes[k];
 
-	            if (o.name == "touchable::plane") {
+	            if (o.name == "touchable::plane" && !this.isJumping) {
 	            	if (cameraBoundingBox.intersectsBox(o.geometry.boundingBox)) {
 	            		let foot = camera.position.clone();
 	            		foot.y -= 0.5;
@@ -1510,7 +1567,7 @@ function Animate() {
 }
 
 
-function loadTags(div) {
+function loadTags() {
 	xhr({
 		method: "GET",
 		url: "/image-tags",
@@ -1518,12 +1575,39 @@ function loadTags(div) {
 			var tags = JSON.parse(this.response);
 			imageModal.innerHTML = `
 			<div class="breadcrumbs">tags</div>
-			<div>
+			<div class="tag-grid">
 				${
-					tags.map(tag => `<button class="tag" data-tag="${tag}">${tag}</div>`).join('')
+					tags.map(tag => `<button class="tag" data-tag="${tag.name}">(${tag.countOf}) ${tag.name}</button>`).join('')
 				}
 			</div>
 			`;
+			document.querySelectorAll('.tag').forEach(function(button) {
+				button.addEventListener('click', function() {
+					var tag = this.dataset.tag;
+					loadImages(tag);
+				});
+			})
+		}
+	})
+}
+
+window.loadTags = loadTags;
+
+function loadImages(tag) {
+	xhr({
+		method: "GET",
+		url: "/images?tag=" + tag,
+		load: function() {
+			var tagIds = JSON.parse(this.response);
+			imageModal.innerHTML = `
+				<div class="breadcrumbs">
+					<button onclick="loadTags()">tags</button> > <span>${tag}</span>
+				</div>
+				<div class="image-grid" data-tag="${tag}">
+					${
+						tagIds.map(id => `<div style="background:url(/image?id=${id})" data-id="${id}" onclick="applyImage(event)"></div>`).join('')
+					}
+				</div>`;
 			document.querySelectorAll('.tag').forEach(function(button) {
 				button.addEventListener('click', function() {
 					var tag = this.dataset.id;
@@ -1534,7 +1618,24 @@ function loadTags(div) {
 	})
 }
 
-function loadImages(tag) {
-
+window.applyImage = function(event) {
+	let imageId = event.srcElement.dataset.id;
+	let texture = new THREE.TextureLoader().load("/image?id=" + imageId);
+	texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(5, 5);
+	console.log(texture)
+	for (var i = 0; i < scene.children.length; i++) {
+		if (scene.children[i].uuid == controller.creator.uuid) {
+			scene.children[i].material.map = texture;
+			scene.children[i].material.needsUpdate = true;
+			scene.children[i].material.wireframe = false;
+			scene.children[i].material.color.set('white');
+		}
+	}
+	for (var i = 0; i < level.objects.length; i++) {
+		if (level.objects[i].uuid == controller.creator.uuid) {
+			level.objects[i].imageId = imageId;
+		}
+	}
 }
-

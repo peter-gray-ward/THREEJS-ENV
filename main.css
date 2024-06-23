@@ -127,4 +127,16 @@ table {
 	white-space: pre;
 }
 
+.tag-grid, .image-grid {
+	display: flex;
+	flex-wrap: wrap;
+	overflow: auto;
+	height: 89%;
+}
 
+.image-grid > div {
+	width: 5rem;
+    height: 5rem;
+    background-size: contain !important;
+    background-repeat: no-repeat !important;
+}
