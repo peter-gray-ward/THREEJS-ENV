@@ -1187,8 +1187,8 @@ class Controller {
 	            		var closestDist = Infinity;
 	            		var closestY = 0;
 	            		for (var key in o.terrain) {
-	            			var xz = key.split("_").map(Number);
-	            			let dist = Math.sqrt(Math.pow(xz[0] - camera.position.z, 2) + Math.pow(xz[1] - camera.position.z, 2));
+	            			var xz = key.split("_").map(Number); // some bullshit
+	            			let dist = Math.sqrt(Math.pow(xz[0] - camera.position.x, 2) + Math.pow(xz[1] - camera.position.z, 2));
 	            			if (dist < closestDist) {
 	            				closestDist = dist;
 	            				closestY = o.terrain[key];
@@ -1452,18 +1452,23 @@ function createDome() {
     }
 }
 
-
-function createEarth() {
+window.ocean = undefined;
+function createOcean() {
 	var radius = 700
-	var mesh = new THREE.Mesh(
-		new THREE.PlaneGeometry(radius * 2, radius * 2),
-		new THREE.MeshBasicMaterial({
-			color: 'white'
+	window.ocean = new THREE.Mesh(
+		new THREE.PlaneGeometry(radius * 2, radius * 2, 400, 400),
+		new THREE.MeshStandardMaterial({
+			color: 'blue',
+			opacity: 0.75,
+			transparent: true
 		})
 	);
-	mesh.rotation.x = -Math.PI / 2;
-	mesh.position.set(0, -2, 0);
-	scene.add(mesh);
+	ocean.radius = radius
+	ocean.receiveShadow = true;
+	ocean.castShadow = true;
+	ocean.rotation.x = -Math.PI / 2;
+	ocean.position.set(0, 0, 0);
+	scene.add(ocean);
 }
 
 
@@ -1538,7 +1543,7 @@ function Sun() {
 
 	createDome();
 
-	createEarth()
+	createOcean()
 }
 
 function createTextTexture(message, fontSize = 50, fontColor = 'white', backgroundColor = 'transparent') {
@@ -1608,14 +1613,63 @@ function RenderAll() {
 
 RenderAll();
 
-
+var count = 0;
+var waverecording = []
 function Animate() { 
     window.requestAnimationFrame(() => Animate());
 
     controller.activate();
     controller.touch();
 
+
+    // Periodically adjust wave parameters
+    if (count % 3 === 0) {
+
+		var positions = window.ocean.geometry.attributes.position;
+	    var time = Date.now() * 0.001; // Use time for smooth animation
+	    var waveAmplitude = 1.5; // Amplitude of the waves
+	    var waveFrequency = 0.5; // Frequency of the waves
+
+	    for (var i = 0; i < positions.array.length; i += 3) {
+	        var x = positions.array[i];
+	        var y = positions.array[i + 1];
+	        var z = positions.array[i + 2];
+
+	        // Calculate distance from the center (or shore)
+	        var distanceFromCenter = Math.sqrt(x * x + y * y);
+
+	        // Create a wave effect using sine and cosine
+	        var wave = Math.sin(distanceFromCenter * waveFrequency + time) * waveAmplitude;
+
+	        // Apply wave to the z position with a random fluctuation
+	        z = wave + randomInRange(-0.1, 0.1);
+
+	        // Optionally reset the z position if it's out of bounds
+	        if (z > waveAmplitude || z < -waveAmplitude) {
+	            z = 0;
+	        }
+
+	        positions.array[i + 2] = z;
+
+	        waverecording.push([x,y,z])
+
+	    }
+
+    
+        for (var x = 0; x < ocean.radius * 2; x++) {
+            // Adjust wave parameters or other properties here
+            // Example: Increase wave frequency over time
+            waveFrequency += 0.01;
+        }
+    }
+
+    window.ocean.geometry.attributes.position.needsUpdate = true;
+
+
     renderer.render(scene, camera);
+
+    count += 1
+    if (count == 100) count = 0
 }
 
 
