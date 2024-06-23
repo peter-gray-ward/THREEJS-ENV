@@ -267,7 +267,7 @@ function getCurrentTime() {
 var axisLength = 100;
 const P = 100
 var actives = [];
-const N = 3;
+const N = 4;
 
 // Function to calculate the normal of a triangle
 function calculateNormal(a, b, c) {
@@ -1402,6 +1402,71 @@ ${JSON.stringify(camera.intersects, null, 1)}
 
 var controller = Control()
 
+function createDome() {
+    var gridSize = 20;
+    var planeSize = 50; // Adjust this size to your preference
+    var domeRadius = 700; // Adjust this radius for the subtle arch
+    var domeHeight = 500; // Adjust this height to extend the dome down past y = 0
+
+    for (var i = 0; i < gridSize; i++) {
+        for (var j = 0; j < gridSize; j++) {
+            var x = (i - gridSize / 2) * planeSize;
+            var z = (j - gridSize / 2) * planeSize;
+            
+            // Calculate y for the subtle arch extending down past y = 0
+            var y = Math.sqrt(domeRadius * domeRadius - x * x - z * z) - domeHeight;
+
+            if (isNaN(y)) {
+                y = 0; // If y is NaN, set it to 0 to avoid errors
+            }
+
+            var planeGeometry = new THREE.PlaneGeometry(planeSize * 1.5, planeSize * 1.5);
+            var planeMaterial = new THREE.MeshBasicMaterial({
+                color: "white", 
+                side: THREE.DoubleSide
+            });
+
+            var plane = new THREE.Mesh(planeGeometry, planeMaterial);
+            plane.position.set(x, y, z);
+            plane.lookAt(0, 0, 0);
+
+            var distanceToSun = plane.position.distanceTo(level.sun.position);
+            var maxDistance = domeRadius * 2; 
+            var intensity = 1 - (distanceToSun / maxDistance);
+
+            // Ensure intensity stays within valid range (0 to 1)
+            intensity = Math.max(0, Math.min(1, intensity));
+
+            // Define the colors for the gradient (white for close, dark blue for far)
+            var colorNear = new THREE.Color('blue');
+            var colorFar = new THREE.Color('white');
+
+            // Interpolate between the colors based on intensity
+            var color = new THREE.Color().lerpColors(colorNear, colorFar, intensity);
+
+            // Update the color of the plane's material
+            plane.material.color = color;
+
+            scene.add(plane);
+        }
+    }
+}
+
+
+function createEarth() {
+	var radius = 700
+	var mesh = new THREE.Mesh(
+		new THREE.PlaneGeometry(radius * 2, radius * 2),
+		new THREE.MeshBasicMaterial({
+			color: 'white'
+		})
+	);
+	mesh.rotation.x = -Math.PI / 2;
+	mesh.position.set(0, -2, 0);
+	scene.add(mesh);
+}
+
+
 /********| |********| |********/
 /********| |********| |********/
 /********| |********| |********/
@@ -1416,7 +1481,7 @@ function DevGrid(radius, display) {
 	if (display) {
 		var gridstep = .35// 0.75;
 	    for (var x = 0; x < radius * 2; x += gridstep) {
-	        for (var y = 0; y < radius * 2; y += gridstep) {
+	        for (var y = 0; y < radius * .3; y += gridstep) {
 	            for (var z = 0; z < radius * 2; z += gridstep) {
 	            	let _x = Math.round(x * 100) / 100; 
 	            	let _y = Math.round(y * 100) / 100;
@@ -1433,7 +1498,6 @@ function DevGrid(radius, display) {
 	                dot.receiveShadow = true;
 	                dot.name = 'devdot';
 	                dot.uid = `${_x}_${_y}_${_z}`;
-	                // add2DText(scene, dot.uid, .31, 'yellow', {x,y,z}, true, 'transparent');
 	                
 	                scene.add(dot);
 	                devGridDots.push(dot);
@@ -1457,36 +1521,24 @@ function DevGrid(radius, display) {
 }
 
 function Sun() {
+	var orbitRadius = 700;
     var pointLight = new THREE.PointLight(0xfffffe, 100000, 1000);
     pointLight.position.set(100, 100, 0);
     pointLight.lookAt(0, 0, 0);
     pointLight.castShadow = true;
     scene.add(pointLight);
 
-    var counter = 0;
-    var sway = false;
-    function move() {
-        window.requestAnimationFrame(move);
-        pointLight.position.x += sway ? -0.1 : 0.1;
-        pointLight.position.z += sway ? 0.1 : -0.1;
-        counter += sway ? -1 : 1;
-        if (Math.abs(counter) == 122) {
-            sway = !sway;
-        }
-    }
-
     level.sun = new THREE.Mesh(
-    	new THREE.SphereGeometry(1, 10, 10),
-    	new THREE.MeshBasicMaterial({ color: 0xffffec })
+        new THREE.SphereGeometry(3, 10, 10),
+        new THREE.MeshBasicMaterial({ color: 0xffffef })
     );
     level.sun.position.set(100, 100, 0);
-    // let center = level.sun.ge
-    // for (var i = 0; i < level.sun.geometry.attributes.position.array.length; i++) {
-    // 	var vertexPosition = new THREE.Vector3(level.sun.geometry.attributes.position.array[i], level.sun.geometry.attributes.position.array[i + 1],level.sun.geometry.attributes.position.array[i + 2]);
-    // 	var direction = level.sun.position.clone().sub(vertexPosition).normalize();
-
-    // }
     scene.add(level.sun);
+
+
+	createDome();
+
+	createEarth()
 }
 
 function createTextTexture(message, fontSize = 50, fontColor = 'white', backgroundColor = 'transparent') {
