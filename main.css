@@ -44,6 +44,10 @@ body {
 	width: 50%;
 }
 
+#controller pre {
+	font-size: 1rem;
+}
+
 .row {
 	width: 100%;
 	display: flex;
