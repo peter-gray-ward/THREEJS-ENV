@@ -571,6 +571,7 @@ class Ocean {
         this.segments = 1000;
         this.oceanMesh = null;
         this.initialYPositions = [];
+        this.currentWavePositions = [];
         this.clock = new THREE.Clock();
         this.init();
     }
@@ -578,7 +579,8 @@ class Ocean {
     init() {
         this.MakeOcean();
         this.storeInitialYPositions();
-        this.WaveOcean();
+        // this.WaveOcean();
+        // this.EbbOcean();
     }
 
     _MakeVerticesWithRandomHorizontalAdjustments(segments, v0, v1, v2, v3, negY = -0.05, posY = 0.09) {
@@ -598,7 +600,7 @@ class Ocean {
                 y += randomInRange(randomInRange(negY, -0.01), randomInRange(0.01, posY));
                 vertices.push(x, y, z);
                 uvs.push(i / segments, j / segments);
-                map[round(x, 2) + '_' + round(z, 2)] = y;
+                map[round(x, 1) + '_' + round(z, 1)] = y;
             }
         }
 
@@ -624,8 +626,8 @@ class Ocean {
             new THREE.Vector3(-700, 0, 700),
             new THREE.Vector3(700, 0, 700),
             new THREE.Vector3(700, 0, -700),
-            -.5,
-            .5
+            0,
+            0
         );
 
         var planeGeometry = new THREE.BufferGeometry();
@@ -679,6 +681,28 @@ class Ocean {
         this.oceanMesh.geometry.attributes.position.needsUpdate = true;
         requestAnimationFrame(this.WaveOcean.bind(this));
     }
+
+    EbbOcean() {
+        const positions = this.oceanMesh.geometry.attributes.position.array;
+        const time = this.clock.getElapsedTime();
+        const waveFrequency = 2.0; // Frequency of the temporary wave
+        const waveAmplitude = 0.1; // Amplitude of the temporary wave
+
+        // Calculate temporary wave positions
+        for (let i = 0; i < this.initialYPositions.length; i++) {
+            const phaseShift = i * 0.1; // Adjust this value for phase shift
+            const wavePosition = Math.sin(waveFrequency * (time + phaseShift)) * waveAmplitude;
+            this.currentWavePositions[i] = wavePosition;
+        }
+
+        // Apply temporary wave to ocean mesh
+        for (let i = 0; i < positions.length; i += 3) {
+            positions[i + 1] = this.initialYPositions[i / 3] + this.currentWavePositions[i / 3];
+        }
+
+        this.oceanMesh.geometry.attributes.position.needsUpdate = true;
+        requestAnimationFrame(this.EbbOcean.bind(this));
+    }
 }
 
 class Creator {
@@ -688,20 +712,7 @@ class Creator {
 	uuid = undefined;
 	ConnectTheDotsWithPolygons() {
 		let points = this.polygonVertices[this.activePolygonVerticesIndex];
-
-
-		/**
-		 * 
-		  	Vertices: Collect vertex positions and store them in a Float32Array.
-			Indices: Define the order in which vertices form triangles.
-			Normals: Calculate normals for proper shading.
-			Material: Create a material for the mesh.
-			Mesh: Create the mesh with the geometry and material, and add it to the scene.
-		*
-		*/
 	    const geometry = new THREE.BufferGeometry();
-
-	    // Create an array for the vertices
 	    const vertices = [];
 
 	    // Add vertices to the array
@@ -769,8 +780,6 @@ class Creator {
 		        positions[indices[i + 2] * 3 + 1],
 		        positions[indices[i + 2] * 3 + 2]
 		    );
-
-		    // triangles.push({ a: vertex1, b: vertex2, c: vertex3 });
 
 	        const vertices = new Float32Array([
 		        vertex1.x, vertex1.y, vertex1.z,
@@ -850,7 +859,7 @@ class Creator {
                     y += randomInRange(randomInRange(negY, -0.01), randomInRange(0.01, posY)); // Random vertical adjustment
                     vertices.push(x, y, z);
                     uvs.push(i / segments, j / segments); // Adding UV coordinates
-                    map[round(x, 2) + '_' + round(z, 2)] = y;
+                    map[round(x, 1) + '_' + round(z, 1)] = y;
                 }
             }
 
@@ -1022,7 +1031,11 @@ class Creator {
 		document.getElementById('touched-objects').innerHTML = user.touchedObjects.map(to => `<div class="row">
 			<div>${to.name}</div>
 			<div>${JSON.stringify(to.center, null, 1)}</div>
-			<div>${to.cameraFaceTouched}</div>
+			<div><pre>
+${to.intersectionPoint.x}
+${to.intersectionPoint.y}
+${to.intersectionPoint.z}
+            </pre></div>
 		</div>`).join('')
 		
 		document.getElementById('intersection-points').innerHTML = `
@@ -1111,6 +1124,10 @@ class Controller {
     	while (isIM && isIM.id !== 'image-modal') isIM = isIM.parentElement;
     	if (isIM) return;
 
+        var isCanvas = e.srcElement;
+        while (isCanvas && isCanvas.id !== 'view') isCanvas = isCanvas.parentElement;
+        if (isCanvas) isCanvas = true;
+
     	this.mouse.x = (e.clientX / page.width) * 2 - 1;
 		this.mouse.y = - (e.clientY / page.height) * 2 + 1;
 		this.raycaster.setFromCamera(this.mouse, camera);
@@ -1139,7 +1156,7 @@ class Controller {
 						y: target.position.y, 
 						z: target.position.z 
 					});
-				} else {
+				} else if (isCanvas) {
 					this.creator.uuid = target.uuid;
 					let top = e.clientY;
 					if (e.clientY + 200 > window.innerHeight) {
@@ -1287,10 +1304,12 @@ class Controller {
         camera.position.y += this.velocity.y;
     	camera.position.y = Math.round(camera.position.y * P) / P;
 
-        if (camera.position.y <= camera.floor + 0.5) {
-            this.velocity.y = 0;
-            camera.position.y = camera.floor + 0.5;
-            this.isJumping = false;
+        if (camera.floor !== null) {
+            if (camera.position.y <= camera.floor + 0.5) {
+                this.velocity.y = 0;
+                camera.position.y = camera.floor + 0.5;
+                this.isJumping = false;
+            }
         }
 
         this.creator.update()
@@ -1355,17 +1374,27 @@ class Controller {
 	            		foot.y -= 0.5;
 	            		var closestDist = Infinity;
 	            		var closestY = 0;
+                        var closestKey = '';
 	            		for (var key in o.terrain) {
 	            			var xz = key.split("_").map(Number); // some bullshit
 	            			let dist = Math.sqrt(Math.pow(xz[0] - camera.position.x, 2) + Math.pow(xz[1] - camera.position.z, 2));
 	            			if (dist < closestDist) {
 	            				closestDist = dist;
 	            				closestY = o.terrain[key];
+                                closestKey = key;
 	            			}
 	            		}
+                        closestKey = closestKey.split("_").map(Number);
 	            		camera.floor = closestY;
 	            		camera.floorDiff = Math.abs(camera.position.y - camera.floor);
 	                	camera.position.y = camera.floor + 0.5;
+                        var ip = new THREE.Vector3(closestKey[0], closestY, closestKey[1]);
+                        intersectionPoints.push(ip);
+                        user.touchedObjects.push({
+                            name: o.name,
+                            intersectionPoint: ip,
+                            center: {}
+                        })
 	            		controller.creator.update();
 	            	}
 	            } else if (o.triangle && cameraBoundingBox.intersectsTriangle(o.triangle)) {
@@ -1390,6 +1419,7 @@ class Controller {
 	                        let center = new THREE.Vector3();
 	                        user.touchedObjects.push({
 	                            name: o.name,
+                                intersectionPoint,
 	                            center: center.addVectors(o.triangle.a, o.triangle.b).add(o.triangle.c).divideScalar(3)
 	                        });
 
@@ -1400,37 +1430,41 @@ class Controller {
 	                        intersectionPoints.push({ point: intersectionPoint, normal: o.triangle.normal });
 	                    }
 	                }
-	            }
+	            } else if (o.name == "touchable::ocean") {
+                    
+
+                   
+                }
 	        }
 	    }
 
 	    if (intersectionPoints.length) {
-	        // Find the most relevant intersection point
-	        let relevantIntersection = intersectionPoints[0];
+	        // // Find the most relevant intersection point
+	        // let relevantIntersection = intersectionPoints[0];
 
-	        for (let i = 1; i < intersectionPoints.length; i++) {
-	            if (intersectionPoints[i].point.y < relevantIntersection.point.y) {
-	                relevantIntersection = intersectionPoints[i];
-	            }
-	        }
+	        // for (let i = 1; i < intersectionPoints.length; i++) {
+	        //     if (intersectionPoints[i].point.y < relevantIntersection.point.y) {
+	        //         relevantIntersection = intersectionPoints[i];
+	        //     }
+	        // }
 
-	        if (Math.abs(relevantIntersection.normal.y) > Math.cos(Math.PI / 4)) {
-	            let thisYFloor = Math.floor(relevantIntersection.point.y * 1000) / 1000;
-	            camera.floorDiff = Math.abs(thisYFloor - camera.floor);
-	            camera.floor = thisYFloor;
+	        // if (Math.abs(relevantIntersection.normal.y) > Math.cos(Math.PI / 4)) {
+	        //     let thisYFloor = Math.floor(relevantIntersection.point.y * 1000) / 1000;
+	        //     camera.floorDiff = Math.abs(thisYFloor - camera.floor);
+	        //     camera.floor = thisYFloor;
 
-	            if (camera.floorDiff > 0.05 && camera.floorDiff < 0.5) {
-	                controller.creator.update();
-	                camera.position.y = thisYFloor + 0.5;
-	            }
-	        } else {
-	            if (this.w) this.wS = 0.0;
-	            if (this.a) this.aS = 0.0;
-	            if (this.s) this.sS = 0.0;
-	            if (this.d) this.dS = 0.0;
-	        }
-	    } else {
-	        camera.floor = 0;
+	        //     if (camera.floorDiff > 0.05 && camera.floorDiff < 0.5) {
+	        //         controller.creator.update();
+	        //         camera.position.y = thisYFloor + 0.5;
+	        //     }
+	        // } else {
+	        //     if (this.w) this.wS = 0.0;
+	        //     if (this.a) this.aS = 0.0;
+	        //     if (this.s) this.sS = 0.0;
+	        //     if (this.d) this.dS = 0.0;
+	        // }
+	    } else if (!camera.isJumping) {
+	       // camera.floor = 0;
 	    }
 	}
 
@@ -1503,9 +1537,9 @@ function Control() {
 	candidatePoints.classList.add('generate-polygon');
 	candidatePoints.innerHTML = `<div id="touch">
 	<pre id="intersection-points"></pre>
-		<div class="header"><div>name</div><div>center</div><div>camera face touched</div></div>
+		<div class="header"><div>name</div><div>center</div><div>intersection point</div></div>
 		<div id="touched-objects">${
-			user.touchedObjects.map(to => `<div class="row"><div>${to.name}</div><div>${JSON.stringify(to.center, null, 1)}</div><div>${to.cameraFaceTouched}</div></div>`).join('')
+			user.touchedObjects.map(to => `<div class="row"><div>${to.name}</div><div>${JSON.stringify(to.center, null, 1)}</div><div></div></div>`).join('')
 		}</div>
 	</div>
 	<div class="header"><div>Points</div><div>Actions</div></div>
@@ -1680,15 +1714,15 @@ function DevGrid(radius, display) {
 function Sun() {
 	var orbitRadius = 700;
     var domeheight = 500 / 2
-    var pointLight = new THREE.PointLight(0xfffffe, 130000, 10000);
+    var pointLight = new THREE.PointLight(0xffffff , 212222);
     pointLight.position.set(100, 175, 0);
-    pointLight.lookAt(0, 0, 0);
+    // pointLight.lookAt(0, 0, 0);
     pointLight.castShadow = true;
     scene.add(pointLight);
 
     var al = new THREE.AmbientLight(0xfffffe, 5);
     al.position.set(100, 175, 0);
-    scene.add(al)
+    // scene.add(al)
 
     level.sun = new THREE.Mesh(
         new THREE.SphereGeometry(3, 10, 10),

@@ -18,7 +18,7 @@ app
 .get('/', (req, res) => res.sendFile(dir('index.html')))
 .get('/three', (req, res) => {
 	var fp = path.join(__dirname, 'node_modules/three/build/three.module.js')
-	console.log(fp)
+
 	res.sendFile(fp)
 })
 .get('/image-tags', (req, res) => {
@@ -48,7 +48,6 @@ app
     select image
     from fun.images
     where id = '${id}'`, (err, results) => {
-      console.log(results)
       res.end(results[0].image)
     })
 })
