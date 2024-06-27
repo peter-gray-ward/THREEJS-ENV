@@ -570,6 +570,7 @@ class Ocean {
     constructor() {
         this.segments = 1000;
         this.oceanMesh = null;
+        this.heightMap = [];
         this.initialYPositions = [];
         this.currentWavePositions = [];
         this.clock = new THREE.Clock();
@@ -579,7 +580,7 @@ class Ocean {
     init() {
         this.MakeOcean();
         this.storeInitialYPositions();
-        // this.WaveOcean();
+        this.WaveOcean();
         // this.EbbOcean();
     }
 
@@ -588,6 +589,8 @@ class Ocean {
         let indices = [];
         let uvs = [];
         let map = {};
+        this.heightMap = Array.from(Array(segments + 1), () => new Array(segments + 1));
+
 
         for (let i = 0; i <= segments; i++) {
             for (let j = 0; j <= segments; j++) {
@@ -600,7 +603,8 @@ class Ocean {
                 y += randomInRange(randomInRange(negY, -0.01), randomInRange(0.01, posY));
                 vertices.push(x, y, z);
                 uvs.push(i / segments, j / segments);
-                map[round(x, 1) + '_' + round(z, 1)] = y;
+                map[Math.round(x) + '_' + Math.round(z)] = y;
+                this.heightMap[i][j] = y;
             }
         }
 
@@ -622,10 +626,10 @@ class Ocean {
         var radius = 700;
         var { vertices, indices, uvs, map } = this._MakeVerticesWithRandomHorizontalAdjustments(
             this.segments,
-            new THREE.Vector3(-700, 0, -700),
-            new THREE.Vector3(-700, 0, 700),
-            new THREE.Vector3(700, 0, 700),
-            new THREE.Vector3(700, 0, -700),
+            new THREE.Vector3(-radius, 0, -radius),
+            new THREE.Vector3(-radius, 0, radius),
+            new THREE.Vector3(radius, 0, radius),
+            new THREE.Vector3(radius, 0, -radius),
             0,
             0
         );
@@ -640,14 +644,19 @@ class Ocean {
         planeGeometry.boundingBox.max.y += 0.5;
 
         var material = new THREE.MeshStandardMaterial({ 
-            color: 'royalblue',
-            side: THREE.DoubleSide 
+            // color: 'royalblue',
+            map: new THREE.TextureLoader().load("/image?id=572a9275-377c-4e52-be7c-27600a2d4eaf"),
+            side: THREE.BackSide,
+            opacity: 0.98,
+            transparent: true
         });
 
         this.oceanMesh = new THREE.Mesh(planeGeometry, material);
         this.oceanMesh.name = "touchable::ocean";
         this.oceanMesh.castShadow = true;
         this.oceanMesh.receiveShadow = true;
+
+        console.log(map)
         this.oceanMesh.surface = map;
         this.oceanMesh.position.set(0,0,0);
         level.objects.push({
@@ -666,16 +675,41 @@ class Ocean {
         }
     }
 
+    // WaveOcean() {
+    //     const positions = this.oceanMesh.geometry.attributes.position.array;
+    //     const time = this.clock.getElapsedTime();
+    //     const frequency = 0.5;
+    //     const amplitude = 0.5;
+
+    //     for (let i = 0; i < positions.length; i += 3) {
+    //         const x = positions[i];
+    //         const z = positions[i + 2];
+    //         positions[i + 1] = this.initialYPositions[i / 3] + Math.sin(frequency * (x + time)) * amplitude * Math.sin(frequency * (z + time));
+
+
+    //     }
+
+    //     this.oceanMesh.geometry.attributes.position.needsUpdate = true;
+    //     requestAnimationFrame(this.WaveOcean.bind(this));
+    // }
     WaveOcean() {
         const positions = this.oceanMesh.geometry.attributes.position.array;
         const time = this.clock.getElapsedTime();
         const frequency = 0.5;
-        const amplitude = 0.2;
+        const amplitude = 0.5;
+        const segments = this.segments;
+        const segmentSize = 1400 / segments;
 
-        for (let i = 0; i < positions.length; i += 3) {
-            const x = positions[i];
-            const z = positions[i + 2];
-            positions[i + 1] = this.initialYPositions[i / 3] + Math.sin(frequency * (x + time)) * amplitude * Math.sin(frequency * (z + time));
+        for (let i = 0; i <= segments; i++) {
+            for (let j = 0; j <= segments; j++) {
+                const index = (i * (segments + 1) + j) * 3;
+                const x = positions[index];
+                const z = positions[index + 2];
+                positions[index + 1] = this.initialYPositions[index / 3] + Math.sin(frequency * (x + time)) * amplitude * Math.sin(frequency * (z + time));
+
+                // Update the height map
+                this.heightMap[i][j] = positions[index + 1];
+            }
         }
 
         this.oceanMesh.geometry.attributes.position.needsUpdate = true;
@@ -702,6 +736,35 @@ class Ocean {
 
         this.oceanMesh.geometry.attributes.position.needsUpdate = true;
         requestAnimationFrame(this.EbbOcean.bind(this));
+    }
+
+    getHeightAtPosition(x, z) {
+        const segmentSize = 1400 / this.segments;
+        const gridX = Math.floor((x + 700) / segmentSize);
+        const gridZ = Math.floor((z + 700) / segmentSize);
+
+        // Ensure the position is within the height map bounds
+        if (gridX < 0 || gridX >= this.segments || gridZ < 0 || gridZ >= this.segments) {
+            return 0; // Return 0 if out of bounds, adjust as needed
+        }
+
+        // Bilinear interpolation to get the height at the exact position
+        const x1 = gridX * segmentSize - 700;
+        const x2 = (gridX + 1) * segmentSize - 700;
+        const z1 = gridZ * segmentSize - 700;
+        const z2 = (gridZ + 1) * segmentSize - 700;
+
+        const Q11 = this.heightMap[gridX][gridZ];
+        const Q12 = this.heightMap[gridX][gridZ + 1];
+        const Q21 = this.heightMap[gridX + 1][gridZ];
+        const Q22 = this.heightMap[gridX + 1][gridZ + 1];
+
+        const height = (Q11 * (x2 - x) * (z2 - z) +
+                        Q21 * (x - x1) * (z2 - z) +
+                        Q12 * (x2 - x) * (z - z1) +
+                        Q22 * (x - x1) * (z - z1)) / ((x2 - x1) * (z2 - z1));
+
+        return height;
     }
 }
 
@@ -1088,6 +1151,7 @@ class Controller {
 	page = 'generate-polygon';
 	tabs = ['create-outside', 'generate-polygon', 'apply-images', 'manage-spaces'];
 	creator = new Creator();
+    ocean = new Ocean();
 
     constructor() {}
 
@@ -1310,6 +1374,12 @@ class Controller {
                 camera.position.y = camera.floor + 0.5;
                 this.isJumping = false;
             }
+        }
+
+        if (camera.inOcean = true) {
+           var seaLevel = this.ocean.getHeightAtPosition(camera.position.x, camera.position.z);
+
+           camera.position.y = seaLevel + 0.25
         }
 
         this.creator.update()
@@ -1718,6 +1788,8 @@ function Sun() {
     pointLight.position.set(100, 175, 0);
     // pointLight.lookAt(0, 0, 0);
     pointLight.castShadow = true;
+    pointLight.shadow.mapSize.width = 100048;
+    pointLight.shadow.mapSize.height = 100048;
     scene.add(pointLight);
 
     var al = new THREE.AmbientLight(0xfffffe, 5);
@@ -1792,7 +1864,8 @@ function RenderAll() {
 
     // controller.creator.MakeOcean();
 
-    new Ocean();
+    controller.ocean = new Ocean();
+    camera.inOcean = true
 
 	Animate();
 
