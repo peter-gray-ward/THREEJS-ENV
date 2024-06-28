@@ -10,6 +10,7 @@ scene.objects = [];
 var camera = new THREE.PerspectiveCamera(75, (window.innerWidth * 0.75) / window.innerHeight, 0.1, 100000);
 scene.add(camera);
 camera.floor = 0;
+camera.inOcean = true;
 camera.touchingFloor = true;
 camera.floorDiff = 0;
 camera.position.set(3, 0.5, 3);
@@ -643,8 +644,8 @@ class Ocean {
         planeGeometry.setIndex(indices);
         planeGeometry.computeVertexNormals();
         planeGeometry.computeBoundingBox();
-        planeGeometry.boundingBox.min.y -= 0.15;
-        planeGeometry.boundingBox.max.y += 0.15;
+        planeGeometry.boundingBox.min.y -= 100;
+        // planeGeometry.boundingBox.max.y;
 
         var material = new THREE.MeshStandardMaterial({ 
             color: 'royalblue',
@@ -669,6 +670,7 @@ class Ocean {
             uuid: this.oceanMesh.uuid
         });
         scene.add(this.oceanMesh);
+        scene.grounds.push(this.oceanMesh)
     }
 
     storeInitialYPositions() {
@@ -678,23 +680,6 @@ class Ocean {
         }
     }
 
-    // WaveOcean() {
-    //     const positions = this.oceanMesh.geometry.attributes.position.array;
-    //     const time = this.clock.getElapsedTime();
-    //     const frequency = 0.5;
-    //     const amplitude = 0.5;
-
-    //     for (let i = 0; i < positions.length; i += 3) {
-    //         const x = positions[i];
-    //         const z = positions[i + 2];
-    //         positions[i + 1] = this.initialYPositions[i / 3] + Math.sin(frequency * (x + time)) * amplitude * Math.sin(frequency * (z + time));
-
-
-    //     }
-
-    //     this.oceanMesh.geometry.attributes.position.needsUpdate = true;
-    //     requestAnimationFrame(this.WaveOcean.bind(this));
-    // }
     WaveOcean() {
         const positions = this.oceanMesh.geometry.attributes.position.array;
         const time = this.clock.getElapsedTime();
@@ -1049,7 +1034,7 @@ class Creator {
 		document.getElementById('touched-objects').innerHTML = user.touchedObjects.map(to => `<div class="row">
 			<div>${to.name}</div>
 			<div>${JSON.stringify(to.center, null, 1)}</div>
-			<div><pre>
+			<div><pre>      
 ${to.intersectionPoint.x}
 ${to.intersectionPoint.y}
 ${to.intersectionPoint.z}
@@ -1057,20 +1042,15 @@ ${to.intersectionPoint.z}
 		</div>`).join('')
 		
 		document.getElementById('intersection-points').innerHTML = `
-<button onclick="Save()">Save</button>
-<span>floor: ${camera.floor}</span> <br />
-<pre>
-x: ${camera.position.x}
-y: ${camera.position.y}
-z: ${camera.position.z}
+&nbsp;<button onclick="Save()">Save</button>
+<pre>            floor: ${camera.floor}
+            isJumping: ${controller.isJumping}
+            inOcean: ${camera.inOcean}
+    x: ${camera.position.x}
+    y: ${camera.position.y}
+    z: ${camera.position.z}
 </pre>
 		`
-		// xhr({
-		// 	method: 'POST',
-		// 	url: `/items?user=${user.name}&space=${user.space}`,
-		// 	body: this.polygonVertices
-		// });
-
 
 	}
 }
@@ -1314,7 +1294,9 @@ class Controller {
         if (this.space && !this.isJumping) {
             this.velocity.y = this.jumpStrength;
             this.isJumping = true;
+            camera.inOcean = false;
             active = true;
+            camera.floor = null
         }
 
 
@@ -1329,12 +1311,12 @@ class Controller {
                 camera.position.y = camera.floor + 0.5;
                 this.isJumping = false;
             }
-        }
+        } 
 
-        if (camera.inOcean = true) {
+        if (!controller.isJumping && camera.inOcean == true) {
            var seaLevel = this.ocean.getHeightAtPosition(camera.position.x, camera.position.z);
-
-           camera.position.y = seaLevel + 0.25
+           camera.floor = seaLevel;
+           camera.position.y = seaLevel + 0.35
         }
 
         this.creator.update()
@@ -1461,11 +1443,15 @@ class Controller {
                     }
                 }
             } else if (o.name == "touchable::ocean") {
-                
-
-               
+                var oceanSurfaceY = this.ocean.getHeightAtPosition(camera.position.x, camera.position.y);
+                if (!camera.isJumping && cameraBoundingBox.intersectsBox(o.geometry.boundingBox) && Math.abs(oceanSurfaceY - camera.position.y - 0.35) < 0.1) {
+                    camera.isJumping = false;
+                    camera.floor = oceanSurfaceY;
+                    camera.inOcean = true;
+                }
             }
         }
+
 
 	    if (intersectionPoints.length) {
 	        // Find the most relevant intersection point
@@ -1477,12 +1463,14 @@ class Controller {
 	            }
 	        }
 
-	        if (Math.abs(relevantIntersection.normal.y) > Math.cos(Math.PI / 4)) {
+	        if (Math.abs(relevantIntersection.normal.y) > Math.cos(Math.PI / 3)) {
 	            let thisYFloor = Math.floor(relevantIntersection.point.y * 1000) / 1000;
 	            camera.floorDiff = Math.abs(thisYFloor - camera.floor);
 	            camera.floor = thisYFloor;
 
 	            if (camera.floorDiff < 0.5) {
+
+                    camera.inOcean = false;
 	                controller.creator.update();
 	                camera.position.y = thisYFloor + 0.5;
 	            }
@@ -1492,9 +1480,13 @@ class Controller {
 	            if (this.s) this.sS = 0.0;
 	            if (this.d) this.dS = 0.0;
 	        }
-	    } else if (!camera.isJumping) {
-	       // camera.floor = 0;
-	    }
+	    } else {
+            // *** No intersections **** //
+            //
+            if (camera.floor !== null) {
+                camera.floor = -100;
+            }
+        }
 	}
 
     navigate() {
