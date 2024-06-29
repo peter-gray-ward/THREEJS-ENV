@@ -13,7 +13,7 @@ camera.floor = 0;
 camera.inOcean = true;
 camera.touchingFloor = true;
 camera.floorDiff = 0;
-camera.position.set(3, 0.5, 3);
+camera.position.set(3, 2.5, 3);
 camera.up = new THREE.Vector3(0, 1, 0);
 camera.lookAt(new THREE.Vector3(0, 0, 0));
 
@@ -24,7 +24,6 @@ var axisLength = 100;
 const P = 100
 var actives = [];
 const N = 0;
-
 var levels = [];
 var level = {
 	name: 'first level',
@@ -473,6 +472,30 @@ function xhr(options = { body: {} }) {
 }
 
 
+function ShowBoundingBox(object, boxSize) {
+  const position = object.position.clone();
+  let boundingBox;
+
+  // Check object type
+  if (object instanceof THREE.PerspectiveCamera) {
+    // For PerspectiveCamera, create a box around its position
+    boundingBox = new THREE.Box3().setFromCenterAndSize(position, boxSize);
+  } else if (object instanceof THREE.Mesh) {
+    // For Mesh object, create a box around its geometry
+    object.geometry.computeBoundingBox();
+    boundingBox = object.geometry.boundingBox.clone();
+    boundingBox.translate(position); // Apply position offset
+  } else {
+    console.error('Unsupported object type for bounding box visualization.');
+    return;
+  }
+
+  // Create helper to display the bounding box
+  const boxHelper = new THREE.Box3Helper(boundingBox, 0xffff00);
+  scene.add(boxHelper);
+}
+
+
 function getChildIndex(child) {
     const parent = child.parentNode;
     const childrenArray = Array.from(parent.children);
@@ -655,7 +678,8 @@ class Ocean {
             side: THREE.BackSide,
             opacity: 0.98,
             bumpScale: 0,
-            transparent: true
+            transparent: true,
+            // wireframe: true
         });
 
         this.oceanMesh = new THREE.Mesh(planeGeometry, material);
@@ -683,53 +707,60 @@ class Ocean {
     }
 
     WaveOcean() {
-        const positions = this.oceanMesh.geometry.attributes.position.array;
-        const time = this.clock.getElapsedTime();
-        const frequency = 0.5;
-        const amplitude = this.amplitude;
-        const segments = this.segments;
-        const segmentSize = (this.radius * 2) / segments;
+      const positions = this.oceanMesh.geometry.attributes.position.array;
+      const time = this.clock.getElapsedTime();
+      const frequency = 1.5;
+      const amplitude = this.amplitude;
+      const segments = this.segments;
+      const segmentSize = (this.radius * 2) / segments;
 
-        for (let i = 0; i <= segments; i++) {
-            for (let j = 0; j <= segments; j++) {
-                const index = (i * (segments + 1) + j) * 3;
-                const x = positions[index];
-                const z = positions[index + 2];
-                positions[index + 1] = this.initialYPositions[index / 3] + Math.sin(frequency * (x + time)) * amplitude * Math.sin(frequency * (z + time));
+      for (let i = 0; i <= segments; i++) {
+          for (let j = 0; j <= segments; j++) {
+              const index = (i * (segments + 1) + j) * 3;
+              const x = positions[index];
+              const z = positions[index + 2];
 
-                // if (Math.random() < 0.3) {
-                //     positions[index + 1] += randomInRange(-0.005, 0.005);
-                // }
 
-                // Update the height map
-                this.heightMap[i][j] = positions[index + 1];
-            }
-        }
+              if (camera.isSplashing) {
 
-        this.oceanMesh.geometry.attributes.position.needsUpdate = true;
-        requestAnimationFrame(this.WaveOcean.bind(this));
+                const dist = Math.abs((x - camera.x) + (z - camera.z));
+                console.log(dist)
+
+                continue;
+
+
+              }
+              positions[index + 1] = this.initialYPositions[index / 3] + Math.sin(frequency * (x + time)) * amplitude * Math.sin(frequency * (z + time));
+
+              // Update the height map
+              this.heightMap[i][j] = positions[index + 1];
+          }
+      }
+
+      this.oceanMesh.geometry.attributes.position.needsUpdate = true;
+      requestAnimationFrame(this.WaveOcean.bind(this));
     }
 
     EbbOcean() {
-        const positions = this.oceanMesh.geometry.attributes.position.array;
-        const time = this.clock.getElapsedTime();
-        const waveFrequency = 2.0; // Frequency of the temporary wave
-        const waveAmplitude = 0.1; // Amplitude of the temporary wave
+      const positions = this.oceanMesh.geometry.attributes.position.array;
+      const time = this.clock.getElapsedTime();
+      const waveFrequency = 2.0; // Frequency of the temporary wave
+      const waveAmplitude = 0.1; // Amplitude of the temporary wave
 
-        // Calculate temporary wave positions
-        for (let i = 0; i < this.initialYPositions.length; i++) {
-            const phaseShift = i * 0.1; // Adjust this value for phase shift
-            const wavePosition = Math.sin(waveFrequency * (time + phaseShift)) * waveAmplitude;
-            this.currentWavePositions[i] = wavePosition;
-        }
+      // Calculate temporary wave positions
+      for (let i = 0; i < this.initialYPositions.length; i++) {
+          const phaseShift = i * 0.1; // Adjust this value for phase shift
+          const wavePosition = Math.sin(waveFrequency * (time + phaseShift)) * waveAmplitude;
+          this.currentWavePositions[i] = wavePosition;
+      }
 
-        // Apply temporary wave to ocean mesh
-        for (let i = 0; i < positions.length; i += 3) {
-            positions[i + 1] = this.initialYPositions[i / 3] + this.currentWavePositions[i / 3];
-        }
+      // Apply temporary wave to ocean mesh
+      for (let i = 0; i < positions.length; i += 3) {
+          positions[i + 1] = this.initialYPositions[i / 3] + this.currentWavePositions[i / 3];
+      }
 
-        this.oceanMesh.geometry.attributes.position.needsUpdate = true;
-        requestAnimationFrame(this.EbbOcean.bind(this));
+      this.oceanMesh.geometry.attributes.position.needsUpdate = true;
+      requestAnimationFrame(this.EbbOcean.bind(this));
     }
 
     getHeightAtPosition(x, z) {
@@ -769,222 +800,233 @@ class Creator {
 	uuid = undefined;
 	ConnectTheDotsWithPolygons() {
 		let points = this.polygonVertices[this.activePolygonVerticesIndex];
-	    const geometry = new THREE.BufferGeometry();
-	    const vertices = [];
+    const geometry = new THREE.BufferGeometry();
+    const vertices = [];
 
-	    // Add vertices to the array
-	    points.forEach(p => {
-			add2DText(
-				scene, 
-				`(${p.x}, ${p.y}, ${p.z})`, 
-				0.5, 
-				'white', 
-				{ x: p.x, y: p.y, z: p.z }, 
-				true,
-				'transparent'
-			);
-	        vertices.push(p.x, p.y, p.z);
-	    });
+    // Add vertices to the array
+    points.forEach(p => {
+		add2DText(
+			scene, 
+			`(${p.x}, ${p.y}, ${p.z})`, 
+			0.5, 
+			'white', 
+			{ x: p.x, y: p.y, z: p.z }, 
+			true,
+			'transparent'
+		);
+        vertices.push(p.x, p.y, p.z);
+    });
 
-	    // Convert the vertices array to a Float32Array
-	    const verticesArray = new Float32Array(vertices);
+    // Convert the vertices array to a Float32Array
+    const verticesArray = new Float32Array(vertices);
 
-	    // Set the vertices to the BufferGeometry
-	    geometry.setAttribute('position', new THREE.BufferAttribute(verticesArray, 3));
+    // Set the vertices to the BufferGeometry
+    geometry.setAttribute('position', new THREE.BufferAttribute(verticesArray, 3));
 
-        // Compute the bounding box for UV mapping
-    	geometry.computeBoundingBox();
+      // Compute the bounding box for UV mapping
+  	geometry.computeBoundingBox();
 
-	    // Create an array for the indices
-	    const indices = [];
+    // Create an array for the indices
+    const indices = [];
 
-	    // Define faces from the vertices (triangulate the this.polygonVertices)
-	    // Here we'll assume the this.polygonVertices are ordered and form a convex polygon
-	    for (let i = 1; i < points.length - 1; i++) {
-	        if (true || Math.random() < 0.5) {
-	        	indices.push(i - 1, i, i + 1);
-	        } else {
-	        	indices.push(0, i, i + 1);
-	        }
-	    }
+    // Define faces from the vertices (triangulate the this.polygonVertices)
+    // Here we'll assume the this.polygonVertices are ordered and form a convex polygon
+    for (let i = 1; i < points.length - 1; i++) {
+        if (true || Math.random() < 0.5) {
+        	indices.push(i - 1, i, i + 1);
+        } else {
+        	indices.push(0, i, i + 1);
+        }
+    }
 
-	    // Set the indices to the BufferGeometry
-	    geometry.setIndex(indices);
+    // Set the indices to the BufferGeometry
+    geometry.setIndex(indices);
 
-	    // Compute normals for shading
-	    geometry.computeVertexNormals();
+    // Compute normals for shading
+    geometry.computeVertexNormals();
 
 
-       
-	    const triangles = [];
+     
+    const triangles = [];
 		const positions = geometry.attributes.position.array;
 
 		let uuid = undefined;
 
 		for (let i = 0; i < indices.length; i += 3) {
-		    const vertex1 = new THREE.Vector3(
-		        positions[indices[i] * 3],
-		        positions[indices[i] * 3 + 1],
-		        positions[indices[i] * 3 + 2]
-		    );
-		    const vertex2 = new THREE.Vector3(
-		        positions[indices[i + 1] * 3],
-		        positions[indices[i + 1] * 3 + 1],
-		        positions[indices[i + 1] * 3 + 2]
-		    );
-		    const vertex3 = new THREE.Vector3(
-		        positions[indices[i + 2] * 3],
-		        positions[indices[i + 2] * 3 + 1],
-		        positions[indices[i + 2] * 3 + 2]
-		    );
+	    const vertex1 = new THREE.Vector3(
+	        positions[indices[i] * 3],
+	        positions[indices[i] * 3 + 1],
+	        positions[indices[i] * 3 + 2]
+	    );
+	    const vertex2 = new THREE.Vector3(
+	        positions[indices[i + 1] * 3],
+	        positions[indices[i + 1] * 3 + 1],
+	        positions[indices[i + 1] * 3 + 2]
+	    );
+	    const vertex3 = new THREE.Vector3(
+	        positions[indices[i + 2] * 3],
+	        positions[indices[i + 2] * 3 + 1],
+	        positions[indices[i + 2] * 3 + 2]
+	    );
 
-	        const vertices = new Float32Array([
-		        vertex1.x, vertex1.y, vertex1.z,
-		        vertex2.x, vertex2.y, vertex2.z,
-		        vertex3.x, vertex3.y, vertex3.z
-		    ]);
+      const vertices = new Float32Array([
+        vertex1.x, vertex1.y, vertex1.z,
+        vertex2.x, vertex2.y, vertex2.z,
+        vertex3.x, vertex3.y, vertex3.z
+	    ]);
 
-		    const triangleGeometry = new THREE.BufferGeometry();
-		    triangleGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+	    const triangleGeometry = new THREE.BufferGeometry();
+	    triangleGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
 			triangleGeometry.computeVertexNormals();
 			triangleGeometry.computeBoundingBox();
 
-			 // Create UV coordinates
-		    const uvs = [];
-		    points.forEach(p => {
-		        uvs.push((p.x - triangleGeometry.boundingBox.min.x) / triangleGeometry.boundingBox.max.x, 
-		                 (p.y - triangleGeometry.boundingBox.min.y) / triangleGeometry.boundingBox.max.y);
-		    });
-		    const uvsArray = new Float32Array(uvs);
-		    triangleGeometry.setAttribute('uv', new THREE.BufferAttribute(uvsArray, 2));
+		 // Create UV coordinates
+	    const uvs = [];
+	    points.forEach(p => {
+	        uvs.push((p.x - triangleGeometry.boundingBox.min.x) / triangleGeometry.boundingBox.max.x, 
+	                 (p.y - triangleGeometry.boundingBox.min.y) / triangleGeometry.boundingBox.max.y);
+	    });
+	    const uvsArray = new Float32Array(uvs);
+	    triangleGeometry.setAttribute('uv', new THREE.BufferAttribute(uvsArray, 2));
 
 
 
-		    var triangleMaterial = new THREE.MeshStandardMaterial({ 
-		    	color: new THREE.Color(Math.random(),Math.random(),Math.random()),
-		    	side: THREE.DoubleSide
-		    });
-		    var triangleMesh = new THREE.Mesh(triangleGeometry, triangleMaterial);
-		    triangleMesh.castShadow = true;
-	    	triangleMesh.receiveShadow = true;
-	    	triangleMesh.triangle = new THREE.Triangle(
-	    		new THREE.Vector3(vertex1.x, vertex1.y, vertex1.z),
-	    		new THREE.Vector3(vertex2.x, vertex2.y, vertex2.z),
-	    		new THREE.Vector3(vertex3.x, vertex3.y, vertex3.z)
-	    	);
-	    	triangleMesh.triangle.normal = calculateNormal(triangleMesh.triangle.a, triangleMesh.triangle.b, triangleMesh.triangle.c)
-	    	triangleMesh.name = "touchable::triangle";
-		    scene.add(triangleMesh);
-            scene.grounds.push(triangleMesh);
+	    var triangleMaterial = new THREE.MeshStandardMaterial({ 
+	    	color: new THREE.Color(Math.random(),Math.random(),Math.random()),
+	    	side: THREE.DoubleSide
+	    });
+	    var triangleMesh = new THREE.Mesh(triangleGeometry, triangleMaterial);
+	    triangleMesh.castShadow = true;
+    	triangleMesh.receiveShadow = true;
+    	triangleMesh.triangle = new THREE.Triangle(
+    		new THREE.Vector3(vertex1.x, vertex1.y, vertex1.z),
+    		new THREE.Vector3(vertex2.x, vertex2.y, vertex2.z),
+    		new THREE.Vector3(vertex3.x, vertex3.y, vertex3.z)
+    	);
+    	triangleMesh.triangle.normal = calculateNormal(triangleMesh.triangle.a, triangleMesh.triangle.b, triangleMesh.triangle.c)
+    	triangleMesh.name = "touchable::triangle";
+	    scene.add(triangleMesh);
+          scene.grounds.push(triangleMesh);
 
-		    if (!i) {
-		    	uuid = triangleMesh.uuid
-		    } else {
-		    	triangleMesh.uuid = uuid;
-		    }
+	    if (!i) {
+	    	uuid = triangleMesh.uuid
+	    } else {
+	    	triangleMesh.uuid = uuid;
+	    }
 
-		    level.objects.push({
-		    	type: 'triangle',
-		    	points: points,
-		    	imageId: undefined,
-		    	uuid: uuid
-		    });
+	    level.objects.push({
+	    	type: 'triangle',
+	    	points: points,
+	    	imageId: undefined,
+	    	uuid: uuid
+	    });
 
 		}
 
 
 	}
 
-    _MakeVerticesWithRandomHorizontalAdjustments(segments, v0, v1, v2, v3, negY = -0.05, posY = 0.09) {
-        let vertices = [];
-        let indices = [];
-        let uvs = [];
-        let map = {};
-         // Create vertices with random vertical adjustments
-         for (let i = 0; i <= segments; i++) {
-                for (let j = 0; j <= segments; j++) {
-                    let x = (1 - i / segments) * ((1 - j / segments) * v0.x + (j / segments) * v3.x) + 
-                            (i / segments) * ((1 - j / segments) * v1.x + (j / segments) * v2.x);
-                    let z = (1 - i / segments) * ((1 - j / segments) * v0.z + (j / segments) * v3.z) + 
-                            (i / segments) * ((1 - j / segments) * v1.z + (j / segments) * v2.z);
-                    let y = (1 - i / segments) * ((1 - j / segments) * v0.y + (j / segments) * v3.y) + 
-                            (i / segments) * ((1 - j / segments) * v1.y + (j / segments) * v2.y);
-                    y += randomInRange(randomInRange(negY, -0.01), randomInRange(0.01, posY)); // Random vertical adjustment
-                    vertices.push(x, y, z);
-                    uvs.push(i / segments, j / segments); // Adding UV coordinates
-                    map[round(x, 1) + '_' + round(z, 1)] = y;
-                }
-            }
+  _MakeVerticesWithRandomHorizontalAdjustments(segments, v0, v1, v2, v3, negY = -0.05, posY = 0.09) {
+      let vertices = [];
+      let indices = [];
+      let uvs = [];
+      let map = {};
+      // Create vertices with random vertical adjustments
+      for (let i = 0; i <= segments; i++) {
+          for (let j = 0; j <= segments; j++) {
+              let x = (1 - i / segments) * ((1 - j / segments) * v0.x + (j / segments) * v3.x) + 
+                      (i / segments) * ((1 - j / segments) * v1.x + (j / segments) * v2.x);
+              let z = (1 - i / segments) * ((1 - j / segments) * v0.z + (j / segments) * v3.z) + 
+                      (i / segments) * ((1 - j / segments) * v1.z + (j / segments) * v2.z);
+              let y = (1 - i / segments) * ((1 - j / segments) * v0.y + (j / segments) * v3.y) + 
+                      (i / segments) * ((1 - j / segments) * v1.y + (j / segments) * v2.y);
+              y += randomInRange(randomInRange(negY, -0.01), randomInRange(0.01, posY)); // Random vertical adjustment
+              vertices.push(x, y, z);
+              uvs.push(i / segments, j / segments); // Adding UV coordinates
+              map[round(x, 1) + '_' + round(z, 1)] = y;
+          }
+      }
 
-            // Create indices for the plane
-            for (let i = 0; i < segments; i++) {
-                for (let j = 0; j < segments; j++) {
-                    let a = i * (segments + 1) + j;
-                    let b = i * (segments + 1) + (j + 1);
-                    let c = (i + 1) * (segments + 1) + (j + 1);
-                    let d = (i + 1) * (segments + 1) + j;
+      // Create indices for the plane
+      for (let i = 0; i < segments; i++) {
+          for (let j = 0; j < segments; j++) {
+              let a = i * (segments + 1) + j;
+              let b = i * (segments + 1) + (j + 1);
+              let c = (i + 1) * (segments + 1) + (j + 1);
+              let d = (i + 1) * (segments + 1) + j;
 
-                    // Two triangles per segment
-                    indices.push(a, b, d);
-                    indices.push(b, c, d);
-                }
-            }
+              // Two triangles per segment
+              indices.push(a, b, d);
+              indices.push(b, c, d);
+          }
+      }
 
-            return {
-                vertices,
-                indices,
-                uvs,
-                map
-            }
-    }
+      return {
+          vertices,
+          indices,
+          uvs,
+          map
+      }
+  }
 
 	MakeFlatishGround(object) {
 		let points = this.polygonVertices[this.activePolygonVerticesIndex]
 
-	    if (points.length == 4) {
-	        var v0 = points[0];
-	        var v1 = points[1];
-	        var v2 = points[2];
-	        var v3 = points[3];
+    if (points.length == 4) {
+        var v0 = points[0];
+        var v1 = points[1];
+        var v2 = points[2];
+        var v3 = points[3];
 
-	        var segments = Math.floor(randomInRange(10, 20)); // Number of segments along each axis
+        var segments = Math.floor(randomInRange(10, 20)); // Number of segments along each axis     
+        var { vertices, indices, uvs, map } = this._MakeVerticesWithRandomHorizontalAdjustments(segments, v0, v1, v2, v3);
 
+        var planeGeometry = new THREE.BufferGeometry();
+        planeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        planeGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); // Adding UVs to geometry
+        planeGeometry.setIndex(indices);
+        planeGeometry.computeVertexNormals();
+        planeGeometry.computeBoundingBox();
 
-	        
-            var { vertices, indices, uvs, map } = this._MakeVerticesWithRandomHorizontalAdjustments(segments, v0, v1, v2, v3);
-
-	        var planeGeometry = new THREE.BufferGeometry();
-	        planeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-	        planeGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); // Adding UVs to geometry
-	        planeGeometry.setIndex(indices);
-	        planeGeometry.computeVertexNormals();
-	        planeGeometry.computeBoundingBox();
-
-	        planeGeometry.boundingBox.min.y -= 0.5;
-	        planeGeometry.boundingBox.max.y += 0.5;
+        // planeGeometry.boundingBox.min.y -= 0.5;
+        // planeGeometry.boundingBox.max.y
 
 
-	        var material = new THREE.MeshStandardMaterial({ 
-	        	// color: new THREE.Color(Math.random(), Math.random(), Math.random()),
-	        	color: 0xffffff,
-	        	wireframe: true, 
-	        	side: THREE.DoubleSide 
-	        });
-	        var mesh = new THREE.Mesh(planeGeometry, material);
-	        mesh.name = "touchable::plane";
-	        mesh.terrain = map;
+        var material = new THREE.MeshStandardMaterial({ 
+        	// color: new THREE.Color(Math.random(), Math.random(), Math.random()),
+        	color: 0xffffff,
+        	wireframe: true, 
+        	side: THREE.DoubleSide 
+        });
+        var mesh = new THREE.Mesh(planeGeometry, material);
+        mesh.name = "touchable::plane";
+        mesh.terrain = map;
 
-	        level.objects.push({
-		    	type: 'plane',
-		    	points: points,
-		    	imageId: undefined,
-		    	uuid: mesh.uuid
-		    });
+        ShowBoundingBox(mesh, new THREE.Vector3(
+          Math.max(v0.x, v1.x, v2.x, v3.x) - Math.min(v0.x, v1.x, v2.x, v3.x),
+          Math.max(v0.y, v1.y, v2.y, v3.y) - Math.min(v0.y, v1.y, v2.y, v3.y),
+          Math.max(v0.z, v1.z, v2.z, v3.z) - Math.min(v0.z, v1.z, v2.z, v3.z)
+        ))
 
-	        scene.add(mesh);
-            scene.grounds.push(mesh);
-	    }
+        level.objects.push({
+	    	type: 'plane',
+	    	points: points,
+	    	imageId: undefined,
+	    	uuid: mesh.uuid
+	    });
+
+        scene.add(mesh);
+          scene.grounds.push(mesh);
+    }
 	}
+
+
+  /**
+   * 
+   * What's the difference between having a null floor and not being on ground
+   * 
+   * and having a null floor and not being on ground and isJumping
+   */
 
 	selectPointGroup(event) {
 		var src = event.srcElement;
@@ -1045,12 +1087,13 @@ ${to.intersectionPoint.z}
 		
 		document.getElementById('intersection-points').innerHTML = `
 &nbsp;<button onclick="Save()">Save</button>
-<pre>       floor: ${camera.floor}
-        isJumping: ${controller.isJumping}
-        inOcean: ${camera.inOcean}
+<pre>   floor: ${camera.floor}
+  isJumping: ${controller.isJumping}
   on terrain: ${camera.onTerrain}
   in ocean: ${camera.inOcean}
-x: ${camera.position.x}, y: ${camera.position.y}, z: ${camera.position.z}
+x: ${round(camera.position.x, 2)}, 
+y: ${round(camera.position.y, 2)}, 
+z: ${round(camera.position.z, 2)}
 </pre>
 		`
 
@@ -1061,294 +1104,307 @@ x: ${camera.position.x}, y: ${camera.position.y}, z: ${camera.position.z}
 
 
 class Controller {
-    w = false;
-    a = false;
-    s = false;
-    d = false;
-    wS = 0.02;
-    aS = 0.02;
-    sS = 0.02;
-    dS = 0.02;
-    space = false;
-    ArrowUp = false;
-    ArrowRight = false;
-    ArrowDown = false;
-    ArrowLeft = false;
-    isJumping = false;
-    velocity = new THREE.Vector3();
-    gravity = -0.009;
-    jumpStrength = .1;
-    mouse = {
-    	x: 0,
-    	y: 0
-    }
-    raycaster = new THREE.Raycaster();
+  w = false;
+  a = false;
+  s = false;
+  d = false;
+  wS = 0.02;
+  aS = 0.02;
+  sS = 0.02;
+  dS = 0.02;
+  space = false;
+  ArrowUp = false;
+  ArrowRight = false;
+  ArrowDown = false;
+  ArrowLeft = false;
+  isJumping = false;
+  velocity = new THREE.Vector3();
+  gravity = -0.009;
+  jumpStrength = .1;
+  mouse = {
+  	x: 0,
+  	y: 0
+  }
+  raycaster = new THREE.Raycaster();
 	mouse = new THREE.Vector2();
 	hoverPlane = null;
 	page = 'generate-polygon';
 	tabs = ['create-outside', 'generate-polygon', 'apply-images', 'manage-spaces'];
 	creator = new Creator();
-    ocean = new Ocean();
-    terrain = undefined
+  ocean = new Ocean();
+  terrain = undefined
+  Sky = []
+  constructor() {}
 
-    constructor() {}
+  Self() {
+      window.addEventListener('keydown', this.listen.bind(this));
+      window.addEventListener('keyup', this.unlisten.bind(this));
+      window.addEventListener('click', this.click.bind(this))
+  }
 
-    Self() {
-        window.addEventListener('keydown', this.listen.bind(this));
-        window.addEventListener('keyup', this.unlisten.bind(this));
-        window.addEventListener('click', this.click.bind(this))
+  calculateTrajectory(prior, current) {
+    const dx = current.x - prior.x;
+    const dy = current.y - prior.y;
+
+    let direction = '';
+
+    if (dy > 0) {
+        direction += 'w';
+    } else if (dy < 0) {
+        direction += 's';
     }
 
-    calculateTrajectory(prior, current) {
-	    const dx = current.x - prior.x;
-	    const dy = current.y - prior.y;
+    if (dx > 0) {
+        direction += 'd';
+    } else if (dx < 0) {
+        direction += 'a';
+    }
 
-	    let direction = '';
-
-	    if (dy > 0) {
-	        direction += 'w';
-	    } else if (dy < 0) {
-	        direction += 's';
-	    }
-
-	    if (dx > 0) {
-	        direction += 'd';
-	    } else if (dx < 0) {
-	        direction += 'a';
-	    }
-
-	    return direction || 'idle';
+    return direction || 'idle';
 	}
 
-    click(e) {
-    	if (this.creator.activePolygonVerticesIndex == -1) return;
-    	var isIM = e.srcElement;
-    	while (isIM && isIM.id !== 'image-modal') isIM = isIM.parentElement;
-    	if (isIM) return;
+  click(e) {
+  	if (this.creator.activePolygonVerticesIndex == -1) return;
+  	var isIM = e.srcElement;
+  	while (isIM && isIM.id !== 'image-modal') isIM = isIM.parentElement;
+  	if (isIM) return;
 
-        var isCanvas = e.srcElement;
-        while (isCanvas && isCanvas.id !== 'view') isCanvas = isCanvas.parentElement;
-        if (isCanvas) isCanvas = true;
+    var isCanvas = e.srcElement;
+    while (isCanvas && isCanvas.id !== 'view') isCanvas = isCanvas.parentElement;
+    if (isCanvas) isCanvas = true;
 
-    	this.mouse.x = (e.clientX / page.width) * 2 - 1;
-		this.mouse.y = - (e.clientY / page.height) * 2 + 1;
-		this.raycaster.setFromCamera(this.mouse, camera);
+  	this.mouse.x = (e.clientX / page.width) * 2 - 1;
+  	this.mouse.y = - (e.clientY / page.height) * 2 + 1;
+  	this.raycaster.setFromCamera(this.mouse, camera);
 
-		const intersects = this.raycaster.intersectObjects(scene.children, true);
 
-		
-		if (intersects.length > 0) {
+    // ==> *
+  	const intersects = this.raycaster.intersectObjects(scene.children, true);
 
-			var i = 0;
-			var target = intersects[i++];
-			while (target && target.object && !target.object.isMesh) target = intersects[i++];
+  	// (*)
+  	if (intersects.length > 0) {
 
-			if (target) {
-				target = target.object;
-				if (/^devdot/.test(target.name)) {
-					if (target.material.color.g == 0) {
-						
-					} else {
-						target.material.color.set('red');
-						
-					}
+  		var i = 0;
+  		var target = intersects[i++];
+  		while (target && target.object && !target.object.isMesh) target = intersects[i++];
 
-					this.creator.polygonVertices[this.creator.activePolygonVerticesIndex].push({ 
-						x: target.position.x, 
-						y: target.position.y, 
-						z: target.position.z 
-					});
-				} else if (isCanvas) {
-					this.creator.uuid = target.uuid;
-					let top = e.clientY;
-					if (e.clientY + 200 > window.innerHeight) {
-						top -= window.innerHeight - e.clientY + 200;
-					}
-					imageModal.innerHTML = '';
-					imageModal.css({
-						position: 'absolute',
-						top: top + 'px',
-						left: e.clientX + 'px',
-						width: '30vw',
-						height: '25vh',
-						padding: '0.1rem',
-						backgroundColor: 'white'
-					});
-					document.body.appendChild(imageModal);
-					loadTags(imageModal)
-				}
-				
-				this.creator.update();
-			}
+  		if (target) {
+  			target = target.object;
+  			if (/^devdot/.test(target.name)) {
+  				if (target.material.color.g == 0) {
+  					
+  				} else {
+  					target.material.color.set('red');
+  					
+  				}
 
-		}
+  				this.creator.polygonVertices[this.creator.activePolygonVerticesIndex].push({ 
+  					x: target.position.x, 
+  					y: target.position.y, 
+  					z: target.position.z 
+  				});
+
+  			} else if (isCanvas) {
+  				this.creator.uuid = target.uuid;
+  				let top = e.clientY;
+  				if (e.clientY + 200 > window.innerHeight) {
+  					top -= window.innerHeight - e.clientY + 200;
+  				}
+  				imageModal.innerHTML = '';
+  				imageModal.css({
+  					position: 'absolute',
+  					top: top + 'px',
+  					left: e.clientX + 'px',
+  					width: '30vw',
+  					height: '25vh',
+  					padding: '0.1rem',
+  					backgroundColor: 'white'
+  				});
+  				document.body.appendChild(imageModal);
+  				loadTags(imageModal)
+  			}
+  			
+  			this.creator.update();
+  		}
+
+  	}
+  }
+
+  listen(e) {
+      if (e.key == 'w') {
+          this.w = true;
+      } else if (e.key == 'a') {
+          this.a = true;
+      } else if (e.key == 's') {
+          this.s = true;
+      } else if (e.key == 'd') {
+          this.d = true;
+      } else if (e.key == ' ') {
+          this.space = true;
+      } else if (e.key == 'ArrowUp') {
+          this.ArrowUp = true;
+      } else if (e.key == 'ArrowDown') {
+          this.ArrowDown = true;
+      } else if (e.key == 'ArrowLeft') {
+          this.ArrowLeft = true;
+      } else if (e.key == 'ArrowRight') {
+          this.ArrowRight = true;
+      } else if (e.key == 't') {
+      	display.devGridDots = !display.devGridDots;
+      	DevGrid(N, display.devGridDots);
+      } else if (e.key == 'y') {
+      	display.userBoxFrame = !display.userBoxFrame;
+      	//DevGrid(N, display.userBoxFrame);
+      }
+  }
+
+  unlisten(e) {
+      if (e.key == 'w') {
+          this.w = false;
+      } else if (e.key == 'a') {
+          this.a = false;
+      } else if (e.key == 's') {
+          this.s = false;
+      } else if (e.key == 'd') {
+          this.d = false;
+      } else if (e.key == ' ') {
+          this.space = false;
+      } else if (e.key == 'ArrowUp') {
+          this.ArrowUp = false;
+      } else if (e.key == 'ArrowDown') {
+          this.ArrowDown = false;
+      } else if (e.key == 'ArrowLeft') {
+          this.ArrowLeft = false;
+      } else if (e.key == 'ArrowRight') {
+          this.ArrowRight = false;
+      }
+  }
+
+  activate() {
+  	var active = false;
+  	priorPosition = camera.position;
+    if (this.w) {
+      var direction = new THREE.Vector3();
+      camera.getWorldDirection(direction);
+      direction.multiplyScalar(this.wS);
+      camera.position.add(direction);
+    	active = true;
+    }
+    if (this.a) {
+      var direction = new THREE.Vector3();
+      var right = new THREE.Vector3();
+      camera.getWorldDirection(direction);
+      right.crossVectors(camera.up, direction).normalize();
+      right.multiplyScalar(this.aS);
+      camera.position.add(right);
+    	active = true;
+    }
+    if (this.s) {
+      var direction = new THREE.Vector3();
+      camera.getWorldDirection(direction);
+      direction.multiplyScalar(-this.sS);
+      camera.position.add(direction);
+    	active = true;
+    }
+    if (this.d) {
+      var direction = new THREE.Vector3();
+      var right = new THREE.Vector3();
+      camera.getWorldDirection(direction);
+      right.crossVectors(camera.up, direction).normalize();
+      right.multiplyScalar(-this.dS);
+      camera.position.add(right);
+    	active = true;
+    }
+    if (this.ArrowUp) {
+      camera.rotateX(0.1);
+    	active = true;
+    }
+    if (this.ArrowDown) {
+      camera.rotateX(-0.1);
+    	active = true;
+    }
+    if (this.ArrowLeft || this.ArrowRight) {
+      let quaternionY = new THREE.Quaternion();
+      let quaternionX = new THREE.Quaternion();
+
+      // Yaw rotation - Turning left or right
+      if (this.ArrowLeft) {
+        quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.1);
+      }
+
+      if (this.ArrowRight) {
+        quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -0.1);
+      }
+
+      camera.quaternion.multiplyQuaternions(quaternionY, camera.quaternion);
+      active = true;
     }
 
-    listen(e) {
-        if (e.key == 'w') {
-            this.w = true;
-        } else if (e.key == 'a') {
-            this.a = true;
-        } else if (e.key == 's') {
-            this.s = true;
-        } else if (e.key == 'd') {
-            this.d = true;
-        } else if (e.key == ' ') {
-            this.space = true;
-        } else if (e.key == 'ArrowUp') {
-            this.ArrowUp = true;
-        } else if (e.key == 'ArrowDown') {
-            this.ArrowDown = true;
-        } else if (e.key == 'ArrowLeft') {
-            this.ArrowLeft = true;
-        } else if (e.key == 'ArrowRight') {
-            this.ArrowRight = true;
-        } else if (e.key == 't') {
-        	display.devGridDots = !display.devGridDots;
-        	DevGrid(N, display.devGridDots);
-        } else if (e.key == 'y') {
-        	display.userBoxFrame = !display.userBoxFrame;
-        	//DevGrid(N, display.userBoxFrame);
-        }
+    if (this.space) {
+      camera.floor = null;
+      this.gravity = -0.009;
+      this.velocity.y = this.jumpStrength;
+      // camera.position.y += .7;
+      this.isJumping  = true;
+      camera.inOcean = false;
+      camera.onTerrain = false
+      active = true;
+        
+    } else if (camera.floor == null && !camera.onTerrain && !camera.inOcean) {
+      this.isJumping = true;
+      this.gravity = -0.009;
     }
 
-    unlisten(e) {
-        if (e.key == 'w') {
-            this.w = false;
-        } else if (e.key == 'a') {
-            this.a = false;
-        } else if (e.key == 's') {
-            this.s = false;
-        } else if (e.key == 'd') {
-            this.d = false;
-        } else if (e.key == ' ') {
-            this.space = false;
-        } else if (e.key == 'ArrowUp') {
-            this.ArrowUp = false;
-        } else if (e.key == 'ArrowDown') {
-            this.ArrowDown = false;
-        } else if (e.key == 'ArrowLeft') {
-            this.ArrowLeft = false;
-        } else if (e.key == 'ArrowRight') {
-            this.ArrowRight = false;
+    this.velocity.y += this.gravity;
+    camera.position.y += this.velocity.y;
+	  camera.position.y = Math.round(camera.position.y * P) / P;
+
+    if (camera.floor !== null) {
+      if (camera.position.y <= camera.floor + 0.5) {
+        this.velocity.y = 0;
+        camera.position.y = camera.floor + 0.5;
+        this.isJumping = false;
+        this.gravity = 0;
+      }
+    } 
+
+    
+
+    // Example usage when camera falls into ocean (assuming seaLevel is known)
+    if (camera.inOcean) {
+      var seaLevel = this.ocean.getHeightAtPosition(camera.position.x, camera.position.z);
+      camera.floor = seaLevel;
+      camera.position.y = seaLevel + 0.35;
+      this.isJumping = false;
+
+
+
+    } else if (camera.onTerrain && !this.isJumping) {
+      var closestDist = Infinity;
+      var closestY = 0;
+      var closestKey = '';
+      for (var key in this.terrain) {
+        var xz = key.split("_").map(Number);
+        let dist = Math.sqrt(Math.pow(xz[0] - camera.position.x, 2) + Math.pow(xz[1] - camera.position.z, 2));
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestY = this.terrain[key];
+          closestKey = key;
         }
+      }
+      closestKey = closestKey.split("_").map(Number);
+      camera.floor = closestY;
+      camera.position.y = camera.floor + 0.5;
+      camera.position.needsUpdate = true;
     }
 
-    activate() {
-    	var active = false;
-    	priorPosition = camera.position;
-        if (this.w) {
-            var direction = new THREE.Vector3();
-            camera.getWorldDirection(direction);
-            direction.multiplyScalar(this.wS);
-            camera.position.add(direction);
-        	active = true;
-        }
-        if (this.a) {
-            var direction = new THREE.Vector3();
-            var right = new THREE.Vector3();
-            camera.getWorldDirection(direction);
-            right.crossVectors(camera.up, direction).normalize();
-            right.multiplyScalar(this.aS);
-            camera.position.add(right);
-        	active = true;
-        }
-        if (this.s) {
-            var direction = new THREE.Vector3();
-            camera.getWorldDirection(direction);
-            direction.multiplyScalar(-this.sS);
-            camera.position.add(direction);
-        	active = true;
-        }
-        if (this.d) {
-            var direction = new THREE.Vector3();
-            var right = new THREE.Vector3();
-            camera.getWorldDirection(direction);
-            right.crossVectors(camera.up, direction).normalize();
-            right.multiplyScalar(-this.dS);
-            camera.position.add(right);
-        	active = true;
-        }
-        if (this.ArrowUp) {
-            camera.rotateX(0.1);
-        	active = true;
-        }
-        if (this.ArrowDown) {
-            camera.rotateX(-0.1);
-        	active = true;
-        }
-        if (this.ArrowLeft || this.ArrowRight) {
-            let quaternionY = new THREE.Quaternion();
-	        let quaternionX = new THREE.Quaternion();
+    this.creator.update()
 
-	        // Yaw rotation - Turning left or right
-	        if (this.ArrowLeft) {
-	            quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.1);
-	        }
-
-	        if (this.ArrowRight) {
-	            quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -0.1);
-	        }
-
-	        camera.quaternion.multiplyQuaternions(quaternionY, camera.quaternion);
-	        active = true;
-        }
-
-        if (this.space) {
-            camera.floor = null;
-            this.gravity = -0.009;
-            this.velocity.y = this.jumpStrength;
-            camera.position.y += .7;
-            this.isJumping = true;
-            camera.inOcean = false;
-            camera.onTerrain = false
-            active = true;
-            
-        }
-
-        this.velocity.y += this.gravity;
-        camera.position.y += this.velocity.y;
-    	camera.position.y = Math.round(camera.position.y * P) / P;
-
-        if (camera.floor !== null) {
-            if (camera.position.y <= camera.floor + 0.5) {
-                this.velocity.y = 0;
-                camera.position.y = camera.floor + 0.5;
-                this.isJumping = false;
-                this.gravity = 0;
-            }
-        } 
-
-        if (camera.inOcean == true) {
-           var seaLevel = this.ocean.getHeightAtPosition(camera.position.x, camera.position.z);
-           camera.floor = seaLevel;
-           camera.position.y = seaLevel + 0.35
-           this.isJumping = false
-        } else if (camera.onTerrain && !this.isJumping) {
-            var closestDist = Infinity;
-            var closestY = 0;
-            var closestKey = '';
-            for (var key in this.terrain) {
-                var xz = key.split("_").map(Number);
-                let dist = Math.sqrt(Math.pow(xz[0] - camera.position.x, 2) + Math.pow(xz[1] - camera.position.z, 2));
-                if (dist < closestDist) {
-                    closestDist = dist;
-                    closestY = this.terrain[key];
-                    closestKey = key;
-                }
-            }
-            closestKey = closestKey.split("_").map(Number);
-            camera.floor = closestY;
-            camera.position.y = camera.floor + 0.5
-        }
-
-        this.creator.update()
-
-        if (active && imageModal) imageModal.remove();
-    }
+    if (active && imageModal) imageModal.remove();
+  }
 
 	touch() {
-        camera.floor = null
+      camera.floor = null
 	    user.touchedObjects = [];
 
 	    this.wS = 0.25;
@@ -1371,114 +1427,109 @@ class Controller {
 	    var cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(cameraPosition, boxSize);
 
 	    if (display.userBoxFrame) {
-	        const matrix = new THREE.Matrix4().makeRotationFromQuaternion(camera.quaternion);
-	        const vertices = [
-	            new THREE.Vector3(boxSize.x / 2, boxSize.y / 2, boxSize.z / 2),
-	            new THREE.Vector3(-boxSize.x / 2, boxSize.y / 2, boxSize.z / 2),
-	            new THREE.Vector3(boxSize.x / 2, -boxSize.y / 2, boxSize.z / 2),
-	            new THREE.Vector3(-boxSize.x / 2, -boxSize.y / 2, boxSize.z / 2),
-	            new THREE.Vector3(boxSize.x / 2, boxSize.y / 2, -boxSize.z / 2),
-	            new THREE.Vector3(-boxSize.x / 2, boxSize.y / 2, -boxSize.z / 2),
-	            new THREE.Vector3(boxSize.x / 2, -boxSize.y / 2, -boxSize.z / 2),
-	            new THREE.Vector3(-boxSize.x / 2, -boxSize.y / 2, -boxSize.z / 2),
-	        ];
-
-	        vertices.forEach(v => v.applyMatrix4(matrix).add(cameraPosition));
-
-	        const rotatedBoundingBox = new THREE.Box3().setFromPoints(vertices);
-	        const boxHelper = new THREE.Box3Helper(rotatedBoundingBox, 0xffff00);
-	        scene.add(boxHelper);
+	        ShowBoundingBox(camera, boxSize)
 	    }
 
 	    window.intersects = false;
 	    display.userBoxFrame = false;
-        camera.onTerrain = false
+      camera.onTerrain = false
 
 	    let intersectionPoints = [];
 
-        for (var k = 0; k < scene.grounds.length; k++) {
-            var o = scene.grounds[k];
+      for (var k = 0; k < scene.grounds.length; k++) {
+          var o = scene.grounds[k];
 
-            if (o.name == "touchable::plane") {
-                if (cameraBoundingBox.intersectsBox(o.geometry.boundingBox)) {
-                    let foot = camera.position.clone();
-                    foot.y -= 0.5;
-                    var closestDist = Infinity;
-                    var closestY = 0;
-                    var closestKey = '';
-                    for (var key in o.terrain) {
-                        var xz = key.split("_").map(Number);
-                        let dist = Math.sqrt(Math.pow(xz[0] - camera.position.x, 2) + Math.pow(xz[1] - camera.position.z, 2));
-                        if (dist < closestDist) {
-                            closestDist = dist;
-                            closestY = o.terrain[key];
-                            closestKey = key;
-                        }
-                    }
-                    closestKey = closestKey.split("_").map(Number);
-                    camera.floor = closestY;
-                    camera.floorDiff = Math.abs(camera.position.y - camera.floor);
-                    camera.inOcean = false;
-                    camera.onTerrain = true;
-                    this.terrain = o.terrain
-                    camera.onStruct = false;
-                    camera.position.y = camera.floor + 0.5;
+          if (o.name == "touchable::plane") {
+              if (cameraBoundingBox.intersectsBox(o.geometry.boundingBox) && !camera.onTerrain) {
+                  let foot = camera.position.clone();
+                  foot.y -= 0.5;
+                  var closestDist = Infinity;
+                  var closestY = 0;
+                  var closestKey = '';
+                  for (var key in o.terrain) {
+                      var xz = key.split("_").map(Number);
+                      let dist = Math.sqrt(Math.pow(xz[0] - camera.position.x, 2) + Math.pow(xz[1] - camera.position.z, 2));
+                      if (dist < closestDist) {
+                          closestDist = dist;
+                          closestY = o.terrain[key];
+                          closestKey = key;
+                      }
+                  }
+                  closestKey = closestKey.split("_").map(Number);
+                  camera.floor = closestY;
+                  camera.floorDiff = Math.abs(camera.position.y - camera.floor);
+                  camera.inOcean = false;
+                  camera.onTerrain = true;
+                  this.terrain = o.terrain
+                  camera.onStruct = false;
+                  camera.position.y = camera.floor + 0.5;
+                  camera.position.needsUpdate = true;
 
-                    controller.creator.update();
-                }
-            } else if (o.triangle && cameraBoundingBox.intersectsTriangle(o.triangle)) {
-                camera.inOcean = false
-                camera.onTerrain = false;
+                  controller.creator.update();
+              }
+          } else if (o.triangle && cameraBoundingBox.intersectsTriangle(o.triangle)) {
+              camera.inOcean = false
+              camera.onTerrain = false;
+              this.terrain = undefined
+              camera.onStruct = true;
+
+
+              display.userBoxFrame = true;
+              
+
+              setTimeout(function() { display.userBoxFrame = false }, 300);
+
+
+
+              const rays = [
+                  new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(1, 0, 0)),
+                  new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 1, 0)),
+                  new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 0, 1)),
+                  new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(-1, 0, 0)),
+                  new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, -1, 0)),
+                  new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, 0, -1))
+              ];
+
+              const triangleNormal = calculateNormal(o.triangle.a, o.triangle.b, o.triangle.c);
+
+              for (let i = 0; i < rays.length; i++) {
+                  const intersectionPoint = new THREE.Vector3();
+                  const intersects = rays[i].intersectTriangle(o.triangle.a, o.triangle.b, o.triangle.c, false, intersectionPoint);
+                  if (intersects) {
+                      let center = new THREE.Vector3();
+                      user.touchedObjects.push({
+                          name: o.name,
+                          intersectionPoint,
+                          center: center.addVectors(o.triangle.a, o.triangle.b).add(o.triangle.c).divideScalar(3)
+                      });
+
+                      intersectionPoint.x = Math.round(intersectionPoint.x * 1000) / 1000;
+                      intersectionPoint.y = Math.round(intersectionPoint.y * 1000) / 1000;
+                      intersectionPoint.z = Math.round(intersectionPoint.z * 1000) / 1000;
+
+                      intersectionPoints.push({ 
+                          point: intersectionPoint, 
+                          normal: o.triangle.normal 
+                      });
+                  }
+              }
+          } else if (o.name == "touchable::ocean") {
+              var oceanSurfaceY = this.ocean.getHeightAtPosition(camera.position.x, camera.position.y);
+              if (cameraBoundingBox.intersectsBox(o.geometry.boundingBox)) {
+                camera.isJumping = false;
+                camera.floor = oceanSurfaceY;
+                // if (camera.inOcean == false) {
+                //   createSplashEffect(o, camera.position.x, camera.position.z, 5); // Adjust ripple radius as needed
+                // }
+                camera.inOcean = true;
                 this.terrain = undefined
-                camera.onStruct = true
-                display.userBoxFrame = true;
-                setTimeout(function() { display.userBoxFrame = false }, 300);
-
-                const rays = [
-                    new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(1, 0, 0)),
-                    new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 1, 0)),
-                    new THREE.Ray(cameraBoundingBox.min, new THREE.Vector3(0, 0, 1)),
-                    new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(-1, 0, 0)),
-                    new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, -1, 0)),
-                    new THREE.Ray(cameraBoundingBox.max, new THREE.Vector3(0, 0, -1))
-                ];
-
-                const triangleNormal = calculateNormal(o.triangle.a, o.triangle.b, o.triangle.c);
-
-                for (let i = 0; i < rays.length; i++) {
-                    const intersectionPoint = new THREE.Vector3();
-                    const intersects = rays[i].intersectTriangle(o.triangle.a, o.triangle.b, o.triangle.c, false, intersectionPoint);
-                    if (intersects) {
-                        let center = new THREE.Vector3();
-                        user.touchedObjects.push({
-                            name: o.name,
-                            intersectionPoint,
-                            center: center.addVectors(o.triangle.a, o.triangle.b).add(o.triangle.c).divideScalar(3)
-                        });
-
-                        intersectionPoint.x = Math.round(intersectionPoint.x * 1000) / 1000;
-                        intersectionPoint.y = Math.round(intersectionPoint.y * 1000) / 1000;
-                        intersectionPoint.z = Math.round(intersectionPoint.z * 1000) / 1000;
-
-                        intersectionPoints.push({ 
-                            point: intersectionPoint, 
-                            normal: o.triangle.normal 
-                        });
-                    }
-                }
-            } else if (o.name == "touchable::ocean") {
-                var oceanSurfaceY = this.ocean.getHeightAtPosition(camera.position.x, camera.position.y);
-                if (cameraBoundingBox.intersectsBox(o.geometry.boundingBox)) {
-                    camera.isJumping = false;
-                    camera.floor = oceanSurfaceY;
-                    camera.inOcean = true;
-                    this.terrain = undefined
-                    camera.onTerrain = false;
-                    camera.onStruct = false;
-                }
-            }
-        }
-
+                camera.onTerrain = false;
+                camera.onStruct = false;
+                // Trigger splash effect at camera's position with a specific radius
+                  
+              }
+          }
+      }
 
 	    if (intersectionPoints.length) {
 	        // Find the most relevant intersection point
@@ -1504,17 +1555,17 @@ class Controller {
 	    }
 	}
 
-    navigate() {
-    	this.tabs.forEach(tab => {
-    		if (tab !== this.page) {
-    			document.getElementById(tab).classList.remove('active');
-    			document.querySelector('.' + tab).classList.remove('active');
-    		} else {
-    			document.getElementById(tab).classList.add('active');
-    			document.querySelector('.' + tab).classList.add('active');
-    		}
-    	});
-    }
+  navigate() {
+  	this.tabs.forEach(tab => {
+  		if (tab !== this.page) {
+  			document.getElementById(tab).classList.remove('active');
+  			document.querySelector('.' + tab).classList.remove('active');
+  		} else {
+  			document.getElementById(tab).classList.add('active');
+  			document.querySelector('.' + tab).classList.add('active');
+  		}
+  	});
+  }
 }
 
 
@@ -1645,63 +1696,55 @@ ${JSON.stringify(camera.intersects, null, 1)}
 
 var controller = Control()
 
-function createDome() {
-    var gridSize = sceneRadius;
-    var planeSize = 1; // Adjust this size to your preference
-    var domeRadius = sceneRadius; // Adjust this radius for the subtle arch
-    var domeHeight = sceneRadius * 0.88; // Adjust this height to extend the dome down past y = 0
+var splashDuration = 15000; // Number of frames or time steps for the splash effect
+var splashFrameCount = 0;
 
-    for (var i = 0; i < gridSize; i++) {
-        for (var j = 0; j < gridSize; j++) {
-            var x = (i - gridSize / 2) * planeSize;
-            var z = (j - gridSize / 2) * planeSize;
-            
-            // Calculate y for the subtle arch extending down past y = 0
-            var y = Math.sqrt(domeRadius * domeRadius - x * x - z * z) - domeHeight;
+function createSplashEffect(ocean, centerX, centerZ, rippleRadius) {
+  camera.isSplashing = true;
+  var intervalId = setInterval(splash, 1);
+  function splash() {
+    var positions = ocean.geometry.attributes.position;
+    var center = new THREE.Vector2(centerX, centerZ);
 
-            if (isNaN(y)) {
-                y = 0; // If y is NaN, set it to 0 to avoid errors
-            }
+    
+    for (var i = 0; i < positions.count; i++) {
+      var vertexX = positions.getX(i);
+      var vertexZ = positions.getZ(i);
+      var vertex = new THREE.Vector2(vertexX, vertexZ);
+      var distance = center.distanceTo(vertex);
 
-            var planeGeometry = new THREE.PlaneGeometry(planeSize * 1.5, planeSize * 1.5);
-            var planeMaterial = new THREE.MeshBasicMaterial({
-                color: "white", 
-                side: THREE.DoubleSide
-            });
+      if (distance <= rippleRadius) {
+        var displacement = Math.sin((distance / rippleRadius) * Math.PI) * 1; // Adjust amplitude
 
-            var plane = new THREE.Mesh(planeGeometry, planeMaterial);
-            plane.position.set(x, y, z);
-            plane.lookAt(0, 0, 0);
-
-            var distanceToSun = plane.position.distanceTo(level.sun.position);
-            var maxDistance = domeRadius * 2; 
-            var intensity = 1 - (distanceToSun / maxDistance);
-
-            // Ensure intensity stays within valid range (0 to 1)
-            intensity = Math.max(0, Math.min(1, intensity));
-
-            // Define the colors for the gradient (white for close, dark blue for far)
-            var colorNear = new THREE.Color('blue');
-            var colorFar = new THREE.Color('white');
-
-            // Interpolate between the colors based on intensity
-            var color = new THREE.Color().lerpColors(colorNear, colorFar, intensity);
-
-            // Update the color of the plane's material
-            plane.material.color = color;
-
-            scene.add(plane);
-        }
+        // Apply displacement to vertex position
+        positions.setY(i, positions.getY(i) + displacement);
+      }
     }
+
+
+    ocean.geometry.attributes.position.needsUpdate = true;
+    splashFrameCount++;
+
+    if (splashFrameCount >= splashDuration) {
+      splashFrameCount = 0;
+      clearInterval(intervalId);
+    }
+  }
+
+  
 }
 
-// window.ocean = undefined;
 
 
-/********| |********| |********/
-/********| |********| |********/
-/********| |********| |********/
+/********|•|***|•|***|•|********/
+/********|•|***|•|***|•|********/
+/********|•|***|•|***|•|********/
+/********|•|***|•|***|•|********/
+/********|•|***|•|***|•|********/
+/********|•|***|•|***|•|********/
 window.devGridDots = [];
+var orbitRadius = sceneRadius * 0.88
+var domeheight = (sceneRadius * 0.88) / 2
 function DevGrid(radius, display) {
 	window.devGridDots.forEach(function(dgd) {
 		scene.remove(dgd);
@@ -1752,30 +1795,82 @@ function DevGrid(radius, display) {
 }
 
 function Sun() {
-	var orbitRadius = sceneRadius * 0.88;
-    var domeheight = (sceneRadius * 0.88) / 2
-    var pointLight = new THREE.PointLight(0xffffff , 212222);
-    pointLight.position.set(100, 20, 0);
-    // pointLight.lookAt(0, 0, 0);
-    pointLight.castShadow = true;
-    pointLight.shadow.mapSize.width = 100048;
-    pointLight.shadow.mapSize.height = 100048;
-    scene.add(pointLight);
 
-    var al = new THREE.AmbientLight(0xfffffe, 5);
-    al.position.set(100, 175, 0);
-    // scene.add(al)
+  var pointLight = new THREE.PointLight(0xfffefe , 10000);
+ 
+  pointLight.castShadow = true;
+  pointLight.shadow.mapSize.width = 205000;
+  pointLight.shadow.mapSize.height = 205000;
 
-    level.sun = new THREE.Mesh(
-        new THREE.SphereGeometry(3, 10, 10),
-        new THREE.MeshBasicMaterial({ color: 0xffffef })
-    );
-    level.sun.position.set(100, 20, 0);
-    scene.add(level.sun);
+  level.sunlight = pointLight;
+  // level.dome = createDome();
+
+  scene.add(pointLight);
 
 
-	createDome();
+  level.sun = new THREE.Mesh(
+      new THREE.SphereGeometry(2.55, 10, 10),
+      new THREE.MeshBasicMaterial({ color: 0xfffefe })
+  );
 
+  level.sun.position.copy(level.sunlight.position);
+
+  for (var i = 0; i < 10000; i++) {
+    var y = randomInRange(100, 1000);
+    var x = randomInRange(-sceneRadius * 10, sceneRadius * 10)
+    var z = randomInRange(-sceneRadius * 10, sceneRadius * 10)
+    var star = new THREE.Mesh(new THREE.SphereGeometry(1, 5, 5), new THREE.MeshBasicMaterial({color:0xffffff}));
+    star.position.set(x,y,z)
+    scene.add(star);
+  }
+
+  var starLight = new THREE.AmbientLight(0xffffff, 1);
+  starLight.position.set(0, 500, 0);
+  scene.add(starLight);
+
+  // add one vector in the direction of 0 0 0
+
+	scene.add(level.sun)
+}
+
+function createSky() {
+  
+  // var sky = new THREE.Mesh(
+  //   new THREE.SphereGeometry())
+}
+
+function createDome() {
+  var gridSize = 100;
+  var planeSize = 5; // Adjust this size to your preference
+  var radius = sceneRadius; // Adjust this radius for the dome's curvature
+
+  for (var i = 0; i < gridSize; i++) {
+    for (var j = 0; j < gridSize; j++) {
+      // Calculate spherical coordinates
+      var theta = (i / gridSize) * Math.PI; // Azimuthal angle
+      var phi = (j / gridSize) * Math.PI;   // Polar angle
+
+      // Convert spherical coordinates to Cartesian coordinates
+      var x = radius * Math.sin(phi) * Math.cos(theta);
+      var z = radius * Math.cos(phi);
+      var y = radius * Math.sin(phi) * Math.sin(theta);
+
+      var planeGeometry = new THREE.PlaneGeometry(planeSize, planeSize);
+      var planeMaterial = new THREE.MeshBasicMaterial({
+        color: "white",
+        transparent: true,
+        side: THREE.DoubleSide
+      });
+
+      var plane = new THREE.Mesh(planeGeometry, planeMaterial);
+      plane.position.set(x, y - (sceneRadius * .85), z);
+      plane.lookAt(0, 0, 0);
+      // plane.rotation.z = randomInRange(0, Math.PI * 2)
+
+      controller.Sky.push(plane);
+      scene.add(plane);
+    }
+  }
 }
 
 function createTextTexture(message, fontSize = 50, fontColor = 'white', backgroundColor = 'transparent') {
@@ -1831,21 +1926,24 @@ function RenderAll() {
 	devGridDots = [];
 	DevGrid(N, display.devGridDots);
 	Sun();
+  createDome()
+  // createSky()
 
-    // controller.creator.MakeOcean();
+  // controller.creator.MakeOcean();
 
-    controller.creator.polygonVertices = [
-        [
-            { x: -5, y: 0.5, z: 5 },
-            { x: 5, y: 0.5, z: 5 },
-            { x: 5, y: 0.5, z: -5 },
-            { x: -5, y: 0.5, z: -5 }
-        ]
-    ];
-    controller.creator.activePolygonVerticesIndex = 0;
-    controller.creator.MakeFlatishGround()
-    // camera.inOcean = true;
+  controller.creator.polygonVertices = [
+      [
+          { x: -5, y: 0.5, z: 5 },
+          { x: 5, y: 0.5, z: 5 },
+          { x: 5, y: 0.5, z: -5 },
+          { x: -5, y: 0.5, z: -5 }
+      ]
+  ];
+  controller.creator.activePolygonVerticesIndex = 0;
+  controller.creator.MakeFlatishGround()
+  // camera.inOcean = true;
 
+  camera.lookAt(level.sun.position)
 	Animate();
 
 	document.getElementById('intersection-points').innerHTML = `
@@ -1860,71 +1958,69 @@ function RenderAll() {
 
 RenderAll();
 
-var count = 0;
+var count = 1000;
+var angle = 0;
 
-function Animate() { 
-    window.requestAnimationFrame(() => Animate());
+function Animate() {
+  window.requestAnimationFrame(Animate);
 
-    controller.activate();
-    controller.touch();
+  controller.activate();
+  controller.touch();
 
-    var nearestZToCamera = Infinity // The Plane is Rotated -Math.PI / 2
-    						        // So the Z becomes the Vertical
-    // Periodically adjust wave parameters
+  // Update sun position based on current angle
+  var x = sceneRadius * Math.cos(angle);
+  var y = sceneRadius * Math.sin(angle);
+  level.sun.position.set(x, y - (sceneRadius * .85), level.sun.position.z);
+  level.sunlight.position.set(x, y - (sceneRadius * .85), level.sun.position.z);
 
-    // if (Math.random() < 0.5 && count % 5 == 0) {
-    //     waveOcean()
-    // }
+  for (var i = 0; i < controller.Sky.length; i++) {
+      var distanceToSun = controller.Sky[i].position.distanceTo(level.sun.position);
+      var maxDistance = sceneRadius * 2; // Adjust the factor to fine-tune the gradient spread
 
-    
+      // Calculate intensity based on distance
+      var intensity = 1 - (distanceToSun / maxDistance);
+
+      // Ensure intensity stays within valid range (0 to 1)
+      intensity = Math.max(0, Math.min(1, intensity));
+
+      // Define the colors for the gradient (white for close, dark blue for far)
+      var colorNear = new THREE.Color('lightblue');
+      var colorFar = new THREE.Color('darkblue');
+
+      var opacity = intensity; // Set opacity directly as it represents night time opacity
+
+      // Optionally, adjust opacity further to smooth the transition
+      opacity = Math.pow(opacity, 2); // Apply a power function for a smoother transition
 
 
+      // Interpolate between the colors based on intensity
+      var color = new THREE.Color().lerpColors(colorFar, colorNear, intensity);
 
-    renderer.render(scene, camera);
+      // Update the color of the plane's material
+      controller.Sky[i].material.color.copy(color);
+      controller.Sky[i].material.needsUpdate = true; // Ensure material update
+      // Optionally, adjust material opacity based on intensity for a smoother transition
+      if (distanceToSun > 1000) {controller.Sky[i].material.opacity = opacity * 0.8;}
+      controller.Sky[i].material.opacity = intensity;
+  }
 
-    count += 1
-    if (count == 100) count = 0
+  // Update camera position or controls
+  renderer.render(scene, camera);
+
+  // Animation update
+  if (count % 2 == 0) {
+    angle += 0.01;
+    if (angle > Math.PI * 2) {
+      angle = 0;
+    }
+  }
+
+  count++;
+  if (count > 1001) count = 0;
 }
 
-// function waveOcean() {
-//     let positions = window.ocean.geometry.attributes.position;
-//     var time = Date.now() * 0.001; // Use time for smooth animation
-//     var waveAmplitude = .5; // Amplitude of the waves
-//     var waveFrequency = 0.5; // Frequency of the waves
-
-//     for (var i = 0; i < positions.array.length; i += 3) {
-//         var x = positions.array[i];
-//         var y = positions.array[i + 1];
-//         var z = positions.array[i + 2];
-
-//         // Calculate distance from the center (or shore)
-//         var distanceFromCenter = Math.sqrt(x * x + y * y);
-
-//         // Create a wave effect using sine and cosine
-//         var wave = Math.sin(distanceFromCenter * waveFrequency + time) * waveAmplitude;
-
-//         // Apply wave to the z position with a random fluctuation
-//         z = wave + randomInRange(-0.05, 0.03);
-
-//         // Optionally reset the z position if it's out of bounds
-//         if (z > waveAmplitude || z < -waveAmplitude) {
-//             z = 0;
-//         }
-
-//         positions.array[i + 2] = z;
 
 
-//     }
-
-
-//     for (var x = 0; x < ocean.radius * 2; x++) {
-//         // Adjust wave parameters or other properties here
-//         // Example: Increase wave frequency over time
-//         waveFrequency += 0.01;
-//     }
-
-//     window.ocean.geometry.attributes.position.needsUpdate = true;
-// }
 function loadTags() {
 	xhr({
 		method: "GET",
@@ -1979,9 +2075,9 @@ function loadImages(tag) {
 window.applyImage = function(event) {
 	let imageId = event.srcElement.dataset.id;
 	let texture = new THREE.TextureLoader().load("/image?id=" + imageId);
-	texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(5, 5);
+	// texture.wrapS = THREE.RepeatWrapping;
+  // texture.wrapT = THREE.RepeatWrapping;
+  // texture.repeat.set(5, 5);
 	console.log(texture)
 	for (var i = 0; i < scene.children.length; i++) {
 		if (scene.children[i].uuid == controller.creator.uuid) {
