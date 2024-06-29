@@ -19,6 +19,12 @@ camera.lookAt(new THREE.Vector3(0, 0, 0));
 
 var priorPosition = camera.position.clone();
 
+var sceneRadius = 100
+var axisLength = 100;
+const P = 100
+var actives = [];
+const N = 0;
+
 var levels = [];
 var level = {
 	name: 'first level',
@@ -265,11 +271,6 @@ function getCurrentTime() {
 
 
 
-
-var axisLength = 100;
-const P = 100
-var actives = [];
-const N = 4;
 
 // Function to calculate the normal of a triangle
 function calculateNormal(a, b, c) {
@@ -571,7 +572,8 @@ function convertPlaneToTriangles(geometry) {
 
 class Ocean {
     constructor() {
-        this.radius = 700;
+        this.radius = sceneRadius;
+        this.amplitude = 0.09;
         this.segments = 1000;
         this.oceanMesh = null;
         this.heightMap = [];
@@ -684,7 +686,7 @@ class Ocean {
         const positions = this.oceanMesh.geometry.attributes.position.array;
         const time = this.clock.getElapsedTime();
         const frequency = 0.5;
-        const amplitude = 0.09;
+        const amplitude = this.amplitude;
         const segments = this.segments;
         const segmentSize = (this.radius * 2) / segments;
 
@@ -1043,12 +1045,12 @@ ${to.intersectionPoint.z}
 		
 		document.getElementById('intersection-points').innerHTML = `
 &nbsp;<button onclick="Save()">Save</button>
-<pre>            floor: ${camera.floor}
-            isJumping: ${controller.isJumping}
-            inOcean: ${camera.inOcean}
-    x: ${camera.position.x}
-    y: ${camera.position.y}
-    z: ${camera.position.z}
+<pre>       floor: ${camera.floor}
+        isJumping: ${controller.isJumping}
+        inOcean: ${camera.inOcean}
+  on terrain: ${camera.onTerrain}
+  in ocean: ${camera.inOcean}
+x: ${camera.position.x}, y: ${camera.position.y}, z: ${camera.position.z}
 </pre>
 		`
 
@@ -1087,6 +1089,7 @@ class Controller {
 	tabs = ['create-outside', 'generate-polygon', 'apply-images', 'manage-spaces'];
 	creator = new Creator();
     ocean = new Ocean();
+    terrain = undefined
 
     constructor() {}
 
@@ -1291,15 +1294,17 @@ class Controller {
 	        active = true;
         }
 
-        if (this.space && !this.isJumping) {
+        if (this.space) {
+            camera.floor = null;
+            this.gravity = -0.009;
             this.velocity.y = this.jumpStrength;
+            camera.position.y += .7;
             this.isJumping = true;
             camera.inOcean = false;
+            camera.onTerrain = false
             active = true;
-            camera.floor = null
+            
         }
-
-
 
         this.velocity.y += this.gravity;
         camera.position.y += this.velocity.y;
@@ -1310,13 +1315,31 @@ class Controller {
                 this.velocity.y = 0;
                 camera.position.y = camera.floor + 0.5;
                 this.isJumping = false;
+                this.gravity = 0;
             }
         } 
 
-        if (!controller.isJumping && camera.inOcean == true) {
+        if (camera.inOcean == true) {
            var seaLevel = this.ocean.getHeightAtPosition(camera.position.x, camera.position.z);
            camera.floor = seaLevel;
            camera.position.y = seaLevel + 0.35
+           this.isJumping = false
+        } else if (camera.onTerrain && !this.isJumping) {
+            var closestDist = Infinity;
+            var closestY = 0;
+            var closestKey = '';
+            for (var key in this.terrain) {
+                var xz = key.split("_").map(Number);
+                let dist = Math.sqrt(Math.pow(xz[0] - camera.position.x, 2) + Math.pow(xz[1] - camera.position.z, 2));
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestY = this.terrain[key];
+                    closestKey = key;
+                }
+            }
+            closestKey = closestKey.split("_").map(Number);
+            camera.floor = closestY;
+            camera.position.y = camera.floor + 0.5
         }
 
         this.creator.update()
@@ -1325,8 +1348,10 @@ class Controller {
     }
 
 	touch() {
+        camera.floor = null
 	    user.touchedObjects = [];
-	    this.wS = 0.05;
+
+	    this.wS = 0.25;
 	    this.aS = 0.05;
 	    this.sS = 0.05;
 	    this.dS = 0.05;
@@ -1365,21 +1390,16 @@ class Controller {
 	        scene.add(boxHelper);
 	    }
 
-
-
-	    // var touchablePlanes = scene.children.filter(child => {
-        //     /touchable/.test(child.name)
-        // });
-
 	    window.intersects = false;
 	    display.userBoxFrame = false;
+        camera.onTerrain = false
 
 	    let intersectionPoints = [];
 
         for (var k = 0; k < scene.grounds.length; k++) {
             var o = scene.grounds[k];
 
-            if (o.name == "touchable::plane" && !this.isJumping) {
+            if (o.name == "touchable::plane") {
                 if (cameraBoundingBox.intersectsBox(o.geometry.boundingBox)) {
                     let foot = camera.position.clone();
                     foot.y -= 0.5;
@@ -1387,7 +1407,7 @@ class Controller {
                     var closestY = 0;
                     var closestKey = '';
                     for (var key in o.terrain) {
-                        var xz = key.split("_").map(Number); // some bullshit
+                        var xz = key.split("_").map(Number);
                         let dist = Math.sqrt(Math.pow(xz[0] - camera.position.x, 2) + Math.pow(xz[1] - camera.position.z, 2));
                         if (dist < closestDist) {
                             closestDist = dist;
@@ -1398,18 +1418,19 @@ class Controller {
                     closestKey = closestKey.split("_").map(Number);
                     camera.floor = closestY;
                     camera.floorDiff = Math.abs(camera.position.y - camera.floor);
+                    camera.inOcean = false;
+                    camera.onTerrain = true;
+                    this.terrain = o.terrain
+                    camera.onStruct = false;
                     camera.position.y = camera.floor + 0.5;
-                    var ip = new THREE.Vector3(closestKey[0], closestY, closestKey[1]);
-                    intersectionPoints.push(ip);
-                    user.touchedObjects.push({
-                        name: o.name,
-                        intersectionPoint: ip,
-                        center: {}
-                    })
+
                     controller.creator.update();
                 }
             } else if (o.triangle && cameraBoundingBox.intersectsTriangle(o.triangle)) {
                 camera.inOcean = false
+                camera.onTerrain = false;
+                this.terrain = undefined
+                camera.onStruct = true
                 display.userBoxFrame = true;
                 setTimeout(function() { display.userBoxFrame = false }, 300);
 
@@ -1439,15 +1460,21 @@ class Controller {
                         intersectionPoint.y = Math.round(intersectionPoint.y * 1000) / 1000;
                         intersectionPoint.z = Math.round(intersectionPoint.z * 1000) / 1000;
 
-                        intersectionPoints.push({ point: intersectionPoint, normal: o.triangle.normal });
+                        intersectionPoints.push({ 
+                            point: intersectionPoint, 
+                            normal: o.triangle.normal 
+                        });
                     }
                 }
             } else if (o.name == "touchable::ocean") {
                 var oceanSurfaceY = this.ocean.getHeightAtPosition(camera.position.x, camera.position.y);
-                if (!camera.isJumping && cameraBoundingBox.intersectsBox(o.geometry.boundingBox) && Math.abs(oceanSurfaceY - camera.position.y - 0.35) < 0.1) {
+                if (cameraBoundingBox.intersectsBox(o.geometry.boundingBox)) {
                     camera.isJumping = false;
                     camera.floor = oceanSurfaceY;
                     camera.inOcean = true;
+                    this.terrain = undefined
+                    camera.onTerrain = false;
+                    camera.onStruct = false;
                 }
             }
         }
@@ -1457,20 +1484,14 @@ class Controller {
 	        // Find the most relevant intersection point
 	        let relevantIntersection = intersectionPoints[0];
 
-	        for (let i = 1; i < intersectionPoints.length; i++) {
-	            if (intersectionPoints[i].point.y < relevantIntersection.point.y) {
-	                relevantIntersection = intersectionPoints[i];
-	            }
-	        }
-
 	        if (Math.abs(relevantIntersection.normal.y) > Math.cos(Math.PI / 3)) {
 	            let thisYFloor = Math.floor(relevantIntersection.point.y * 1000) / 1000;
 	            camera.floorDiff = Math.abs(thisYFloor - camera.floor);
 	            camera.floor = thisYFloor;
 
 	            if (camera.floorDiff < 0.5) {
-
-                    camera.inOcean = false;
+                    // is this needed
+                    // camera.inOcean = false;
 	                controller.creator.update();
 	                camera.position.y = thisYFloor + 0.5;
 	            }
@@ -1480,13 +1501,7 @@ class Controller {
 	            if (this.s) this.sS = 0.0;
 	            if (this.d) this.dS = 0.0;
 	        }
-	    } else {
-            // *** No intersections **** //
-            //
-            if (camera.floor !== null) {
-                camera.floor = -100;
-            }
-        }
+	    }
 	}
 
     navigate() {
@@ -1541,8 +1556,10 @@ function Control() {
 	createOutside.classList.add('page');
 	createOutside.classList.add('create-outside');
 	createOutside.innerHTML = `<div id="self-control">
-		<input type="number" id="gravity" value="${controller.gravity}" />
-		<input type="number" id="jumpStrength" value="${controller.jumpStrength}" />
+		<input type="number" id="gravity" value="${controller.gravity}" /><br/>
+		<input type="number" id="jumpStrength" value="${controller.jumpStrength}" /><br/>
+        <label>Wave Strength<lavel>
+        <input type="number" id="waveStrength" value="${controller.ocean.amplitude}" /><br/>
 	</div>`;
 
 	c.appendChild(createOutside);
@@ -1550,6 +1567,8 @@ function Control() {
 	document.getElementById('gravity').addEventListener('change', e => controller.gravity = +e.srcElement.value);
 
 	document.getElementById('jumpStrength').addEventListener('change', e => controller.jumpStrength = +e.srcElement.value);
+
+    document.getElementById('waveStrength').addEventListener('change', e => controller.ocean.amplitude = +e.srcElement.value);
 
 
 	var candidatePoints = document.createElement('section');
@@ -1627,10 +1646,10 @@ ${JSON.stringify(camera.intersects, null, 1)}
 var controller = Control()
 
 function createDome() {
-    var gridSize = 20;
-    var planeSize = 50; // Adjust this size to your preference
-    var domeRadius = 700; // Adjust this radius for the subtle arch
-    var domeHeight = 500; // Adjust this height to extend the dome down past y = 0
+    var gridSize = sceneRadius;
+    var planeSize = 1; // Adjust this size to your preference
+    var domeRadius = sceneRadius; // Adjust this radius for the subtle arch
+    var domeHeight = sceneRadius * 0.88; // Adjust this height to extend the dome down past y = 0
 
     for (var i = 0; i < gridSize; i++) {
         for (var j = 0; j < gridSize; j++) {
@@ -1691,10 +1710,10 @@ function DevGrid(radius, display) {
 	});
 	window.devGridDots = [];
 	if (display) {
-		var gridstep = .35// 0.75;
-	    for (var x = 0; x < radius * 2; x += gridstep) {
-	        for (var y = 0; y < radius * .3; y += gridstep) {
-	            for (var z = 0; z < radius * 2; z += gridstep) {
+		var gridstep = 1// 0.75;
+	    for (var x = 0; x < radius; x += gridstep) {
+	        for (var y = 0; y < radius * 10; y += gridstep) {
+	            for (var z = 0; z < radius; z += gridstep) {
 	            	let _x = Math.round(x * 100) / 100; 
 	            	let _y = Math.round(y * 100) / 100;
 	            	let _z = Math.round(z * 100) / 100;
@@ -1733,10 +1752,10 @@ function DevGrid(radius, display) {
 }
 
 function Sun() {
-	var orbitRadius = 700;
-    var domeheight = 500 / 2
+	var orbitRadius = sceneRadius * 0.88;
+    var domeheight = (sceneRadius * 0.88) / 2
     var pointLight = new THREE.PointLight(0xffffff , 212222);
-    pointLight.position.set(100, 175, 0);
+    pointLight.position.set(100, 20, 0);
     // pointLight.lookAt(0, 0, 0);
     pointLight.castShadow = true;
     pointLight.shadow.mapSize.width = 100048;
@@ -1751,7 +1770,7 @@ function Sun() {
         new THREE.SphereGeometry(3, 10, 10),
         new THREE.MeshBasicMaterial({ color: 0xffffef })
     );
-    level.sun.position.set(100, 175, 0);
+    level.sun.position.set(100, 20, 0);
     scene.add(level.sun);
 
 
@@ -1815,7 +1834,17 @@ function RenderAll() {
 
     // controller.creator.MakeOcean();
 
-    camera.inOcean = true
+    controller.creator.polygonVertices = [
+        [
+            { x: -5, y: 0.5, z: 5 },
+            { x: 5, y: 0.5, z: 5 },
+            { x: 5, y: 0.5, z: -5 },
+            { x: -5, y: 0.5, z: -5 }
+        ]
+    ];
+    controller.creator.activePolygonVerticesIndex = 0;
+    controller.creator.MakeFlatishGround()
+    // camera.inOcean = true;
 
 	Animate();
 
