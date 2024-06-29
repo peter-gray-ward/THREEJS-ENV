@@ -99,6 +99,21 @@ function secondFlooredDivisibleBy(date, factor) {
    return seconds % factor === 0;
 };
 
+function moveTo(mesh, target, unitsToMove = 1) {
+
+  // Step 1: Calculate the direction vector
+  const direction = new THREE.Vector3();
+  direction.subVectors(target.position, mesh.position);
+
+  // Step 2: Normalize the direction vector
+  direction.normalize();
+
+  // Step 3: Scale the direction vector by the number of units to move
+  direction.multiplyScalar(unitsToMove);
+
+  // Step 4: Update the mesh position
+  mesh.position.add(direction);
+}
 
 function randomInRange(from, to, startDistance = 0) {
    const min = Math.min(from, to) + startDistance;
@@ -988,10 +1003,6 @@ class Creator {
         planeGeometry.computeVertexNormals();
         planeGeometry.computeBoundingBox();
 
-        // planeGeometry.boundingBox.min.y -= 0.5;
-        // planeGeometry.boundingBox.max.y
-
-
         var material = new THREE.MeshStandardMaterial({ 
         	// color: new THREE.Color(Math.random(), Math.random(), Math.random()),
         	color: 0xffffff,
@@ -1404,10 +1415,11 @@ class Controller {
   }
 
 	touch() {
-      camera.floor = null
+      var floorFound = false
+
 	    user.touchedObjects = [];
 
-	    this.wS = 0.25;
+	    this.wS = 0.05;
 	    this.aS = 0.05;
 	    this.sS = 0.05;
 	    this.dS = 0.05;
@@ -1432,7 +1444,6 @@ class Controller {
 
 	    window.intersects = false;
 	    display.userBoxFrame = false;
-      camera.onTerrain = false
 
 	    let intersectionPoints = [];
 
@@ -1440,7 +1451,7 @@ class Controller {
           var o = scene.grounds[k];
 
           if (o.name == "touchable::plane") {
-              if (cameraBoundingBox.intersectsBox(o.geometry.boundingBox) && !camera.onTerrain) {
+              if (cameraBoundingBox.intersectsBox(o.geometry.boundingBox)) {
                   let foot = camera.position.clone();
                   foot.y -= 0.5;
                   var closestDist = Infinity;
@@ -1457,6 +1468,7 @@ class Controller {
                   }
                   closestKey = closestKey.split("_").map(Number);
                   camera.floor = closestY;
+                  floorFound = true
                   camera.floorDiff = Math.abs(camera.position.y - camera.floor);
                   camera.inOcean = false;
                   camera.onTerrain = true;
@@ -1464,7 +1476,6 @@ class Controller {
                   camera.onStruct = false;
                   camera.position.y = camera.floor + 0.5;
                   camera.position.needsUpdate = true;
-
                   controller.creator.update();
               }
           } else if (o.triangle && cameraBoundingBox.intersectsTriangle(o.triangle)) {
@@ -1518,6 +1529,7 @@ class Controller {
               if (cameraBoundingBox.intersectsBox(o.geometry.boundingBox)) {
                 camera.isJumping = false;
                 camera.floor = oceanSurfaceY;
+                floorFound = true;
                 // if (camera.inOcean == false) {
                 //   createSplashEffect(o, camera.position.x, camera.position.z, 5); // Adjust ripple radius as needed
                 // }
@@ -1529,6 +1541,11 @@ class Controller {
                   
               }
           }
+      }
+
+      if (!floorFound) {
+        camera.onTerrain = false
+        camera.floor = null
       }
 
 	    if (intersectionPoints.length) {
@@ -1553,6 +1570,8 @@ class Controller {
 	            if (this.d) this.dS = 0.0;
 	        }
 	    }
+
+      
 	}
 
   navigate() {
@@ -1796,7 +1815,7 @@ function DevGrid(radius, display) {
 
 function Sun() {
 
-  var pointLight = new THREE.PointLight(0xfffefe , 10000);
+  var pointLight = new THREE.PointLight(0xfffefe , 100);
  
   pointLight.castShadow = true;
   pointLight.shadow.mapSize.width = 205000;
@@ -1809,11 +1828,12 @@ function Sun() {
 
 
   level.sun = new THREE.Mesh(
-      new THREE.SphereGeometry(2.55, 10, 10),
+      new THREE.SphereGeometry(1.5, 10, 10),
       new THREE.MeshBasicMaterial({ color: 0xfffefe })
   );
 
   level.sun.position.copy(level.sunlight.position);
+  moveTo(level.sun, origin, 20);
 
   for (var i = 0; i < 10000; i++) {
     var y = randomInRange(100, 1000);
@@ -2008,15 +2028,11 @@ function Animate() {
   renderer.render(scene, camera);
 
   // Animation update
-  if (count % 2 == 0) {
-    angle += 0.01;
-    if (angle > Math.PI * 2) {
-      angle = 0;
-    }
+  angle += 0.01;
+  if (angle > Math.PI * 2) {
+    angle = 0;
   }
 
-  count++;
-  if (count > 1001) count = 0;
 }
 
 
