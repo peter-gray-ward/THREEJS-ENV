@@ -25,9 +25,12 @@ var Grass = [
     '#536c46', //
     '#5d6847', //
 ];
+
+window.sunMaxDist = -Infinity;
+window.sunMinDist = Infinity
 var priorPosition = camera.position.clone();
 
-var sceneRadius = 300
+var sceneRadius = 255
 var axisLength = 100;
 const P = 100
 var actives = [];
@@ -1233,7 +1236,7 @@ ${to.intersectionPoint.z}
   isJumping: ${controller.isJumping}
   on terrain: ${camera.onTerrain}
   in ocean: ${camera.inOcean}
-  •
+  •   ${window.sunMinDist}, ${window.sunMaxDist}
   x: ${round(camera.position.x, 2)}, 
   y: ${round(camera.position.y, 2)}, 
   z: ${round(camera.position.z, 2)}
@@ -1944,10 +1947,7 @@ function Sun() {
   var pointLight = new THREE.DirectionalLight(0xfffefe, 3);
  
   pointLight.castShadow = true;
-  pointLight.shadow.mapSize.width = 205000;
-  pointLight.shadow.mapSize.height = 205000;
-
-  var halfSize = sceneRadius;
+  var halfSize = sceneRadius * 2;
   pointLight.shadow.camera.left = -halfSize;
   pointLight.shadow.camera.right = halfSize;
   pointLight.shadow.camera.top = sceneRadius;
@@ -1955,28 +1955,37 @@ function Sun() {
 
 
   level.sunlight = pointLight;
-  level.sunlight.position.set(0, sceneRadius, 0)
+  level.sunlight.position.set(0, 20, 0)
   // level.dome = createDome();
 
   scene.add(pointLight);
 
 
   level.sun = new THREE.Mesh(
-      new THREE.SphereGeometry(5.5, 10, 10),
+      new THREE.SphereGeometry(18.5, 100, 100),
       new THREE.MeshBasicMaterial({ color: 0xfffefe })
   );
 
   level.sun.position.copy(level.sunlight.position);
-  moveTo(level.sun, origin, 50);
+  // moveTo(level.sun, origin, 50);
   //
 
-  for (var i = 0; i < 10000; i++) {
-    var y = randomInRange(100, 1000);
+  for (var i = 0; i < 1000; i++) {
+    var y = randomInRange(sceneRadius, sceneRadius * 3);
     var x = randomInRange(-sceneRadius * 10, sceneRadius * 10)
     var z = randomInRange(-sceneRadius * 10, sceneRadius * 10)
-    var star = new THREE.Mesh(new THREE.SphereGeometry(1, 5, 5), new THREE.MeshBasicMaterial({color:0xffffff}));
+
+
+    if (x < sceneRadius && x > -sceneRadius && z < sceneRadius && z > -sceneRadius) {
+      y = randomInRange(-100, -50)
+    }
+    var radius = new THREE.Vector3(x,y,z).distanceTo(origin.position) / (sceneRadius * 3) * randomInRange(1.1, 1.35)
+    var star = new THREE.Mesh(new THREE.SphereGeometry(radius, 5, 5), new THREE.MeshBasicMaterial({color:0xffffff}));
     star.position.set(x,y,z)
-    scene.add(star);
+    
+    var dist = star.position.distanceTo(origin.position)
+    if (dist > sceneRadius * 2) scene.add(star);
+    
   }
 
   // var starLight = new THREE.AmbientLight(0xffffff, 1);
@@ -1987,17 +1996,61 @@ function Sun() {
 
 	scene.add(level.sun)
 }
+let cloudParticles = [];
 
 function createSky() {
-  
-  // var sky = new THREE.Mesh(
-  //   new THREE.SphereGeometry())
+
+
+  // Create cumulonimbus cloud particles
+  for (let i = 0; i < 12; i++) {
+    const cloudNodeCount = randomInRange(100, 300); // More particles for cumulonimbus clouds
+    const positions = new Float32Array(cloudNodeCount * 3);
+
+    for (let j = 0; j < cloudNodeCount; j++) {
+      const x = randomInRange(-50, 50);
+      const y = randomInRange(0, 200); // Taller cloud structure
+      const z = randomInRange(-50, 50);
+
+      positions[j * 3] = x;
+      positions[j * 3 + 1] = y;
+      positions[j * 3 + 2] = z;
+    }
+
+    const cloudGeometry = new THREE.BufferGeometry();
+    cloudGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const cloudMaterial = new THREE.PointsMaterial({ 
+      color: 0xffffff, 
+      size: randomInRange(20, 100), 
+      transparent: true, 
+      opacity: 0.8 
+    });
+    const cloud = new THREE.Points(cloudGeometry, cloudMaterial);
+
+    cloud.position.set(
+      randomInRange(-sceneRadius, sceneRadius),
+      randomInRange(50, 200), // Clouds height range
+      randomInRange(-sceneRadius, sceneRadius)
+    );
+
+    scene.add(cloud);
+    cloudParticles.push(cloud);
+  }
+}
+
+function animateClouds() {
+  const cloudSpeed = 1.1; // Adjust the speed as needed
+  cloudParticles.forEach(cloud => {
+    cloud.position.x += cloudSpeed;
+    if (cloud.position.x > sceneRadius) {
+      cloud.position.x = -sceneRadius; // Wrap around to the other side
+    }
+  });
 }
 
 function createDome() {
   var gridSize = 100;
-  var planeSize = 15; // Adjust this size to your preference
-  var radius = sceneRadius; // Adjust this radius for the dome's curvature
+  var planeSize = 120; // Adjust this size to your preference
+  var radius = sceneRadius * 2; // Adjust this radius for the dome's curvature
 
   for (var i = 0; i < gridSize; i++) {
     for (var j = 0; j < gridSize; j++) {
@@ -2014,11 +2067,12 @@ function createDome() {
       var planeMaterial = new THREE.MeshBasicMaterial({
         color: "white",
         transparent: true,
+        opacity: phi > Math.PI ? 0 : 0.5,
         side: THREE.DoubleSide
       });
 
       var plane = new THREE.Mesh(planeGeometry, planeMaterial);
-      plane.position.set(x, y - (sceneRadius * .85), z);
+      plane.position.set(x, y - sceneRadius * .6, z);
       plane.lookAt(camera.position.x, camera.position.y, camera.position.z);
       // plane.rotation.z = randomInRange(0, Math.PI * 2)
 
@@ -2082,7 +2136,7 @@ function RenderAll() {
 	DevGrid(N, display.devGridDots);
 	Sun();
   createDome()
-  // createSky()
+  createSky()
 
   // controller.creator.MakeOcean();
 
@@ -2115,6 +2169,8 @@ RenderAll();
 
 var count = 1000;
 var angle = 0;
+var sr = sceneRadius * 2
+var day = sceneRadius * .6
 
 function Animate() {
   window.requestAnimationFrame(Animate);
@@ -2122,32 +2178,35 @@ function Animate() {
   controller.activate();
   controller.touch();
 
+  animateClouds()
+
   // Update sun position based on current angle
-  var x = sceneRadius * Math.cos(angle);
-  var y = sceneRadius * Math.sin(angle);
+  var x = sr * Math.cos(angle);
+  var y = sr * Math.sin(angle);
+  y -= sceneRadius * .6
   level.sun.position.set(x, y, level.sun.position.z);
   level.sunlight.position.set(x, y, level.sun.position.z);
   level.sunlight.lookAt(0, 0, 0)
 
   for (var i = 0; i < controller.Sky.length; i++) {
       var distanceToSun = controller.Sky[i].position.distanceTo(level.sun.position);
-      var maxDistance = sceneRadius * 2; // Adjust the factor to fine-tune the gradient spread
+
+      if (distanceToSun < sunMinDist) sunMinDist = distanceToSun
+      if (distanceToSun > sunMaxDist) sunMaxDist = distanceToSun
+
 
       // Calculate intensity based on distance
-      var intensity = 1 - (distanceToSun / maxDistance);
+      var intensity = 1 - (distanceToSun / sunMaxDist);
 
       // Ensure intensity stays within valid range (0 to 1)
       intensity = Math.max(0, Math.min(1, intensity));
 
       // Define the colors for the gradient (white for close, dark blue for far)
-      var colorNear = new THREE.Color('lightblue');
+      var colorNear = new THREE.Color('#4287f5');
       var colorFar = new THREE.Color('darkblue');
 
-      var opacity = intensity; // Set opacity directly as it represents night time opacity
-
       // Optionally, adjust opacity further to smooth the transition
-      opacity = Math.pow(opacity, 2); // Apply a power function for a smoother transition
-
+      
 
       // Interpolate between the colors based on intensity
       var color = new THREE.Color().lerpColors(colorFar, colorNear, intensity);
@@ -2156,20 +2215,25 @@ function Animate() {
       controller.Sky[i].material.color.copy(color);
       controller.Sky[i].material.needsUpdate = true; // Ensure material update
       // Optionally, adjust material opacity based on intensity for a smoother transition
-      if (distanceToSun > 1000) {controller.Sky[i].material.opacity = opacity * 0.8;}
-      controller.Sky[i].material.opacity = intensity;
-      controller.Sky[i].lookAt(camera.position.x, camera.position.y, camera.position.z);
+        
+      if (level.sun.position.y > 0) {
+        controller.Sky[i].material.opacity = 1
+      } else if (distanceToSun > day) {
+        controller.Sky[i].material.opacity = intensity * .13;
+      }
+      // if (distanceToSun > maxDistance) controller.Sky[i].material.opacity = Math.sqrt(opacity, 3);
+      // controller.Sky[i].lookAt(camera.position.x, camera.position.y, camera.position.z);
   }
 
   // Update camera position or controls
   renderer.render(scene, camera);
 
-  // Animation update
   if (level.sun.position.y > 0) {
-    angle += 0.01;
+    angle += .003;
   } else {
-    angle += .31;
+    angle += .03 * .6;
   }
+  
   if (angle > Math.PI * 2) {
     angle = 0;
   }
