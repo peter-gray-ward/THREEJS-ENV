@@ -16,10 +16,18 @@ camera.floorDiff = 0;
 camera.position.set(3, 2.5, 3);
 camera.up = new THREE.Vector3(0, 1, 0);
 camera.lookAt(new THREE.Vector3(0, 0, 0));
-
+var Grass = [
+    '#33462d', //
+    '#435c3a', //
+    '#4e5e3e', //
+    '#53634c', //
+    '#53634c', // (duplicate, same as above)
+    '#536c46', //
+    '#5d6847', //
+];
 var priorPosition = camera.position.clone();
 
-var sceneRadius = 100
+var sceneRadius = 300
 var axisLength = 100;
 const P = 100
 var actives = [];
@@ -30,6 +38,7 @@ var level = {
 	objects: []
 }
 
+window.trees = {}
 var display = {
 	devGridDots: true,
 	userBoxFrame: false,
@@ -113,6 +122,7 @@ function moveTo(mesh, target, unitsToMove = 1) {
 
   // Step 4: Update the mesh position
   mesh.position.add(direction);
+  mesh.position.needsUpdate = true
 }
 
 function randomInRange(from, to, startDistance = 0) {
@@ -628,7 +638,7 @@ class Ocean {
         // this.EbbOcean();
     }
 
-    _MakeVerticesWithRandomHorizontalAdjustments(segments, v0, v1, v2, v3, negY = -0.05, posY = 0.09) {
+    _MakeVerticesWithRandomHorizontalAdjustments(segments, v0, v1, v2, v3, negY = -0.05, posY = 0.09, options) {
         let vertices = [];
         let indices = [];
         let uvs = [];
@@ -649,6 +659,8 @@ class Ocean {
                 uvs.push(i / segments, j / segments);
                 map[Math.round(x) + '_' + Math.round(z)] = y;
                 this.heightMap[i][j] = y;
+
+                
             }
         }
 
@@ -675,7 +687,8 @@ class Ocean {
             new THREE.Vector3(radius, 0, radius),
             new THREE.Vector3(radius, 0, -radius),
             0,
-            0
+            0,
+            {}
         );
 
         var planeGeometry = new THREE.BufferGeometry();
@@ -735,16 +748,14 @@ class Ocean {
               const x = positions[index];
               const z = positions[index + 2];
 
+              if (x <= 70 && x >= -70 && z <= 70 && z >= -70) {
+                positions[index + 1] = 0
 
-              if (camera.isSplashing) {
-
-                const dist = Math.abs((x - camera.x) + (z - camera.z));
-                console.log(dist)
-
+                // Update the height map
+                this.heightMap[i][j] = 0
                 continue;
-
-
               }
+              
               positions[index + 1] = this.initialYPositions[index / 3] + Math.sin(frequency * (x + time)) * amplitude * Math.sin(frequency * (z + time));
 
               // Update the height map
@@ -813,6 +824,8 @@ class Creator {
 	activePolygonVerticesIndex = -1;
 	polygonVertices = [];
 	uuid = undefined;
+  leafTexture = new THREE.TextureLoader().load("/image?id=a6ebd1c4-bc15-4c53-bd82-5cf1a4df0501")
+  twoByFourTexture = new THREE.TextureLoader().load("/image?id=ca74fa95-77a7-42a6-8fa9-e1458cb8857b")
 	ConnectTheDotsWithPolygons() {
 		let points = this.polygonVertices[this.activePolygonVerticesIndex];
     const geometry = new THREE.BufferGeometry();
@@ -941,7 +954,116 @@ class Creator {
 
 	}
 
-  _MakeVerticesWithRandomHorizontalAdjustments(segments, v0, v1, v2, v3, negY = -0.05, posY = 0.09) {
+  CREATE_A_TREE(x, y, z) {
+    var trunkHeight = randomInRange(7, 50)
+    var trunkBaseRadius = randomInRange(1.27, 3.5)
+    var rr = randomInRange(.01, 1.09)
+    var trunkCurve = []
+    var trunkRadius = []
+
+    var zS = z
+    var xS = x
+    var yS = y;
+
+    for (; yS < y + trunkHeight; yS += 0.02) {
+        if (Math.random() < 0.13) {
+            zS += randomInRange(-rr, rr)
+        }
+        if (Math.random() < 0.13) {
+            xS += randomInRange(-rr, rr)
+        }
+        var r = trunkBaseRadius
+        trunkRadius.push(r)
+        trunkCurve.push(
+            new THREE.Vector3(
+                xS,
+                yS, 
+                zS
+            )
+        )
+    }
+
+     // Create foliage
+    var foliageRadius = trunkHeight / randomInRange(4, 7)
+
+
+    segments = 10
+    const sphereGeometry = new THREE.SphereGeometry(foliageRadius, 10, 10);
+    let sphereMaterial = new THREE.MeshStandardMaterial({
+        color: foliageColor,
+        map: this.leafTexture
+    });
+    
+    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+    sphere.uid = "foliage_" + x + "." + z + "." + y;
+    sphere.lights = true;
+    sphere.castShadow = true
+    sphere.receiveShadow = true
+    sphere.position.set(xS, yS - foliageRadius, zS); // Set foliage position
+    scene.add(sphere); // Add foliage to the scene
+    // window.VolumeHierarchy.push(sphere)
+
+    var {
+        array,
+        itemSize
+    } = sphereGeometry.attributes.position
+    for (let i = 0; i < segments; i++) {
+        for (var j = 0; j < segments; j++) {
+            var vertexIndex = (i * (segments + 1) + j) * itemSize
+            var x = array[vertexIndex]
+            var z = array[vertexIndex + 1]
+            var y = array[vertexIndex + 2]
+
+            
+            array[vertexIndex] = randomInRange(x - (foliageRadius * 2.2),     x + foliageRadius * 2.2)
+            array[vertexIndex + 1] = randomInRange(y - (foliageRadius * 2.2), y + foliageRadius * 2.2)
+            array[vertexIndex + 2] = randomInRange(y - (foliageRadius * 2.2), z + foliageRadius * 2.2)
+        }
+    }
+
+    const path = new THREE.CatmullRomCurve3(trunkCurve);
+
+    var segments = Math.floor(randomInRange(5, 11))
+
+
+    var radialSegments = 15
+
+
+     // Create the tube geometry
+    const tubeGeometry = new THREE.TubeGeometry(path, segments, trunkBaseRadius);
+
+ 
+
+    var colors = ['#964B00', '#654321', '#CD853F', '#F5F5F5'];
+
+    var foliageColors = Grass.concat(['#00FF00', '#00EE00', '#00DD00', '#00CC00', '#00BB00'])//[0xf0FF00, 0x00FF0f, 0x0fFF00, 0x00FFf0, 0xf0FF0f]
+    var foliageColor = foliageColors[Math.floor(Math.random() * foliageColors.length)]
+    var color = colors[Math.floor(Math.random() * colors.length)]
+    // Create a material (e.g., MeshBasicMaterial or MeshPhongMaterial)
+    const material = new THREE.MeshStandardMaterial({ 
+        color,
+        map: this.twoByFourTexture
+    });
+
+    // Create the mesh
+    const tubeMesh = new THREE.Mesh(tubeGeometry, material);
+    tubeMesh.castShadow = true
+    tubeMesh.lights = true
+    tubeMesh.receiveShadow = true
+    // tubeMesh.position.y += trunkHeight /
+
+    tubeMesh.uid = "trunk_" + x + "." + "z" + "." + "y";
+    // window.VolumeHierarchy.push(tubeMesh)
+
+    // Add the mesh to the scene
+    scene.add(tubeMesh);
+
+    trees[Math.floor(x) + '.' + Math.floor(y) + '.' + Math.floor(z)] = { radius: trunkBaseRadius, trunkHeight }
+
+   
+  }
+
+  _MakeVerticesWithRandomHorizontalAdjustments(segments, v0, v1, v2, v3, negY = -0.05, posY = 0.09, options) {
       let vertices = [];
       let indices = [];
       let uvs = [];
@@ -955,10 +1077,16 @@ class Creator {
                       (i / segments) * ((1 - j / segments) * v1.z + (j / segments) * v2.z);
               let y = (1 - i / segments) * ((1 - j / segments) * v0.y + (j / segments) * v3.y) + 
                       (i / segments) * ((1 - j / segments) * v1.y + (j / segments) * v2.y);
-              y += randomInRange(randomInRange(negY, -0.01), randomInRange(0.01, posY)); // Random vertical adjustment
+              y += randomInRange(negY, posY); // Random vertical adjustment
               vertices.push(x, y, z);
               uvs.push(i / segments, j / segments); // Adding UV coordinates
               map[round(x, 1) + '_' + round(z, 1)] = y;
+
+              if (options.withTrees) {
+                  if (Math.random () < 0.0002) {
+                    this.CREATE_A_TREE(x, y, z)
+                  }
+                }
           }
       }
 
@@ -984,7 +1112,7 @@ class Creator {
       }
   }
 
-	MakeFlatishGround(object) {
+	MakeFlatishGround(segments) {
 		let points = this.polygonVertices[this.activePolygonVerticesIndex]
 
     if (points.length == 4) {
@@ -992,9 +1120,8 @@ class Creator {
         var v1 = points[1];
         var v2 = points[2];
         var v3 = points[3];
-
-        var segments = Math.floor(randomInRange(10, 20)); // Number of segments along each axis     
-        var { vertices, indices, uvs, map } = this._MakeVerticesWithRandomHorizontalAdjustments(segments, v0, v1, v2, v3);
+     
+        var { vertices, indices, uvs, map } = this._MakeVerticesWithRandomHorizontalAdjustments(segments, v0, v1, v2, v3, 0, .05, { withTrees: true });
 
         var planeGeometry = new THREE.BufferGeometry();
         planeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
@@ -1005,11 +1132,14 @@ class Creator {
 
         var material = new THREE.MeshStandardMaterial({ 
         	// color: new THREE.Color(Math.random(), Math.random(), Math.random()),
-        	color: 0xffffff,
-        	wireframe: true, 
+        	// color: 0xffffff,
+          color: Grass[Math.floor(Math.random() * Grass.length)],
+        	// wireframe: false, 
         	side: THREE.DoubleSide 
         });
         var mesh = new THREE.Mesh(planeGeometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
         mesh.name = "touchable::plane";
         mesh.terrain = map;
 
@@ -1020,14 +1150,14 @@ class Creator {
         ))
 
         level.objects.push({
-	    	type: 'plane',
-	    	points: points,
-	    	imageId: undefined,
-	    	uuid: mesh.uuid
-	    });
+  	    	type: 'plane',
+  	    	points: points,
+  	    	imageId: undefined,
+  	    	uuid: mesh.uuid
+  	    });
 
         scene.add(mesh);
-          scene.grounds.push(mesh);
+        scene.grounds.push(mesh);
     }
 	}
 
@@ -1098,13 +1228,15 @@ ${to.intersectionPoint.z}
 		
 		document.getElementById('intersection-points').innerHTML = `
 &nbsp;<button onclick="Save()">Save</button>
-<pre>   floor: ${camera.floor}
+<pre>   
+  floor: ${camera.floor}
   isJumping: ${controller.isJumping}
   on terrain: ${camera.onTerrain}
   in ocean: ${camera.inOcean}
-x: ${round(camera.position.x, 2)}, 
-y: ${round(camera.position.y, 2)}, 
-z: ${round(camera.position.z, 2)}
+  •
+  x: ${round(camera.position.x, 2)}, 
+  y: ${round(camera.position.y, 2)}, 
+  z: ${round(camera.position.z, 2)}
 </pre>
 		`
 
@@ -1292,6 +1424,7 @@ class Controller {
   }
 
   activate() {
+
   	var active = false;
   	priorPosition = camera.position;
     if (this.w) {
@@ -1327,11 +1460,11 @@ class Controller {
     	active = true;
     }
     if (this.ArrowUp) {
-      camera.rotateX(0.1);
+      camera.rotateX(0.35);
     	active = true;
     }
     if (this.ArrowDown) {
-      camera.rotateX(-0.1);
+      camera.rotateX(-0.35);
     	active = true;
     }
     if (this.ArrowLeft || this.ArrowRight) {
@@ -1340,11 +1473,11 @@ class Controller {
 
       // Yaw rotation - Turning left or right
       if (this.ArrowLeft) {
-        quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.1);
+        quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.45);
       }
 
       if (this.ArrowRight) {
-        quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -0.1);
+        quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -0.45);
       }
 
       camera.quaternion.multiplyQuaternions(quaternionY, camera.quaternion);
@@ -1364,6 +1497,8 @@ class Controller {
     } else if (camera.floor == null && !camera.onTerrain && !camera.inOcean) {
       this.isJumping = true;
       this.gravity = -0.009;
+      camera.inOcean = false;
+      camera.onTerrain = false
     }
 
     this.velocity.y += this.gravity;
@@ -1415,14 +1550,15 @@ class Controller {
   }
 
 	touch() {
+    camera.floor = null
       var floorFound = false
 
 	    user.touchedObjects = [];
 
-	    this.wS = 0.05;
-	    this.aS = 0.05;
-	    this.sS = 0.05;
-	    this.dS = 0.05;
+	    this.wS = 0.5;
+	    this.aS = 0.45;
+	    this.sS = 0.25;
+	    this.dS = 0.25;
 
 	    actives.forEach(atc => scene.remove(atc));
 	    actives = [];
@@ -1543,11 +1679,6 @@ class Controller {
           }
       }
 
-      if (!floorFound) {
-        camera.onTerrain = false
-        camera.floor = null
-      }
-
 	    if (intersectionPoints.length) {
 	        // Find the most relevant intersection point
 	        let relevantIntersection = intersectionPoints[0];
@@ -1569,9 +1700,7 @@ class Controller {
 	            if (this.s) this.sS = 0.0;
 	            if (this.d) this.dS = 0.0;
 	        }
-	    }
-
-      
+	    }   
 	}
 
   navigate() {
@@ -1627,9 +1756,8 @@ function Control() {
 	createOutside.classList.add('create-outside');
 	createOutside.innerHTML = `<div id="self-control">
 		<input type="number" id="gravity" value="${controller.gravity}" /><br/>
-		<input type="number" id="jumpStrength" value="${controller.jumpStrength}" /><br/>
-        <label>Wave Strength<lavel>
-        <input type="number" id="waveStrength" value="${controller.ocean.amplitude}" /><br/>
+		<label>Jump Strength<lavel><input type="number" id="jumpStrength" value="${controller.jumpStrength}" /><br/>
+    <label>Wave Strength<lavel><input type="number" id="waveStrength" value="${controller.ocean.amplitude}" /><br/>
 	</div>`;
 
 	c.appendChild(createOutside);
@@ -1638,7 +1766,7 @@ function Control() {
 
 	document.getElementById('jumpStrength').addEventListener('change', e => controller.jumpStrength = +e.srcElement.value);
 
-    document.getElementById('waveStrength').addEventListener('change', e => controller.ocean.amplitude = +e.srcElement.value);
+  document.getElementById('waveStrength').addEventListener('change', e => controller.ocean.amplitude = +e.srcElement.value);
 
 
 	var candidatePoints = document.createElement('section');
@@ -1749,8 +1877,6 @@ function createSplashEffect(ocean, centerX, centerZ, rippleRadius) {
       clearInterval(intervalId);
     }
   }
-
-  
 }
 
 
@@ -1815,25 +1941,34 @@ function DevGrid(radius, display) {
 
 function Sun() {
 
-  var pointLight = new THREE.PointLight(0xfffefe , 100);
+  var pointLight = new THREE.DirectionalLight(0xfffefe, 3);
  
   pointLight.castShadow = true;
   pointLight.shadow.mapSize.width = 205000;
   pointLight.shadow.mapSize.height = 205000;
 
+  var halfSize = sceneRadius;
+  pointLight.shadow.camera.left = -halfSize;
+  pointLight.shadow.camera.right = halfSize;
+  pointLight.shadow.camera.top = sceneRadius;
+  pointLight.shadow.camera.bottom = -sceneRadius;
+
+
   level.sunlight = pointLight;
+  level.sunlight.position.set(0, sceneRadius, 0)
   // level.dome = createDome();
 
   scene.add(pointLight);
 
 
   level.sun = new THREE.Mesh(
-      new THREE.SphereGeometry(1.5, 10, 10),
+      new THREE.SphereGeometry(5.5, 10, 10),
       new THREE.MeshBasicMaterial({ color: 0xfffefe })
   );
 
   level.sun.position.copy(level.sunlight.position);
-  moveTo(level.sun, origin, 20);
+  moveTo(level.sun, origin, 50);
+  //
 
   for (var i = 0; i < 10000; i++) {
     var y = randomInRange(100, 1000);
@@ -1844,9 +1979,9 @@ function Sun() {
     scene.add(star);
   }
 
-  var starLight = new THREE.AmbientLight(0xffffff, 1);
-  starLight.position.set(0, 500, 0);
-  scene.add(starLight);
+  // var starLight = new THREE.AmbientLight(0xffffff, 1);
+  // starLight.position.set(0, 500, 0);
+  // scene.add(starLight);
 
   // add one vector in the direction of 0 0 0
 
@@ -1861,7 +1996,7 @@ function createSky() {
 
 function createDome() {
   var gridSize = 100;
-  var planeSize = 5; // Adjust this size to your preference
+  var planeSize = 15; // Adjust this size to your preference
   var radius = sceneRadius; // Adjust this radius for the dome's curvature
 
   for (var i = 0; i < gridSize; i++) {
@@ -1884,7 +2019,7 @@ function createDome() {
 
       var plane = new THREE.Mesh(planeGeometry, planeMaterial);
       plane.position.set(x, y - (sceneRadius * .85), z);
-      plane.lookAt(0, 0, 0);
+      plane.lookAt(camera.position.x, camera.position.y, camera.position.z);
       // plane.rotation.z = randomInRange(0, Math.PI * 2)
 
       controller.Sky.push(plane);
@@ -1953,14 +2088,14 @@ function RenderAll() {
 
   controller.creator.polygonVertices = [
       [
-          { x: -5, y: 0.5, z: 5 },
-          { x: 5, y: 0.5, z: 5 },
-          { x: 5, y: 0.5, z: -5 },
-          { x: -5, y: 0.5, z: -5 }
+          { x: -35, y: .1, z: 35 },
+          { x: 35, y: 0.1, z: 35 },
+          { x: 35, y: 0.1, z: -35 },
+          { x: -35, y: 0.1, z: -35 }
       ]
   ];
   controller.creator.activePolygonVerticesIndex = 0;
-  controller.creator.MakeFlatishGround()
+  controller.creator.MakeFlatishGround(100)
   // camera.inOcean = true;
 
   camera.lookAt(level.sun.position)
@@ -1990,8 +2125,9 @@ function Animate() {
   // Update sun position based on current angle
   var x = sceneRadius * Math.cos(angle);
   var y = sceneRadius * Math.sin(angle);
-  level.sun.position.set(x, y - (sceneRadius * .85), level.sun.position.z);
-  level.sunlight.position.set(x, y - (sceneRadius * .85), level.sun.position.z);
+  level.sun.position.set(x, y, level.sun.position.z);
+  level.sunlight.position.set(x, y, level.sun.position.z);
+  level.sunlight.lookAt(0, 0, 0)
 
   for (var i = 0; i < controller.Sky.length; i++) {
       var distanceToSun = controller.Sky[i].position.distanceTo(level.sun.position);
@@ -2022,13 +2158,18 @@ function Animate() {
       // Optionally, adjust material opacity based on intensity for a smoother transition
       if (distanceToSun > 1000) {controller.Sky[i].material.opacity = opacity * 0.8;}
       controller.Sky[i].material.opacity = intensity;
+      controller.Sky[i].lookAt(camera.position.x, camera.position.y, camera.position.z);
   }
 
   // Update camera position or controls
   renderer.render(scene, camera);
 
   // Animation update
-  angle += 0.01;
+  if (level.sun.position.y > 0) {
+    angle += 0.01;
+  } else {
+    angle += .31;
+  }
   if (angle > Math.PI * 2) {
     angle = 0;
   }
