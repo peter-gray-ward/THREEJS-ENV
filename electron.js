@@ -25,6 +25,10 @@ expressApp
     var fp = path.join(__dirname, 'node_modules/three/build/three.module.js')
     res.sendFile(fp)
   })
+  .get('/perlin-noise', (req, res) => {
+    var fp = path.join(__dirname, 'node_modules/perlin-noise/index.js')
+    res.sendFile(fp)
+  })
   .get('/image-tags', (req, res) => {
     connection.query(`
       select distinct tag as name, count(tag) as countOf from fun.images 

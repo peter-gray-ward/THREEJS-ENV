@@ -1,4 +1,5 @@
 import * as THREE from '/three';
+import * as PERLIN from '/perlin-noise';
 
 var scene = new THREE.Scene();
 var origin = new THREE.Mesh(new THREE.SphereGeometry(0.08, 20, 20), new THREE.MeshStandardMaterial({ color: 'turquoise' }));
@@ -25,16 +26,17 @@ var Grass = [
     '#536c46', //
     '#5d6847', //
 ];
-
+var D = 20
+window.angle = 0
 window.sunMaxDist = -Infinity;
 window.sunMinDist = Infinity
 var priorPosition = camera.position.clone();
 
-var sceneRadius = 255
+var sceneRadius = 100
 var axisLength = 100;
-const P = 100
+const P = 3
 var actives = [];
-const N = 0;
+const N = Math.floor(sceneRadius * 2 / 12);
 var levels = [];
 var level = {
 	name: 'first level',
@@ -43,7 +45,7 @@ var level = {
 
 window.trees = {}
 var display = {
-	devGridDots: true,
+	devGridDots: false,
 	userBoxFrame: false,
 	camera: {
 		boxType: 'person'
@@ -751,7 +753,7 @@ class Ocean {
               const x = positions[index];
               const z = positions[index + 2];
 
-              if (x <= 70 && x >= -70 && z <= 70 && z >= -70) {
+              if (x <= D && x >= -D && z <= D && z >= -D) {
                 positions[index + 1] = 0
 
                 // Update the height map
@@ -827,6 +829,818 @@ class Creator {
 	activePolygonVerticesIndex = -1;
 	polygonVertices = [];
 	uuid = undefined;
+  buildings = {
+    GenerateRandomLeCorbusierEdifice: function(centroid, ceilingHeight, levels, withPilotis) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const indices = [];
+        const levelHeight = ceilingHeight;
+        const baseSize = 10;
+
+        // Generate vertices for levels
+        for (let i = 0; i < levels; i++) {
+            const height = i * levelHeight;
+            vertices.push(
+                centroid.x - baseSize, centroid.y + height, centroid.z - baseSize, // Bottom left
+                centroid.x + baseSize, centroid.y + height, centroid.z - baseSize, // Bottom right
+                centroid.x + baseSize, centroid.y + height, centroid.z + baseSize, // Top right
+                centroid.x - baseSize, centroid.y + height, centroid.z + baseSize, // Top left
+                centroid.x - baseSize, centroid.y + height + ceilingHeight, centroid.z - baseSize, // Upper Bottom left
+                centroid.x + baseSize, centroid.y + height + ceilingHeight, centroid.z - baseSize, // Upper Bottom right
+                centroid.x + baseSize, centroid.y + height + ceilingHeight, centroid.z + baseSize, // Upper Top right
+                centroid.x - baseSize, centroid.y + height + ceilingHeight, centroid.z + baseSize  // Upper Top left
+            );
+        }
+
+        // Generate indices for faces
+        for (let i = 0; i < levels; i++) {
+            const offset = i * 8;
+            indices.push(
+                offset, offset + 1, offset + 5,
+                offset, offset + 5, offset + 4,
+                offset + 1, offset + 2, offset + 6,
+                offset + 1, offset + 6, offset + 5,
+                offset + 2, offset + 3, offset + 7,
+                offset + 2, offset + 7, offset + 6,
+                offset + 3, offset, offset + 4,
+                offset + 3, offset + 4, offset + 7,
+                offset + 4, offset + 5, offset + 6,
+                offset + 4, offset + 6, offset + 7
+            );
+        }
+
+        // Add vertices and indices for pilotis if applicable
+        if (withPilotis) {
+            const pilotisHeight = ceilingHeight / 2;
+            for (let i = 0; i < 4; i++) {
+                const x = (i % 2 === 0 ? -baseSize + 1 : baseSize - 1);
+                const z = (i < 2 ? -baseSize + 1 : baseSize - 1);
+                vertices.push(
+                    centroid.x + x, centroid.y, centroid.z + z,
+                    centroid.x + x, centroid.y + pilotisHeight, centroid.z + z
+                );
+            }
+
+            const pilotisOffset = levels * 8;
+            for (let i = 0; i < 4; i++) {
+                indices.push(
+                    pilotisOffset + i * 2, pilotisOffset + i * 2 + 1, pilotisOffset + ((i + 1) % 4) * 2 + 1,
+                    pilotisOffset + i * 2, pilotisOffset + ((i + 1) % 4) * 2 + 1, pilotisOffset + ((i + 1) % 4) * 2
+                );
+            }
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+        geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
+        geometry.computeVertexNormals();
+
+        const material = new THREE.MeshStandardMaterial({ color: 0x8b8b8b, 
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide 
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        return mesh;
+    },
+
+    GenerateRandomZahaHadidEdifice: function(centroid, maxHeight, numberOfWaves) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const indices = [];
+        const waveHeight = maxHeight / numberOfWaves;
+        const baseSize = 10;
+        const segments = 32;
+
+        for (let i = 0; i <= numberOfWaves; i++) {
+            const height = i * waveHeight;
+            const radius = baseSize * (1 + 0.5 * Math.sin(i * Math.PI / numberOfWaves));
+
+            for (let j = 0; j < segments; j++) {
+                const theta = (j / segments) * Math.PI * 2;
+                const x = radius * Math.cos(theta);
+                const z = radius * Math.sin(theta);
+                vertices.push(centroid.x + x, centroid.y + height, centroid.z + z);
+            }
+        }
+
+        for (let i = 0; i < numberOfWaves; i++) {
+            for (let j = 0; j < segments; j++) {
+                const first = i * segments + j;
+                const second = (i + 1) * segments + j;
+                const third = (i + 1) * segments + (j + 1) % segments;
+                const fourth = i * segments + (j + 1) % segments;
+
+                indices.push(first, second, third);
+                indices.push(first, third, fourth);
+            }
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+        geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
+        geometry.computeVertexNormals();
+
+        const material = new THREE.MeshStandardMaterial({ color: 0x1E90FF, 
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide 
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        return mesh;
+    },
+
+    GenerateRandomFrankGehryEdifice: function(centroid, maxHeight, levels) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const indices = [];
+        const baseSize = 10;
+
+        for (let i = 0; i < levels; i++) {
+            const height = centroid.y + (i * (maxHeight / levels));
+            const xOffset = Math.random() * baseSize - (baseSize / 2);
+            const zOffset = Math.random() * baseSize - (baseSize / 2);
+
+            vertices.push(
+                centroid.x + xOffset - baseSize, height, centroid.z + zOffset - baseSize,
+                centroid.x + xOffset + baseSize, height, centroid.z + zOffset - baseSize,
+                centroid.x + xOffset + baseSize, height, centroid.z + zOffset + baseSize,
+                centroid.x + xOffset - baseSize, height, centroid.z + zOffset + baseSize,
+                centroid.x + xOffset - baseSize, height + (maxHeight / levels), centroid.z + zOffset - baseSize,
+                centroid.x + xOffset + baseSize, height + (maxHeight / levels), centroid.z + zOffset - baseSize,
+                centroid.x + xOffset + baseSize, height + (maxHeight / levels), centroid.z + zOffset + baseSize,
+                centroid.x + xOffset - baseSize, height + (maxHeight / levels), centroid.z + zOffset + baseSize
+            );
+
+            const offset = i * 8;
+            indices.push(
+                offset, offset + 1, offset + 5,
+                offset, offset + 5, offset + 4,
+                offset + 1, offset + 2, offset + 6,
+                offset + 1, offset + 6, offset + 5,
+                offset + 2, offset + 3, offset + 7,
+                offset + 2, offset + 7, offset + 6,
+                offset + 3, offset, offset + 4,
+                offset + 3, offset + 4, offset + 7,
+                offset + 4, offset + 5, offset + 6,
+                offset + 4, offset + 6, offset + 7
+            );
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+        geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
+        geometry.computeVertexNormals();
+
+        const material = new THREE.MeshStandardMaterial({ color: 0x6A5ACD, 
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide 
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        return mesh;
+    },
+
+    GenerateRandomIMPeiEdifice: function(centroid, baseSize, height, levels) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const indices = [];
+        const segmentHeight = height / levels;
+
+        for (let i = 0; i < levels; i++) {
+            const levelHeight = centroid.y + i * segmentHeight;
+            const currentSize = baseSize * (1 - i / levels);
+
+            vertices.push(
+                centroid.x - currentSize, levelHeight, centroid.z - currentSize,
+                centroid.x + currentSize, levelHeight, centroid.z - currentSize,
+                centroid.x + currentSize, levelHeight, centroid.z + currentSize,
+                centroid.x - currentSize, levelHeight, centroid.z + currentSize,
+                centroid.x, levelHeight + segmentHeight, centroid.z
+            );
+
+            const offset = i * 5;
+            indices.push(
+                offset, offset + 1, offset + 4,
+                offset + 1, offset + 2, offset + 4,
+                offset + 2, offset + 3, offset + 4,
+                offset + 3, offset, offset + 4,
+                offset, offset + 1, offset + 2,
+                offset, offset + 2, offset + 3
+            );
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+        geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
+        geometry.computeVertexNormals();
+
+        const material = new THREE.MeshStandardMaterial({ color: 0x00BFFF, 
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide 
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        return mesh;
+    },
+
+    GenerateRandomTadaoAndoEdifice: function(centroid, length, width, height, levels) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const indices = [];
+        const levelHeight = height / levels;
+
+        for (let i = 0; i < levels; i++) {
+            const baseHeight = centroid.y + i * levelHeight;
+            vertices.push(
+                centroid.x - length / 2, baseHeight, centroid.z - width / 2,
+                centroid.x + length / 2, baseHeight, centroid.z - width / 2,
+                centroid.x + length / 2, baseHeight, centroid.z + width / 2,
+                centroid.x - length / 2, baseHeight, centroid.z + width / 2,
+                centroid.x - length / 2, baseHeight + levelHeight, centroid.z - width / 2,
+                centroid.x + length / 2, baseHeight + levelHeight, centroid.z - width / 2,
+                centroid.x + length / 2, baseHeight + levelHeight, centroid.z + width / 2,
+                centroid.x - length / 2, baseHeight + levelHeight, centroid.z + width / 2
+            );
+
+            const offset = i * 8;
+            indices.push(
+                offset, offset + 1, offset + 5,
+                offset, offset + 5, offset + 4,
+                offset + 1, offset + 2, offset + 6,
+                offset + 1, offset + 6, offset + 5,
+                offset + 2, offset + 3, offset + 7,
+                offset + 2, offset + 7, offset + 6,
+                offset + 3, offset, offset + 4,
+                offset + 3, offset + 4, offset + 7,
+                offset + 4, offset + 5, offset + 6,
+                offset + 4, offset + 6, offset + 7
+            );
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+        geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
+        geometry.computeVertexNormals();
+
+        const material = new THREE.MeshStandardMaterial({ color: 0x696969, 
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide 
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        return mesh;
+    },
+
+    GenerateRandomRenzoPianoEdifice: function(centroid, width, depth, height, levels) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const indices = [];
+        const levelHeight = height / levels;
+
+        for (let i = 0; i < levels; i++) {
+            const baseHeight = centroid.y + i * levelHeight;
+
+            // Create vertices for the skeletal frame
+            vertices.push(
+                centroid.x - width / 2, baseHeight, centroid.z - depth / 2,
+                centroid.x + width / 2, baseHeight, centroid.z - depth / 2,
+                centroid.x + width / 2, baseHeight, centroid.z + depth / 2,
+                centroid.x - width / 2, baseHeight, centroid.z + depth / 2,
+                centroid.x - width / 2, baseHeight + levelHeight, centroid.z - depth / 2,
+                centroid.x + width / 2, baseHeight + levelHeight, centroid.z - depth / 2,
+                centroid.x + width / 2, baseHeight + levelHeight, centroid.z + depth / 2,
+                centroid.x - width / 2, baseHeight + levelHeight, centroid.z + depth / 2
+            );
+
+            const offset = i * 8;
+            indices.push(
+                offset, offset + 1, offset + 5,
+                offset, offset + 5, offset + 4,
+                offset + 1, offset + 2, offset + 6,
+                offset + 1, offset + 6, offset + 5,
+                offset + 2, offset + 3, offset + 7,
+                offset + 2, offset + 7, offset + 6,
+                offset + 3, offset, offset + 4,
+                offset + 3, offset + 4, offset + 7,
+                offset + 4, offset + 5, offset + 6,
+                offset + 4, offset + 6, offset + 7
+            );
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+        geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
+        geometry.computeVertexNormals();
+
+        const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x888888, 
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide 
+        });
+        const frameMesh = new THREE.Mesh(geometry, frameMaterial);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        // Create glass panels
+        const glassGeometry = new THREE.BoxGeometry(width, height, depth);
+        const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x87CEFA, transparent: true, opacity: 0.5 });
+        const glassMesh = new THREE.Mesh(glassGeometry, glassMaterial);
+        glassMesh.position.set(centroid.x, centroid.y + height / 2, centroid.z);
+
+        const group = new THREE.Group();
+        group.add(frameMesh);
+        group.add(glassMesh);
+
+        return group;
+    },
+
+    GenerateRandomNormanFosterEdifice: function(centroid, width, depth, height, levels) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const indices = [];
+        const levelHeight = height / levels;
+
+        for (let i = 0; i < levels; i++) {
+            const baseHeight = centroid.y + i * levelHeight;
+            const taper = (1 - i / levels) * 0.5;
+
+            vertices.push(
+                centroid.x - width * taper / 2, baseHeight, centroid.z - depth * taper / 2,
+                centroid.x + width * taper / 2, baseHeight, centroid.z - depth * taper / 2,
+                centroid.x + width * taper / 2, baseHeight, centroid.z + depth * taper / 2,
+                centroid.x - width * taper / 2, baseHeight, centroid.z + depth * taper / 2,
+                centroid.x - width * taper / 2, baseHeight + levelHeight, centroid.z - depth * taper / 2,
+                centroid.x + width * taper / 2, baseHeight + levelHeight, centroid.z - depth * taper / 2,
+                centroid.x + width * taper / 2, baseHeight + levelHeight, centroid.z + depth * taper / 2,
+                centroid.x - width * taper / 2, baseHeight + levelHeight, centroid.z + depth * taper / 2
+            );
+
+            const offset = i * 8;
+            indices.push(
+                offset, offset + 1, offset + 5,
+                offset, offset + 5, offset + 4,
+                offset + 1, offset + 2, offset + 6,
+                offset + 1, offset + 6, offset + 5,
+                offset + 2, offset + 3, offset + 7,
+                offset + 2, offset + 7, offset + 6,
+                offset + 3, offset, offset + 4,
+                offset + 3, offset + 4, offset + 7,
+                offset + 4, offset + 5, offset + 6,
+                offset + 4, offset + 6, offset + 7
+            );
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+        geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
+        geometry.computeVertexNormals();
+
+        const frameMaterial = new THREE.MeshStandardMaterial({ color: 0xCCCCCC, 
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide 
+        });
+        const frameMesh = new THREE.Mesh(geometry, frameMaterial);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        // Create glass panels
+        const glassGeometry = new THREE.BoxGeometry(width, height, depth);
+        const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x87CEEB, transparent: true, opacity: 0.5 });
+        const glassMesh = new THREE.Mesh(glassGeometry, glassMaterial);
+        glassMesh.position.set(centroid.x, centroid.y + height / 2, centroid.z);
+
+        const group = new THREE.Group();
+        group.add(frameMesh);
+        group.add(glassMesh);
+
+        return group;
+    },
+
+    GenerateRandomOscarNiemeyerEdifice: function(centroid, baseRadius, height, levels) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const indices = [];
+        const segments = 32;
+        const levelHeight = height / levels;
+
+        for (let i = 0; i <= levels; i++) {
+            const currentRadius = baseRadius * (1 - i / levels);
+            const y = centroid.y + i * levelHeight;
+
+            for (let j = 0; j <= segments; j++) {
+                const theta = (j / segments) * Math.PI * 2;
+                const x = centroid.x + currentRadius * Math.cos(theta);
+                const z = centroid.z + currentRadius * Math.sin(theta);
+                vertices.push(x, y, z);
+            }
+        }
+
+        for (let i = 0; i < levels; i++) {
+            for (let j = 0; j < segments; j++) {
+                const first = i * (segments + 1) + j;
+                const second = first + segments + 1;
+                const third = first + 1;
+                const fourth = second + 1;
+
+                indices.push(first, second, third);
+                indices.push(second, fourth, third);
+            }
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+        geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
+        geometry.computeVertexNormals();
+
+        const material = new THREE.MeshStandardMaterial({ color: 0xFFD700, 
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide 
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        return mesh;
+    },
+
+    GenerateRandomAntoniGaudiEdifice: function(centroid, height, baseRadius, levels) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const indices = [];
+        const segments = 32;
+        const levelHeight = height / levels;
+
+        for (let i = 0; i <= levels; i++) {
+            const currentRadius = baseRadius * (1 - i / levels);
+            const y = centroid.y + i * levelHeight;
+
+            for (let j = 0; j <= segments; j++) {
+                const theta = (j / segments) * Math.PI * 2;
+                const twist = (i % 2 === 0) ? Math.sin(theta + (i * 0.5)) : Math.cos(theta + (i * 0.5));
+                const x = centroid.x + currentRadius * Math.cos(theta) * (1 + 0.1 * twist);
+                const z = centroid.z + currentRadius * Math.sin(theta) * (1 + 0.1 * twist);
+                vertices.push(x, y, z);
+            }
+        }
+
+        for (let i = 0; i < levels; i++) {
+            for (let j = 0; j < segments; j++) {
+                const first = i * (segments + 1) + j;
+                const second = first + segments + 1;
+                const third = first + 1;
+                const fourth = second + 1;
+
+                indices.push(first, second, third);
+                indices.push(second, fourth, third);
+            }
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+        geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
+        geometry.computeVertexNormals();
+
+        const material = new THREE.MeshStandardMaterial({ color: 0xFF4500, 
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide 
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        return mesh;
+    },
+
+    GenerateRandomEeroSaarinenEdifice: function(centroid, width, depth, height, curvature) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const indices = [];
+        const segments = 32;
+
+        for (let i = 0; i <= segments; i++) {
+            const theta = (i / segments) * Math.PI * 2;
+            const x = centroid.x + width * Math.cos(theta) * (1 + curvature * Math.sin(theta));
+            const z = centroid.z + depth * Math.sin(theta) * (1 + curvature * Math.cos(theta));
+            vertices.push(x, centroid.y, z);
+            vertices.push(x, centroid.y + height, z);
+        }
+
+        for (let i = 0; i < segments; i++) {
+            const first = i * 2;
+            const second = first + 1;
+            const third = first + 2;
+            const fourth = third + 1;
+
+            indices.push(first, third, second);
+            indices.push(second, third, fourth);
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+        geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
+        geometry.computeVertexNormals();
+
+        const material = new THREE.MeshStandardMaterial({ color: 0x8A2BE2, 
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide 
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        return mesh;
+    },
+
+    GenerateRandomRichardMeierEdifice: function(centroid, width, depth, height, levels) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const indices = [];
+        const levelHeight = height / levels;
+        const segments = 10;
+
+        for (let i = 0; i < levels; i++) {
+            const baseHeight = centroid.y + i * levelHeight;
+
+            for (let j = 0; j <= segments; j++) {
+                for (let k = 0; k <= segments; k++) {
+                    const x = centroid.x - width / 2 + (width / segments) * j;
+                    const z = centroid.z - depth / 2 + (depth / segments) * k;
+                    vertices.push(x, baseHeight, z);
+                    vertices.push(x, baseHeight + levelHeight, z);
+                }
+            }
+
+            const vertOffset = i * (segments + 1) * (segments + 1) * 2;
+
+            for (let j = 0; j < segments; j++) {
+                for (let k = 0; k < segments; k++) {
+                    const first = vertOffset + (j * (segments + 1) + k) * 2;
+                    const second = first + 2;
+                    const third = first + (segments + 1) * 2;
+                    const fourth = third + 2;
+
+                    indices.push(first, second, fourth);
+                    indices.push(first, fourth, third);
+
+                    indices.push(first + 1, second + 1, fourth + 1);
+                    indices.push(first + 1, fourth + 1, third + 1);
+                }
+            }
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+        geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
+        geometry.computeVertexNormals();
+
+        const material = new THREE.MeshStandardMaterial({ color: 0xFFFFFF, 
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide 
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        return mesh;
+    },
+
+    GenerateRandomLouisKahnEdifice: function(centroid, width, depth, height, levels) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const indices = [];
+        const levelHeight = height / levels;
+
+        for (let i = 0; i < levels; i++) {
+            const baseHeight = centroid.y + i * levelHeight;
+            const offset = (i % 2 === 0) ? 0 : width / 4;
+
+            vertices.push(
+                centroid.x - width / 2 + offset, baseHeight, centroid.z - depth / 2,
+                centroid.x + width / 2 - offset, baseHeight, centroid.z - depth / 2,
+                centroid.x + width / 2 - offset, baseHeight, centroid.z + depth / 2,
+                centroid.x - width / 2 + offset, baseHeight, centroid.z + depth / 2,
+                centroid.x - width / 2 + offset, baseHeight + levelHeight, centroid.z - depth / 2,
+                centroid.x + width / 2 - offset, baseHeight + levelHeight, centroid.z - depth / 2,
+                centroid.x + width / 2 - offset, baseHeight + levelHeight, centroid.z + depth / 2,
+                centroid.x - width / 2 + offset, baseHeight + levelHeight, centroid.z + depth / 2
+            );
+
+            const vertOffset = i * 8;
+            indices.push(
+                vertOffset, vertOffset + 1, vertOffset + 5,
+                vertOffset, vertOffset + 5, vertOffset + 4,
+                vertOffset + 1, vertOffset + 2, vertOffset + 6,
+                vertOffset + 1, vertOffset + 6, vertOffset + 5,
+                vertOffset + 2, vertOffset + 3, vertOffset + 7,
+                vertOffset + 2, vertOffset + 7, vertOffset + 6,
+                vertOffset + 3, vertOffset, vertOffset + 4,
+                vertOffset + 3, vertOffset + 4, vertOffset + 7,
+                vertOffset + 4, vertOffset + 5, vertOffset + 6,
+                vertOffset + 4, vertOffset + 6, vertOffset + 7
+            );
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+        geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
+        geometry.computeVertexNormals();
+
+        const material = new THREE.MeshStandardMaterial({ color: 0xA9A9A9, 
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide 
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        return mesh;
+    },
+
+
+    GenerateRandomSantiagoCalatravaEdifice: function(centroid, height, radius, levels) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const indices = [];
+        const segments = 32;
+        const levelHeight = height / levels;
+
+        for (let i = 0; i <= levels; i++) {
+            const angleOffset = (i % 2 === 0) ? Math.PI / segments : 0;
+            const levelRadius = radius * (1 - i / levels);
+            const y = centroid.y + i * levelHeight;
+
+            for (let j = 0; j < segments; j++) {
+                const theta = (j / segments) * Math.PI * 2 + angleOffset;
+                const x = centroid.x + levelRadius * Math.cos(theta);
+                const z = centroid.z + levelRadius * Math.sin(theta);
+                vertices.push(x, y, z);
+            }
+        }
+
+        for (let i = 0; i < levels; i++) {
+            for (let j = 0; j < segments; j++) {
+                const first = i * segments + j;
+                const second = first + segments;
+                const third = first + 1;
+                const fourth = second + 1;
+
+                indices.push(first, second, third % segments + i * segments);
+                indices.push(second, fourth % segments + (i + 1) * segments, third % segments + i * segments);
+            }
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+        geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
+        geometry.computeVertexNormals();
+
+        const material = new THREE.MeshStandardMaterial({ color: 0xFFFFFF, 
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide 
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        return mesh;
+    },
+    GenerateRandomMiesVanDerRoheEdifice: function(centroid, ceilingHeight, levels) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const indices = [];
+        const levelHeight = ceilingHeight;
+        const baseSize = 10;
+        const gridSegments = 4;
+
+        // Generate vertices for levels
+        for (let i = 0; i < levels; i++) {
+            const height = i * levelHeight;
+
+            for (let j = 0; j <= gridSegments; j++) {
+                for (let k = 0; k <= gridSegments; k++) {
+                    const x = centroid.x - baseSize + (2 * baseSize / gridSegments) * j;
+                    const z = centroid.z - baseSize + (2 * baseSize / gridSegments) * k;
+                    vertices.push(x, centroid.y + height, z);
+                    vertices.push(x, centroid.y + height + ceilingHeight, z);
+                }
+            }
+        }
+
+        // Generate indices for faces
+        for (let i = 0; i < levels; i++) {
+            const offset = i * (gridSegments + 1) * (gridSegments + 1) * 2;
+
+            for (let j = 0; j < gridSegments; j++) {
+                for (let k = 0; k < gridSegments; k++) {
+                    const first = offset + (j * (gridSegments + 1) + k) * 2;
+                    const second = first + 2;
+                    const third = first + (gridSegments + 1) * 2;
+                    const fourth = third + 2;
+
+                    indices.push(first, second, fourth);
+                    indices.push(first, fourth, third);
+
+                    indices.push(first + 1, second + 1, fourth + 1);
+                    indices.push(first + 1, fourth + 1, third + 1);
+                }
+            }
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+        geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
+        geometry.computeVertexNormals();
+
+        const material = new THREE.MeshStandardMaterial({ color: 0x333333, 
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide 
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        return mesh;
+    },
+
+
+    /**
+     * @  This function will generate a random building inspired 
+     *    by Frank Lloyd Wright's architectural style, known for 
+     *    its organic architecture, use of natural materials, 
+     *    and integration with the environment.
+     */
+    GenerateRandomFrankLloydWrightEdifice(centroid, ceilingHeight, levels, withBasement) {
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const indices = [];
+        const levelHeight = ceilingHeight;
+        const baseSize = 10;
+
+        // Generate vertices for levels
+        for (let i = 0; i < levels; i++) {
+            const height = i * levelHeight;
+            vertices.push(
+                centroid.x - baseSize, centroid.y + height, centroid.z - baseSize, // Bottom left
+                centroid.x + baseSize, centroid.y + height, centroid.z - baseSize, // Bottom right
+                centroid.x + baseSize, centroid.y + height, centroid.z + baseSize, // Top right
+                centroid.x - baseSize, centroid.y + height, centroid.z + baseSize  // Top left
+            );
+        }
+
+        // Generate indices for faces
+        for (let i = 0; i < levels - 1; i++) {
+            const offset = i * 4;
+            indices.push(
+                offset, offset + 1, offset + 5,
+                offset, offset + 5, offset + 4,
+                offset + 1, offset + 2, offset + 6,
+                offset + 1, offset + 6, offset + 5,
+                offset + 2, offset + 3, offset + 7,
+                offset + 2, offset + 7, offset + 6,
+                offset + 3, offset, offset + 4,
+                offset + 3, offset + 4, offset + 7
+            );
+        }
+
+        // Add vertices and indices for basement if applicable
+        if (withBasement) {
+            const basementHeight = -ceilingHeight;
+            vertices.push(
+                centroid.x - baseSize, centroid.y + basementHeight, centroid.z - baseSize, // Bottom left
+                centroid.x + baseSize, centroid.y + basementHeight, centroid.z - baseSize, // Bottom right
+                centroid.x + baseSize, centroid.y + basementHeight, centroid.z + baseSize, // Top right
+                centroid.x - baseSize, centroid.y + basementHeight, centroid.z + baseSize  // Top left
+            );
+
+            const basementOffset = levels * 4;
+            indices.push(
+                basementOffset, basementOffset + 1, basementOffset + 5,
+                basementOffset, basementOffset + 5, basementOffset + 4,
+                basementOffset + 1, basementOffset + 2, basementOffset + 6,
+                basementOffset + 1, basementOffset + 6, basementOffset + 5,
+                basementOffset + 2, basementOffset + 3, basementOffset + 7,
+                basementOffset + 2, basementOffset + 7, basementOffset + 6,
+                basementOffset + 3, basementOffset, basementOffset + 4,
+                basementOffset + 3, basementOffset + 4, basementOffset + 7
+            );
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+        geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
+        geometry.computeVertexNormals();
+
+        const material = new THREE.MeshStandardMaterial({ color: 0xffd700, 
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide 
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+
+        mesh.position.set(centroid.x, centroid.y, centroid.z)
+
+        return mesh;
+    }
+
+
+  }
   leafTexture = new THREE.TextureLoader().load("/image?id=a6ebd1c4-bc15-4c53-bd82-5cf1a4df0501")
   twoByFourTexture = new THREE.TextureLoader().load("/image?id=ca74fa95-77a7-42a6-8fa9-e1458cb8857b")
 	ConnectTheDotsWithPolygons() {
@@ -957,10 +1771,56 @@ class Creator {
 
 	}
 
+  /**
+   * @ This function will generate a random building inspired 
+   *   by Le Corbusier’s architectural style, characterized by 
+   *   modernist principles, use of pilotis (supports), flat 
+   *   roofs, and open floor plans.
+   * 
+   */
+
+
+
+  createCustomBufferGeometry() {
+      // Define the vertices for a cube
+      const vertices = new Float32Array([
+          -1, -1, -1,
+           1, -1, -1,
+           1,  1, -1,
+          -1,  1, -1,
+          -1, -1,  1,
+           1, -1,  1,
+           1,  1,  1,
+          -1,  1,  1,
+      ]);
+
+      // Define the indices for the cube
+      const indices = new Uint16Array([
+          0, 1, 2, 2, 3, 0, // front face
+          4, 5, 6, 6, 7, 4, // back face
+          0, 1, 5, 5, 4, 0, // bottom face
+          2, 3, 7, 7, 6, 2, // top face
+          0, 3, 7, 7, 4, 0, // left face
+          1, 2, 6, 6, 5, 1  // right face
+      ]);
+
+      // Create the buffer geometry
+      const geometry = new THREE.BufferGeometry();
+
+      // Set the attributes
+      geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+      geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+
+      // Compute the normals
+      geometry.computeVertexNormals();
+
+      return geometry;
+  }
+
   CREATE_A_TREE(x, y, z) {
     var trunkHeight = randomInRange(7, 50)
-    var trunkBaseRadius = randomInRange(1.27, 3.5)
-    var rr = randomInRange(.01, 1.09)
+    var trunkBaseRadius = trunkHeight < 10 ? randomInRange(.36, .48) : randomInRange(.57, 1.25)
+    var rr = randomInRange(.01, .1)
     var trunkCurve = []
     var trunkRadius = []
 
@@ -1010,9 +1870,9 @@ class Creator {
         array,
         itemSize
     } = sphereGeometry.attributes.position
-    for (let i = 0; i < segments; i++) {
-        for (var j = 0; j < segments; j++) {
-            var vertexIndex = (i * (segments + 1) + j) * itemSize
+    for (let i = 0; i < 21; i++) {
+        for (var j = 0; j < 21; j++) {
+            var vertexIndex = (i * (21 + 1) + j) * itemSize
             var x = array[vertexIndex]
             var z = array[vertexIndex + 1]
             var y = array[vertexIndex + 2]
@@ -1053,7 +1913,7 @@ class Creator {
     tubeMesh.castShadow = true
     tubeMesh.lights = true
     tubeMesh.receiveShadow = true
-    // tubeMesh.position.y += trunkHeight /
+    tubeMesh.position.y -= 2
 
     tubeMesh.uid = "trunk_" + x + "." + "z" + "." + "y";
     // window.VolumeHierarchy.push(tubeMesh)
@@ -1061,9 +1921,7 @@ class Creator {
     // Add the mesh to the scene
     scene.add(tubeMesh);
 
-    trees[Math.floor(x) + '.' + Math.floor(y) + '.' + Math.floor(z)] = { radius: trunkBaseRadius, trunkHeight }
-
-   
+    trees[Math.floor(x) + '.' + Math.floor(y) + '.' + Math.floor(z)] = { radius: trunkBaseRadius, trunkHeight }   
   }
 
   _MakeVerticesWithRandomHorizontalAdjustments(segments, v0, v1, v2, v3, negY = -0.05, posY = 0.09, options) {
@@ -1073,25 +1931,44 @@ class Creator {
       let map = {};
       // Create vertices with random vertical adjustments
       for (let i = 0; i <= segments; i++) {
-          for (let j = 0; j <= segments; j++) {
-              let x = (1 - i / segments) * ((1 - j / segments) * v0.x + (j / segments) * v3.x) + 
-                      (i / segments) * ((1 - j / segments) * v1.x + (j / segments) * v2.x);
-              let z = (1 - i / segments) * ((1 - j / segments) * v0.z + (j / segments) * v3.z) + 
-                      (i / segments) * ((1 - j / segments) * v1.z + (j / segments) * v2.z);
-              let y = (1 - i / segments) * ((1 - j / segments) * v0.y + (j / segments) * v3.y) + 
-                      (i / segments) * ((1 - j / segments) * v1.y + (j / segments) * v2.y);
-              y += randomInRange(negY, posY); // Random vertical adjustment
-              vertices.push(x, y, z);
-              uvs.push(i / segments, j / segments); // Adding UV coordinates
-              map[round(x, 1) + '_' + round(z, 1)] = y;
+        for (let j = 0; j <= segments; j++) {
+            let x = (1 - i / segments) * ((1 - j / segments) * v0.x + (j / segments) * v3.x) + 
+                    (i / segments) * ((1 - j / segments) * v1.x + (j / segments) * v2.x);
+            let z = (1 - i / segments) * ((1 - j / segments) * v0.z + (j / segments) * v3.z) + 
+                    (i / segments) * ((1 - j / segments) * v1.z + (j / segments) * v2.z);
+            let y = (1 - i / segments) * ((1 - j / segments) * v0.y + (j / segments) * v3.y) + 
+                    (i / segments) * ((1 - j / segments) * v1.y + (j / segments) * v2.y);
 
-              if (options.withTrees) {
-                  if (Math.random () < 0.0002) {
-                    this.CREATE_A_TREE(x, y, z)
-                  }
+          
+            if (options.repeatingMounds) {
+              // Create large, smooth rolling hills or valleys
+              let hill1 = Math.sin(x * Math.PI * 0.5) * Math.cos(z * Math.PI * 0.5) * 0.3; // Lower frequency for larger hills/valleys
+              let hill2 = Math.sin(x * Math.PI * 0.25) * Math.cos(z * Math.PI * 0.25) * 0.2; // Even lower frequency
+              let hill3 = Math.sin(x * Math.PI * 0.125) * Math.cos(z * Math.PI * 0.125) * 0.1; // Very low frequency
+
+              // Combine the hills with different weights
+              y += hill1 + hill2 + hill3;
+            } else if (options.slightBay) {
+              let wave1 = Math.sin((i / segments) * Math.PI * 1.5) * Math.cos((j / segments) * Math.PI * 1.5) * 1.2; // Large wave 1
+              let wave2 = Math.sin((i / segments) * Math.PI * 1.0) * Math.cos((j / segments) * Math.PI * 1.0) * 0.15; // Large wave 2
+              let wave3 = Math.sin((i / segments) * Math.PI * 0.5) * Math.cos((j / segments) * Math.PI * 0.5) * 0.1; // Large wave 3
+
+              // Combine the waves with different weights to ensure large, smooth transitions
+              y += wave1 + wave2 + wave3;
+
+            }
+
+            vertices.push(x, y, z);
+            uvs.push(i / segments, j / segments); // Adding UV coordinates
+            map[round(x, 1) + '_' + round(z, 1)] = y;
+
+            if (options.withTrees) {
+                if (true && Math.random() < 0.01 && Math.random() < 0.01) {
+                    this.CREATE_A_TREE(x, y, z);
                 }
-          }
-      }
+            }
+        }
+    }
 
       // Create indices for the plane
       for (let i = 0; i < segments; i++) {
@@ -1115,8 +1992,172 @@ class Creator {
       }
   }
 
-	MakeFlatishGround(segments) {
-		let points = this.polygonVertices[this.activePolygonVerticesIndex]
+  CreateFlatMeadow(segments, v0, v1, v2, v3) {
+      // Initialize arrays to store vertices, indices, and uvs
+      let vertices = [];
+      let indices = [];
+      let uvs = [];
+
+      // Calculate segment size
+      const segmentSize = 1 / segments;
+
+      var sectors = segments / segmentSize
+
+      // Create vertices, uvs, and indices
+      for (let i = 0; i <= segments; i++) {
+          for (let j = 0; j <= segments; j++) {
+              // Interpolating between the four corners
+              let x = i * segmentSize;
+              let y = j * segmentSize;
+
+              let v = new THREE.Vector3();
+              v.x = (1 - x) * (1 - y) * v0.x + x * (1 - y) * v1.x + x * y * v2.x + (1 - x) * y * v3.x;
+              v.y = (1 - x) * (1 - y) * v0.y + x * (1 - y) * v1.y + x * y * v2.y + (1 - x) * y * v3.y;
+              v.z = (1 - x) * (1 - y) * v0.z + x * (1 - y) * v1.z + x * y * v2.z + (1 - x) * y * v3.z;
+
+              // Add some height variation
+              let height = Math.sin(x * Math.PI) * Math.sin(y * Math.PI) * Math.random();
+              v.z += height;
+
+              vertices.push(v.x, v.y, v.z);
+              uvs.push(x, y);
+
+              if (i < segments && j < segments) {
+                  // Create indices for two triangles per quad
+                  let a = i + j * (segments + 1);
+                  let b = (i + 1) + j * (segments + 1);
+                  let c = (i + 1) + (j + 1) * (segments + 1);
+                  let d = i + (j + 1) * (segments + 1);
+
+                  // Triangle 1
+                  indices.push(a, b, d);
+                  // Triangle 2
+                  indices.push(b, c, d);
+              }
+          }
+      }
+
+      // Creating the map (optional)
+      let map = {
+          vertices: vertices,
+          indices: indices,
+          uvs: uvs
+      };
+
+      return { vertices, indices, uvs, map };
+  }
+
+  CreateMeadow(segments, v0, v1, v2, v3) {
+    // Initialize arrays to store vertices, indices, and uvs
+    let vertices = [];
+    let indices = [];
+    let uvs = [];
+    var map = {}
+
+    // Calculate segment size
+    const segmentSize = 1 / segments;
+
+    const noiseWidth = 100;
+    const noiseHeight = 100;
+    const perlinNoise = PERLIN.generatePerlinNoise(noiseWidth, noiseHeight);
+
+    // Create vertices, uvs, and indices
+    for (let i = 0; i <= segments; i++) {
+        for (let j = 0; j <= segments; j++) {
+            // Interpolating between the four corners
+            let x = i * segmentSize;
+            let y = j * segmentSize;
+
+            let v = new THREE.Vector3();
+            v.x = (1 - x) * (1 - y) * v0.x + x * (1 - y) * v1.x + x * y * v2.x + (1 - x) * y * v3.x;
+            v.y = (1 - x) * (1 - y) * v0.y + x * (1 - y) * v1.y + x * y * v2.y + (1 - x) * y * v3.y;
+            v.z = (1 - x) * (1 - y) * v0.z + x * (1 - y) * v1.z + x * y * v2.z + (1 - x) * y * v3.z;
+
+            // Sample Perlin noise
+            let noiseX = Math.floor(x * (noiseWidth - 1));
+            let noiseY = Math.floor(y * (noiseHeight - 1));
+            let height = 0.53 * perlinNoise[noiseY * noiseWidth + noiseX] * 5; // Adjust the multiplier for desired height
+
+            v.y += height;
+
+            vertices.push(v.x, v.y, v.z);
+            uvs.push(x, y);
+            map[`${round(v.x, 2)}_${round(v.z, 2)}`] = y;
+
+            if (i < segments && j < segments) {
+                // Create indices for two triangles per quad
+                let a = i + j * (segments + 1);
+                let b = (i + 1) + j * (segments + 1);
+                let c = (i + 1) + (j + 1) * (segments + 1);
+                let d = i + (j + 1) * (segments + 1);
+
+                // Triangle 1
+                indices.push(a, b, d);
+                // Triangle 2
+                indices.push(b, c, d);
+            }
+        }
+    }
+
+    return { vertices, indices, uvs, map };
+  }
+
+  CreateValley(segments, v0, v1, v2, v3) {
+      // Initialize arrays to store vertices, indices, and uvs
+      let vertices = [];
+      let indices = [];
+      let uvs = [];
+
+      // Calculate segment size
+      const segmentSize = 1 / segments;
+
+      // Create vertices, uvs, and indices
+      for (let i = 0; i <= segments; i++) {
+          for (let j = 0; j <= segments; j++) {
+              // Interpolating between the four corners
+              let x = i * segmentSize;
+              let y = j * segmentSize;
+
+              let v = new THREE.Vector3();
+              v.x = (1 - x) * (1 - y) * v0.x + x * (1 - y) * v1.x + x * y * v2.x + (1 - x) * y * v3.x;
+              v.y = (1 - x) * (1 - y) * v0.y + x * (1 - y) * v1.y + x * y * v2.y + (1 - x) * y * v3.y;
+              v.z = (1 - x) * (1 - y) * v0.z + x * (1 - y) * v1.z + x * y * v2.z + (1 - x) * y * v3.z;
+
+              // Add height variation to create a valley effect
+              let distanceFromCenter = Math.sqrt((x - 0.5) * (x - 0.5) + (y - 0.5) * (y - 0.5));
+              let height = Math.cos(distanceFromCenter * Math.PI * 2) * 0.2; // Adjust height for valley depth
+              v.z += height;
+
+              vertices.push(v.x, v.y, v.z);
+              uvs.push(x, y);
+
+              if (i < segments && j < segments) {
+                  // Create indices for two triangles per quad
+                  let a = i + j * (segments + 1);
+                  let b = (i + 1) + j * (segments + 1);
+                  let c = (i + 1) + (j + 1) * (segments + 1);
+                  let d = i + (j + 1) * (segments + 1);
+
+                  // Triangle 1
+                  indices.push(a, b, d);
+                  // Triangle 2
+                  indices.push(b, c, d);
+              }
+          }
+      }
+
+      // Creating the map (optional)
+      let map = {
+          vertices: vertices,
+          indices: indices,
+          uvs: uvs
+      };
+
+      return { vertices, indices, uvs, map };
+  }
+
+MakeFlatishGround(segments, options) {
+	let points = this.polygonVertices[this.activePolygonVerticesIndex]
 
     if (points.length == 4) {
         var v0 = points[0];
@@ -1124,7 +2165,8 @@ class Creator {
         var v2 = points[2];
         var v3 = points[3];
      
-        var { vertices, indices, uvs, map } = this._MakeVerticesWithRandomHorizontalAdjustments(segments, v0, v1, v2, v3, 0, .05, { withTrees: true });
+        var { vertices, indices, uvs, map } = this._MakeVerticesWithRandomHorizontalAdjustments(segments, v0, v1, v2, v3, -.3, .3, options);
+        // var { vertices, indices, uvs, map } = this.CreateMeadow(segments, v0, v1, v2, v3)
 
         var planeGeometry = new THREE.BufferGeometry();
         planeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
@@ -1137,7 +2179,7 @@ class Creator {
         	// color: new THREE.Color(Math.random(), Math.random(), Math.random()),
         	// color: 0xffffff,
           color: Grass[Math.floor(Math.random() * Grass.length)],
-        	// wireframe: false, 
+        	wireframe: true, 
         	side: THREE.DoubleSide 
         });
         var mesh = new THREE.Mesh(planeGeometry, material);
@@ -1145,6 +2187,13 @@ class Creator {
         mesh.receiveShadow = true;
         mesh.name = "touchable::plane";
         mesh.terrain = map;
+
+        var keys = Object.keys(map)[0];
+        var xz = keys.split("_").map(Number);
+        camera.position.y = 0.5 + map[keys];
+        camera.position.x = xz[0];
+        camera.position.z = xz[1];
+        camera.position.needsUpdate = true;
 
         ShowBoundingBox(mesh, new THREE.Vector3(
           Math.max(v0.x, v1.x, v2.x, v3.x) - Math.min(v0.x, v1.x, v2.x, v3.x),
@@ -1163,7 +2212,6 @@ class Creator {
         scene.grounds.push(mesh);
     }
 	}
-
 
   /**
    * 
@@ -1233,14 +2281,25 @@ ${to.intersectionPoint.z}
 &nbsp;<button onclick="Save()">Save</button>
 <pre>   
   floor: ${camera.floor}
-  isJumping: ${controller.isJumping}
+  isJumping: ${camera.isJumping}
   on terrain: ${camera.onTerrain}
   in ocean: ${camera.inOcean}
-  •   ${window.sunMinDist}, ${window.sunMaxDist}
-  x: ${round(camera.position.x, 2)}, 
-  y: ${round(camera.position.y, 2)}, 
-  z: ${round(camera.position.z, 2)}
-</pre>
+
+  <ul>
+    <li>x: ${round(camera.position.x, 2)}</li> 
+    <li>y: ${round(camera.position.y, 2)}</li> 
+    <li>z: ${round(camera.position.z, 2)}</li>
+
+    <li>angle: ${angle}</li>
+
+    <li>velocity: 
+      <ul>
+        <li>y: ${controller.velocity.y}</li>
+      </ul>
+    </li>
+    <li>Gravity: ${controller.gravity}</li>
+  </ul>
+  </pre>
 		`
 
 	}
@@ -1265,8 +2324,8 @@ class Controller {
   ArrowLeft = false;
   isJumping = false;
   velocity = new THREE.Vector3();
-  gravity = -0.009;
-  jumpStrength = .1;
+  gravity = -0.029;
+  jumpStrength = .2;
   mouse = {
   	x: 0,
   	y: 0
@@ -1377,57 +2436,63 @@ class Controller {
   }
 
   listen(e) {
-      if (e.key == 'w') {
-          this.w = true;
-      } else if (e.key == 'a') {
-          this.a = true;
-      } else if (e.key == 's') {
-          this.s = true;
-      } else if (e.key == 'd') {
-          this.d = true;
-      } else if (e.key == ' ') {
-          this.space = true;
-      } else if (e.key == 'ArrowUp') {
-          this.ArrowUp = true;
-      } else if (e.key == 'ArrowDown') {
-          this.ArrowDown = true;
-      } else if (e.key == 'ArrowLeft') {
-          this.ArrowLeft = true;
-      } else if (e.key == 'ArrowRight') {
-          this.ArrowRight = true;
-      } else if (e.key == 't') {
-      	display.devGridDots = !display.devGridDots;
-      	DevGrid(N, display.devGridDots);
-      } else if (e.key == 'y') {
-      	display.userBoxFrame = !display.userBoxFrame;
-      	//DevGrid(N, display.userBoxFrame);
-      }
+    const key = e.key.toUpperCase();
+    if (key == 'W') {
+        this.w = true;
+    } else if (key == 'A') {
+        this.a = true;
+    } else if (key == 'S') {
+        this.s = true;
+    } else if (key == 'D') {
+        this.d = true;
+    } else if (key == ' ') {
+        this.space = true;
+        camera.floor = null;
+        this.velocity.y = this.jumpStrength;
+
+        camera.isJumping  = true;
+        camera.inOcean = false;
+        camera.onTerrain = false
+    } else if (key == 'ARROWUP') {
+        this.ArrowUp = true;
+    } else if (key == 'ARROWDOWN') {
+        this.ArrowDown = true;
+    } else if (key == 'ARROWLEFT') {
+        this.ArrowLeft = true;
+    } else if (key == 'ARROWRIGHT') {
+        this.ArrowRight = true;
+    } else if (key == 'T') {
+    	display.devGridDots = !display.devGridDots;
+    	DevGrid(N, display.devGridDots);
+    } else if (key == 'Y') {
+    	display.userBoxFrame = !display.userBoxFrame;
+    }
   }
 
   unlisten(e) {
-      if (e.key == 'w') {
-          this.w = false;
-      } else if (e.key == 'a') {
-          this.a = false;
-      } else if (e.key == 's') {
-          this.s = false;
-      } else if (e.key == 'd') {
-          this.d = false;
-      } else if (e.key == ' ') {
-          this.space = false;
-      } else if (e.key == 'ArrowUp') {
-          this.ArrowUp = false;
-      } else if (e.key == 'ArrowDown') {
-          this.ArrowDown = false;
-      } else if (e.key == 'ArrowLeft') {
-          this.ArrowLeft = false;
-      } else if (e.key == 'ArrowRight') {
-          this.ArrowRight = false;
-      }
+    const key = e.key.toUpperCase();
+    if (key == 'W') {
+        this.w = false;
+    } else if (key == 'A') {
+        this.a = false;
+    } else if (key == 'S') {
+        this.s = false;
+    } else if (key == 'D') {
+        this.d = false;
+    } else if (key == ' ') {
+        this.space = false;
+    } else if (key == 'ARROWUP') {
+        this.ArrowUp = false;
+    } else if (key == 'ARROWDOWN') {
+        this.ArrowDown = false;
+    } else if (key == 'ARROWLEFT') {
+        this.ArrowLeft = false;
+    } else if (key == 'ARROWRIGHT') {
+        this.ArrowRight = false;
+    }
   }
 
   activate() {
-
   	var active = false;
   	priorPosition = camera.position;
     if (this.w) {
@@ -1474,7 +2539,6 @@ class Controller {
       let quaternionY = new THREE.Quaternion();
       let quaternionX = new THREE.Quaternion();
 
-      // Yaw rotation - Turning left or right
       if (this.ArrowLeft) {
         quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.45);
       }
@@ -1487,33 +2551,18 @@ class Controller {
       active = true;
     }
 
-    if (this.space) {
-      camera.floor = null;
-      this.gravity = -0.009;
-      this.velocity.y = this.jumpStrength;
-      // camera.position.y += .7;
-      this.isJumping  = true;
-      camera.inOcean = false;
-      camera.onTerrain = false
-      active = true;
-        
-    } else if (camera.floor == null && !camera.onTerrain && !camera.inOcean) {
-      this.isJumping = true;
-      this.gravity = -0.009;
-      camera.inOcean = false;
-      camera.onTerrain = false
-    }
-
-    this.velocity.y += this.gravity;
     camera.position.y += this.velocity.y;
-	  camera.position.y = Math.round(camera.position.y * P) / P;
+    camera.position.needsUpdate = true;
+    this.velocity.y += this.gravity;
+
+    if (this.velocity.y < 0) {
+      camera.isJumping = false;
+    }
 
     if (camera.floor !== null) {
       if (camera.position.y <= camera.floor + 0.5) {
         this.velocity.y = 0;
         camera.position.y = camera.floor + 0.5;
-        this.isJumping = false;
-        this.gravity = 0;
       }
     } 
 
@@ -1524,11 +2573,11 @@ class Controller {
       var seaLevel = this.ocean.getHeightAtPosition(camera.position.x, camera.position.z);
       camera.floor = seaLevel;
       camera.position.y = seaLevel + 0.35;
-      this.isJumping = false;
+      camera.isJumping = false;
 
 
 
-    } else if (camera.onTerrain && !this.isJumping) {
+    } else if (camera.onTerrain && !camera.isJumping) {
       var closestDist = Infinity;
       var closestY = 0;
       var closestKey = '';
@@ -1553,7 +2602,7 @@ class Controller {
   }
 
 	touch() {
-    camera.floor = null
+      camera.floor = null
       var floorFound = false
 
 	    user.touchedObjects = [];
@@ -1590,7 +2639,8 @@ class Controller {
           var o = scene.grounds[k];
 
           if (o.name == "touchable::plane") {
-              if (cameraBoundingBox.intersectsBox(o.geometry.boundingBox)) {
+              if (!camera.isJumping && cameraBoundingBox.intersectsBox(o.geometry.boundingBox)) {
+                console.log("plane at foot")
                   let foot = camera.position.clone();
                   foot.y -= 0.5;
                   var closestDist = Infinity;
@@ -1682,28 +2732,28 @@ class Controller {
           }
       }
 
-	    if (intersectionPoints.length) {
-	        // Find the most relevant intersection point
-	        let relevantIntersection = intersectionPoints[0];
+	    // if (intersectionPoints.length) {
+	    //     // Find the most relevant intersection point
+	    //     let relevantIntersection = intersectionPoints[0];
 
-	        if (Math.abs(relevantIntersection.normal.y) > Math.cos(Math.PI / 3)) {
-	            let thisYFloor = Math.floor(relevantIntersection.point.y * 1000) / 1000;
-	            camera.floorDiff = Math.abs(thisYFloor - camera.floor);
-	            camera.floor = thisYFloor;
+	    //     if (Math.abs(relevantIntersection.normal.y) > Math.cos(Math.PI / 3)) {
+	    //         let thisYFloor = Math.floor(relevantIntersection.point.y * 1000) / 1000;
+	    //         camera.floorDiff = Math.abs(thisYFloor - camera.floor);
+	    //         camera.floor = thisYFloor;
 
-	            if (camera.floorDiff < 0.5) {
-                    // is this needed
-                    // camera.inOcean = false;
-	                controller.creator.update();
-	                camera.position.y = thisYFloor + 0.5;
-	            }
-	        } else {
-	            if (this.w) this.wS = 0.0;
-	            if (this.a) this.aS = 0.0;
-	            if (this.s) this.sS = 0.0;
-	            if (this.d) this.dS = 0.0;
-	        }
-	    }   
+	    //         if (camera.floorDiff < 0.5) {
+      //               // is this needed
+      //               // camera.inOcean = false;
+	    //             controller.creator.update();
+	    //             camera.position.y = thisYFloor + 0.5;
+	    //         }
+	    //     } else {
+	    //         if (this.w) this.wS = 0.0;
+	    //         if (this.a) this.aS = 0.0;
+	    //         if (this.s) this.sS = 0.0;
+	    //         if (this.d) this.dS = 0.0;
+	    //     }
+	    // }   
 	}
 
   navigate() {
@@ -1802,11 +2852,45 @@ function Control() {
 				<button class="generate-polygon">Triangle Path</button>
 				<button class="flatish-ground">Flatish Ground</button>
 				<button class="flatish-triangle">Flatish Triangle Path</button>
+        <button class="generate-polygon" data-function="GenerateRandomFrankLloydWrightEdifice">Frank Lloyd Wright</button>
+        <button class="generate-polygon" data-function="GenerateRandomLeCorbusierEdifice">Le Corbusier</button>
+        <button class="generate-polygon" data-function="GenerateRandomZahaHadidEdifice">Zaha Hadid</button>
+        <button class="generate-polygon" data-function="GenerateRandomMiesVanDerRoheEdifice">Ludwig Mies van der Rohe</button>
+        <button class="generate-polygon" data-function="GenerateRandomFrankGehryEdifice">Frank Gehry</button>
+        <button class="generate-polygon" data-function="GenerateRandomIMPeiEdifice">I. M. Pei</button>
+        <button class="generate-polygon" data-function="GenerateRandomTadaoAndoEdifice">Tadao Ando</button>
+        <button class="generate-polygon" data-function="GenerateRandomRenzoPianoEdifice">Renzo Piano</button>
+        <button class="generate-polygon" data-function="GenerateRandomNormanFosterEdifice">Norman Foster</button>
+        <button class="generate-polygon" data-function="GenerateRandomSantiagoCalatravaEdifice">Santiago Calatrava</button>
+        <button class="generate-polygon" data-function="GenerateRandomOscarNiemeyerEdifice">Oscar Niemeyer</button>
+        <button class="generate-polygon" data-function="GenerateRandomEeroSaarinenEdifice">Eero Saarinen</button>
+        <button class="generate-polygon" data-function="GenerateRandomRichardMeierEdifice">Richard Meier</button>
 			</div>`;
 
 		document.getElementById('add-polygon-row').insertAdjacentElement('beforebegin', pg);
-		
-		pg.children[0].addEventListener('click', controller.creator.selectPointGroup.bind(controller.creator));
+
+    pg.querySelectorAll('.generate-polygon').forEach(function(button) {
+      button.addEventListener('click', () => {
+        const functionName = button.getAttribute('data-function');
+        if (controller.creator.buildings[functionName]) {
+            const centroid = controller.creator.polygonVertices[controller.creator.activePolygonVerticesIndex][0];
+            const ceilingHeight = 7;
+            const levels = 3;
+            const withBasement = false;
+            var buildingMesh = controller.creator.buildings[functionName](centroid, ceilingHeight, levels, withBasement);
+            buildingMesh.position.set(centroid.x, centroid.y, centroid.z)
+            scene.add(buildingMesh);
+        } else {
+            console.error(`Function ${functionName} not found in controller.creator`);
+        }
+      });
+    });
+
+		pg.querySelectorAll('.point-group').forEach(function(pre) {
+      pre.addEventListener('click', function(event) {
+         controller.creator.selectPointGroup(event)
+      });
+    })
 
 		pg.children[1].children[0].addEventListener('click', e => {
 			controller.creator.addChild = true;
@@ -1844,7 +2928,7 @@ ${JSON.stringify(camera.intersects, null, 1)}
 	return controller
 }
 
-var controller = Control()
+window.controller = Control()
 
 var splashDuration = 15000; // Number of frames or time steps for the splash effect
 var splashFrameCount = 0;
@@ -1901,45 +2985,32 @@ function DevGrid(radius, display) {
 	});
 	window.devGridDots = [];
 	if (display) {
-		var gridstep = 1// 0.75;
-	    for (var x = 0; x < radius; x += gridstep) {
-	        for (var y = 0; y < radius * 10; y += gridstep) {
-	            for (var z = 0; z < radius; z += gridstep) {
-	            	let _x = Math.round(x * 100) / 100; 
-	            	let _y = Math.round(y * 100) / 100;
-	            	let _z = Math.round(z * 100) / 100;
-	                var dot = new THREE.Mesh(
-	                    new THREE.SphereGeometry(.02, 11, 11),
-	                    new THREE.MeshStandardMaterial({
-	                        color: 'white',
-	                        side: THREE.DoubleSide
-	                    })
-	                );
-	                dot.position.set(_x, _y, _z);
-	                dot.castShadow = true;
-	                dot.receiveShadow = true;
-	                dot.name = 'devdot';
-	                dot.uid = `${_x}_${_y}_${_z}`;
-	                
-	                scene.add(dot);
-	                devGridDots.push(dot);
-	            }
-	        }
-	    }
+		var gridstep = 1
+    for (var x = -radius; x < radius; x += gridstep) {
+        for (var y = 0; y < P; y += gridstep) {
+            for (var z = -radius; z < radius; z += gridstep) {
+            	let _x = Math.round(x * 100) / 100; 
+            	let _y = Math.round(y * 100) / 100;
+            	let _z = Math.round(z * 100) / 100;
+                var dot = new THREE.Mesh(
+                    new THREE.SphereGeometry(.1, 11, 11),
+                    new THREE.MeshStandardMaterial({
+                        color: 'white',
+                        side: THREE.DoubleSide
+                    })
+                );
+                dot.position.set(_x, _y, _z);
+                dot.castShadow = true;
+                dot.receiveShadow = true;
+                dot.name = 'devdot';
+                dot.uid = `${_x}_${_y}_${_z}`;
+                
+                if (x % 2 == 0 && z % 2 !== 0) scene.add(dot);
+                devGridDots.push(dot);
+            }
+        }
+    }
 	}
-
-    // var g = new THREE.PlaneGeometry(radius * 2, radius * 2, 300, 300);
-    // var m = new THREE.MeshStandardMaterial({
-    //     color: 'blue',
-    //     wireframe: false,
-    //     side: THREE.DoubleSide
-    // });
-    // var plane = new THREE.Mesh(g, m);
-    // plane.name = 'ground';
-    // plane.receiveShadow = true;
-    // plane.position.set(0, 0, 0);
-    // plane.rotation.x = -Math.PI / 2;
-    // scene.add(plane);
 }
 
 function Sun() {
@@ -1988,9 +3059,9 @@ function Sun() {
     
   }
 
-  // var starLight = new THREE.AmbientLight(0xffffff, 1);
-  // starLight.position.set(0, 500, 0);
-  // scene.add(starLight);
+  var starLight = new THREE.AmbientLight(0xffffff, .3);
+  starLight.position.set(0, 500, 0);
+  scene.add(starLight);
 
   // add one vector in the direction of 0 0 0
 
@@ -1999,7 +3070,7 @@ function Sun() {
 let cloudParticles = [];
 
 function createSky() {
-
+  const sceneRadius = 1000; // Define scene radius for cloud distribution
 
   // Create cumulonimbus cloud particles
   for (let i = 0; i < 12; i++) {
@@ -2025,17 +3096,21 @@ function createSky() {
       opacity: 0.8 
     });
     const cloud = new THREE.Points(cloudGeometry, cloudMaterial);
-
+    cloud.castShadow = true;
+    cloud.receiveShadow = true;
     cloud.position.set(
       randomInRange(-sceneRadius, sceneRadius),
       randomInRange(50, 200), // Clouds height range
       randomInRange(-sceneRadius, sceneRadius)
     );
-
     scene.add(cloud);
     cloudParticles.push(cloud);
   }
 }
+
+
+
+
 
 function animateClouds() {
   const cloudSpeed = 1.1; // Adjust the speed as needed
@@ -2133,23 +3208,28 @@ function RenderAll() {
 
 	devGridDots.forEach(dgd => scene.remove(dgd));
 	devGridDots = [];
-	DevGrid(N, display.devGridDots);
+	// DevGrid(N, display.devGridDots);
 	Sun();
-  createDome()
-  createSky()
+  // createDome()
+  // createSky()
 
   // controller.creator.MakeOcean();
 
   controller.creator.polygonVertices = [
       [
-          { x: -35, y: .1, z: 35 },
-          { x: 35, y: 0.1, z: 35 },
-          { x: 35, y: 0.1, z: -35 },
-          { x: -35, y: 0.1, z: -35 }
+          { x: -D, y: .1, z: D },
+          { x: D, y: 0.1, z: D },
+          { x: D, y: 0.1, z: -D },
+          { x: -D, y: 0.1, z: -D }
       ]
   ];
   controller.creator.activePolygonVerticesIndex = 0;
-  controller.creator.MakeFlatishGround(100)
+  controller.creator.MakeFlatishGround(sceneRadius * 2, { 
+    withTrees: true,
+    slightBay: true
+  });
+  controller.creator.activePolygonVerticesIndex = -1;
+  controller.creator.polygonVertices = []
   // camera.inOcean = true;
 
   camera.lookAt(level.sun.position)
@@ -2174,6 +3254,8 @@ var day = sceneRadius * .6
 
 function Animate() {
   window.requestAnimationFrame(Animate);
+
+  window.angle = angle;
 
   controller.activate();
   controller.touch();
