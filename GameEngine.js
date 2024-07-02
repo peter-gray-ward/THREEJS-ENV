@@ -27,15 +27,22 @@ window.stage = {
 	earth: {
 		radius: 1000
 	},
-    terrain: {}
+    terrain: {},
+    sky: [],
+    sunAngle: 0,
+    sun: {}
 }
-
+const FOV = 300
+let cloudParticles = [];
+window.sunMaxDist = -Infinity;
+window.sunMinDist = Infinity
 window.activeMapIndex = -1;
 window.priorMapIndex = -1
 window.map = {}
 
 window.scene = new THREE.Scene();
-window.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
+window.sceneRadius = 100
+window.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, FOV);
 window.camera.touches = new Set()
 window.camera.foot = null;
 window.camera.sectionTouched = null;
@@ -47,7 +54,8 @@ window.renderer.shadowMap.enabled = true;
 window.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 window.renderer.domElement.id = "view";
 document.body.appendChild(window.renderer.domElement);
-
+var origin = new THREE.Mesh(new THREE.SphereGeometry(0.08, 20, 20), new THREE.MeshStandardMaterial({ color: 'turquoise' }));
+origin.position.set(0, 0, 0);
 
 window.addEventListener('keydown', function(e) {
     const key = e.key.toUpperCase();
@@ -101,6 +109,12 @@ window.addEventListener('keyup', function(e) {
 })
 
 
+function randomInRange(from, to, startDistance = 0) {
+   const min = Math.min(from, to) + startDistance;
+   const max = Math.max(from, to) + startDistance;
+   const val = Math.random() * (max - min) + min;
+   return val;
+}
 
 
 class BVHNode {
@@ -273,7 +287,7 @@ p.style.maxHeight = '100vh';
 p.style.padding = '0.15rem 1rem'
 
 function Sun() {
-	var pointLight = new THREE.PointLight(0xfffefe, 999);
+	var pointLight = new THREE.DirectionalLight(0xfffefe, 20);
 
 	pointLight.castShadow = true;
 	var halfSize = 1000 * 2;
@@ -282,8 +296,30 @@ function Sun() {
 	pointLight.shadow.camera.top = halfSize;
 	pointLight.shadow.camera.bottom = -halfSize;
 
-	scene.add(pointLight)
-	pointLight.position.set(0, 100, 0)
+	// scene.add(pointLight)
+    stage.sun = pointLight
+	pointLight.position.set(30, 10, 80)
+    pointLight.lookAt(origin);
+    scene.add(pointLight)
+
+    for (var i = 0; i < 1000; i++) {
+        var y = randomInRange(sceneRadius, sceneRadius * 4);
+        var x = randomInRange(-sceneRadius * 10, sceneRadius * 10)
+        var z = randomInRange(-sceneRadius * 10, sceneRadius * 10)
+
+
+        if (x < sceneRadius && x > -sceneRadius && z < sceneRadius && z > -sceneRadius) {
+          y = randomInRange(-100, -50)
+        }
+        var radius = new THREE.Vector3(x,y,z).distanceTo(origin.position) / (sceneRadius * 3) * randomInRange(.1, 1)
+        var star = new THREE.Mesh(new THREE.SphereGeometry(radius, 5, 5), new THREE.MeshBasicMaterial({color:0xffffff}));
+        star.position.set(x,y,z)
+
+        var dist = star.position.distanceTo(origin.position)
+        if (dist > sceneRadius * 2) scene.add(star);
+
+    }
+
 }
 
 function TriangleMesh(vertices, a, b, c) {
@@ -420,6 +456,7 @@ function Terrain(T, v0, v1, v2, v3, segments, options = { slightBay: true }) {
 
     var material = new THREE.MeshStandardMaterial({
         map: terrainTexture,
+        // color: 'green',
         side: THREE.DoubleSide // Ensures both sides of the triangles are rendered
     });
     var mesh = new THREE.Mesh(planeGeometry, material);
@@ -435,10 +472,6 @@ function Terrain(T, v0, v1, v2, v3, segments, options = { slightBay: true }) {
 }
 
 
-
-var al = new THREE.AmbientLight(0xfffefe, 3);
-al.position.set(0,0,0);
-scene.add(al)
 
 camera.position.y = 50
 
@@ -479,100 +512,6 @@ SECTION TOUCHED: <table style="overflow: auto;wmax-width:100vw;">
 }
 
 
-// window.Animate = function() {
-//     window.requestAnimationFrame(Animate);
-
-//     if (window.w || window.a || window.s || window.d) {
-//         var direction = new THREE.Vector3();
-//         var right = new THREE.Vector3();
-//         var forwardMovement = new THREE.Vector3();
-//         var rightMovement = new THREE.Vector3();
-
-//         if (window.w) {
-//             window.camera.getWorldDirection(direction);
-//             forwardMovement.add(direction.multiplyScalar(window.wS));
-//         }
-//         if (window.a) {
-//             window.camera.getWorldDirection(direction);
-//             right.crossVectors(window.camera.up, direction).normalize();
-//             rightMovement.add(right.multiplyScalar(window.aS));
-//         }
-//         if (window.s) {
-//             window.camera.getWorldDirection(direction);
-//             forwardMovement.add(direction.multiplyScalar(-window.sS));
-//         }
-//         if (window.d) {
-//             window.camera.getWorldDirection(direction);
-//             right.crossVectors(window.camera.up, direction).normalize();
-//             rightMovement.add(right.multiplyScalar(-window.dS));
-//         }
-
-//         var combinedMovement = new THREE.Vector3();
-//         combinedMovement.add(forwardMovement).add(rightMovement);
-
-//         if (camera.hasCollision && camera.triangleTouched) {
-//             var triangleNormal = new THREE.Vector3();
-//             camera.triangleTouched.getNormal(triangleNormal);
-//             combinedMovement.projectOnPlane(triangleNormal);
-
-//             var newPosition = new THREE.Vector3().copy(window.camera.position).add(combinedMovement);
-//             var isInsideTriangle = isPointInTriangle(newPosition, camera.triangleTouched);
-
-//             if (isInsideTriangle) {
-//                 window.camera.position.copy(newPosition);
-//             }
-//         } else {
-//             window.camera.position.add(combinedMovement);
-//         }
-//     }
-
-//     if (window.ArrowUp || window.ArrowDown) {
-//         if (window.ArrowUp) {
-//             camera.rotateX(window.tS);
-//         }
-//         if (window.ArrowDown) {
-//             camera.rotateX(-window.tS);
-//         }
-//     }
-
-//     if (window.ArrowLeft || window.ArrowRight) {
-//         let quaternionY = new THREE.Quaternion();
-//         let quaternionX = new THREE.Quaternion();
-
-//         if (window.ArrowLeft) {
-//             quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), window.tS);
-//         }
-
-//         if (window.ArrowRight) {
-//             quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -window.tS);
-//         }
-
-//         camera.quaternion.multiplyQuaternions(quaternionY, window.camera.quaternion);
-//     }
-
-//     const cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
-//         camera.position,
-//         new THREE.Vector3(1, 1, 1) // Adjust the size as needed
-//     );
-//     const collisionDetected = checkCollision(cameraBoundingBox, window.BVH);
-//     if (collisionDetected) {
-//         camera.hasCollision = true;
-//         camera.triangleTouched = collisionDetected;
-//         var section = GetMeshForTriangle(collisionDetected);
-//         camera.sectionTouched = section;
-//         camera.touches.add(section.mesh);
-//         scene.add(section.mesh);
-
-//         // todo: Movements align with the triangle
-//     } else {
-//         camera.hasCollision = false;
-//         camera.position.y += -0.009;
-//     }
-
-//     window.renderer.render(window.scene, window.camera);
-// }
-
-
 
 window.Animate = function() {
     window.requestAnimationFrame(Animate);
@@ -588,7 +527,7 @@ window.Animate = function() {
 
         if (window.w) {
             window.camera.getWorldDirection(direction);
-            forwardMovement.add(direction.multiplyScalar(window.wS));
+            forwardMovement.add(direction.multiplyScalar(isJumping ? window.wS * 5 : window.wS));
         }
         if (window.a) {
             window.camera.getWorldDirection(direction);
@@ -706,9 +645,17 @@ window.Animate = function() {
         camera.quaternion.multiplyQuaternions(quaternionY, window.camera.quaternion);
     }
 
+
+
+
+    // Nature animations....
+
+    animateClouds()
+
+
+
     window.renderer.render(window.scene, window.camera);
 }
-
 
 
 
@@ -733,174 +680,8 @@ function isPointInTriangle(point, triangle) {
 }
 
 
-// window.Animate = function() {
-//     window.requestAnimationFrame(Animate);
-
-//     if (window.w || window.a || window.s || window.d) {
-//         var direction = new THREE.Vector3();
-//         var right = new THREE.Vector3();
-//         var forwardMovement = new THREE.Vector3();
-//         var rightMovement = new THREE.Vector3();
-
-//         if (window.w) {
-//             window.camera.getWorldDirection(direction);
-//             forwardMovement.add(direction.multiplyScalar(window.wS));
-//         }
-//         if (window.a) {
-//             window.camera.getWorldDirection(direction);
-//             right.crossVectors(window.camera.up, direction).normalize();
-//             rightMovement.add(right.multiplyScalar(window.aS));
-//         }
-//         if (window.s) {
-//             window.camera.getWorldDirection(direction);
-//             forwardMovement.add(direction.multiplyScalar(-window.sS));
-//         }
-//         if (window.d) {
-//             window.camera.getWorldDirection(direction);
-//             right.crossVectors(window.camera.up, direction).normalize();
-//             rightMovement.add(right.multiplyScalar(-window.dS));
-//         }
-
-//         var combinedMovement = new THREE.Vector3();
-//         combinedMovement.add(forwardMovement).add(rightMovement);
-
-//         if (camera.hasCollision && camera.triangleTouched) {
-//             var triangleNormal = new THREE.Vector3();
-//             camera.triangleTouched.getNormal(triangleNormal);
-//             combinedMovement.projectOnPlane(triangleNormal);
-//         }
-
-//         window.camera.position.add(combinedMovement);
-//     }
-
-//     if (window.ArrowUp || window.ArrowDown) {
-//         if (window.ArrowUp) {
-//             camera.rotateX(window.tS);
-//         }
-//         if (window.ArrowDown) {
-//             camera.rotateX(-window.tS);
-//         }
-//     }
-
-//     if (window.ArrowLeft || window.ArrowRight) {
-//         let quaternionY = new THREE.Quaternion();
-//         let quaternionX = new THREE.Quaternion();
-
-//         if (window.ArrowLeft) {
-//             quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), window.tS);
-//         }
-
-//         if (window.ArrowRight) {
-//             quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -window.tS);
-//         }
-
-//         camera.quaternion.multiplyQuaternions(quaternionY, window.camera.quaternion);
-//     }
-
-//     const cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
-//         camera.position,
-//         new THREE.Vector3(1, 1, 1) // Adjust the size as needed
-//     );
-//     const collisionDetected = checkCollision(cameraBoundingBox, window.BVH);
-//     if (collisionDetected) {
-//         camera.hasCollision = true;
-//         camera.triangleTouched = collisionDetected;
-//         var section = GetMeshForTriangle(collisionDetected);
-//         camera.sectionTouched = section;
-//         camera.touches.add(section.mesh);
-//         scene.add(section.mesh);
-
-//         // todo: Movements align with the triangle
-//     } else {
-//         camera.hasCollision = false;
-//         camera.position.y += -0.09;
-//     }
-
-//     window.renderer.render(window.scene, window.camera);
-// }
 
 
-
-
-// window.Animate = function() {
-//     window.requestAnimationFrame(Animate)
-//     if (window.w) {
-//         var direction = new THREE.Vector3();
-//         window.camera.getWorldDirection(direction);
-//         direction.multiplyScalar(window.wS);
-//         window.camera.position.add(direction);
-//     }
-//     if (window.a) {
-//         var direction = new THREE.Vector3();
-//         var right = new THREE.Vector3();
-//         window.camera.getWorldDirection(direction);
-//         right.crossVectors(window.camera.up, direction).normalize();
-//         right.multiplyScalar(window.aS);
-//         window.camera.position.add(right);
-//     }
-//     if (window.s) {
-//         var direction = new THREE.Vector3();
-//         window.camera.getWorldDirection(direction);
-//         direction.multiplyScalar(-window.sS);
-//         window.camera.position.add(direction);
-//     }
-//     if (window.d) {
-//         var direction = new THREE.Vector3();
-//         var right = new THREE.Vector3();
-//         window.camera.getWorldDirection(direction);
-//         right.crossVectors(window.camera.up, direction).normalize();
-//         right.multiplyScalar(-window.dS);
-//         window.camera.position.add(right);
-//     }
-//     if (window.ArrowUp || window.ArrowDown) {
-
-//         if (window.ArrowUp) {
-//             camera.rotateX(window.tS)
-//         }
-
-//         if (window.ArrowDown) {
-//             camera.rotateX(-window.tS)
-//         }
-
-//     }
-//     if (window.ArrowLeft || window.ArrowRight) {
-//         let quaternionY = new THREE.Quaternion();
-//         let quaternionX = new THREE.Quaternion();
-
-//         if (window.ArrowLeft) {
-//             quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), window.tS);
-//         }
-
-//         if (window.ArrowRight) {
-//             quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -window.tS);
-//         }
-
-//         camera.quaternion.multiplyQuaternions(quaternionY, window.camera.quaternion);
-//     }
-
-//     const cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
-//         camera.position,
-//         new THREE.Vector3(1, 1, 1) // Adjust the size as needed
-//     );
-//     const collisionDetected = checkCollision(cameraBoundingBox, window.BVH);
-//     if (collisionDetected) {
-//         camera.hasCollision = true;
-//         camera.triangleTouched = collisionDetected
-//         var section = GetMeshForTriangle(collisionDetected);
-//         camera.sectionTouched = section;
-//         camera.touches.add(section.mesh);
-//         scene.add(section.mesh);
-
-
-//     } else {
-//         camera.hasCollision = false;
-//         camera.position.y += -0.009;
-//     }
-
-
-
-//     window.renderer.render(window.scene, window.camera)
-// }
 
 var T = 64
 var terrain = Terrain(T,
@@ -913,3 +694,276 @@ var terrain = Terrain(T,
 Sun()
 Animate();
 Watch()
+
+
+
+class Ocean {
+    constructor(radius = 350, amplitude = 0.09) {
+        this.radius = radius;
+        this.amplitude = amplitude;
+        this.segments = 1000;
+        this.oceanMesh = null;
+        this.heightMap = [];
+        this.initialYPositions = [];
+        this.currentWavePositions = [];
+        this.clock = new THREE.Clock();
+        this.init();
+    }
+
+    init() {
+        this.MakeOcean();
+        // this.storeInitialYPositions();
+        // this.WaveOcean();
+        // this.EbbOcean();
+    }
+
+    _MakeVerticesWithRandomHorizontalAdjustments(segments, v0, v1, v2, v3, negY = -0.05, posY = 0.09, options) {
+        let vertices = [];
+        let indices = [];
+        let uvs = [];
+        let map = {};
+        this.heightMap = Array.from(Array(segments + 1), () => new Array(segments + 1));
+
+
+        for (let i = 0; i <= segments; i++) {
+            for (let j = 0; j <= segments; j++) {
+                let x = (1 - i / segments) * ((1 - j / segments) * v0.x + (j / segments) * v3.x) + 
+                        (i / segments) * ((1 - j / segments) * v1.x + (j / segments) * v2.x);
+                let z = (1 - i / segments) * ((1 - j / segments) * v0.z + (j / segments) * v3.z) + 
+                        (i / segments) * ((1 - j / segments) * v1.z + (j / segments) * v2.z);
+                let y = (1 - i / segments) * ((1 - j / segments) * v0.y + (j / segments) * v3.y) + 
+                        (i / segments) * ((1 - j / segments) * v1.y + (j / segments) * v2.y);
+                y += randomInRange(negY, posY)
+                vertices.push(x, y, z);
+                uvs.push(i / segments, j / segments);
+                map[Math.round(x) + '_' + Math.round(z)] = y;
+                this.heightMap[i][j] = y;
+
+                
+            }
+        }
+
+        for (let i = 0; i < segments; i++) {
+            for (let j = 0; j < segments; j++) {
+                let a = i * (segments + 1) + j;
+                let b = i * (segments + 1) + (j + 1);
+                let c = (i + 1) * (segments + 1) + (j + 1);
+                let d = (i + 1) * (segments + 1) + j;
+                indices.push(a, b, d);
+                indices.push(b, c, d);
+            }
+        }
+
+        return { vertices, indices, uvs, map };
+    }
+
+    MakeOcean() {
+        var radius = this.radius;
+        var { vertices, indices, uvs, map } = this._MakeVerticesWithRandomHorizontalAdjustments(
+            this.segments,
+            new THREE.Vector3(-radius, 0, -radius),
+            new THREE.Vector3(-radius, 0, radius),
+            new THREE.Vector3(radius, 0, radius),
+            new THREE.Vector3(radius, 0, -radius),
+            0,
+            0,
+            {}
+        );
+
+        var planeGeometry = new THREE.BufferGeometry();
+        planeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        planeGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        planeGeometry.setIndex(indices);
+        planeGeometry.computeVertexNormals();
+        planeGeometry.computeBoundingBox();
+        planeGeometry.boundingBox.min.y -= 100;
+        // planeGeometry.boundingBox.max.y;
+
+        var material = new THREE.MeshStandardMaterial({ 
+            color: 'royalblue',
+            map: new THREE.TextureLoader().load("/image?id=572a9275-377c-4e52-be7c-27600a2d4eaf"),
+            side: THREE.BackSide,
+            opacity: 0.98,
+            bumpScale: 0,
+            transparent: true,
+            // wireframe: true
+        });
+
+        this.oceanMesh = new THREE.Mesh(planeGeometry, material);
+        this.oceanMesh.name = "touchable::ocean";
+        this.oceanMesh.castShadow = true;
+        this.oceanMesh.receiveShadow = true;
+
+        this.oceanMesh.surface = map;
+        this.oceanMesh.position.set(0,20,0);
+        scene.add(this.oceanMesh);
+    }
+
+    storeInitialYPositions() {
+        const positions = this.oceanMesh.geometry.attributes.position.array;
+        for (let i = 0; i < positions.length; i += 3) {
+            this.initialYPositions.push(positions[i + 1]);
+        }
+    }
+
+    WaveOcean() {
+      const positions = this.oceanMesh.geometry.attributes.position.array;
+      const time = this.clock.getElapsedTime();
+      const frequency = 1.5;
+      const amplitude = this.amplitude;
+      const segments = this.segments;
+      const segmentSize = (this.radius * 2) / segments;
+
+      for (let i = 0; i <= segments; i++) {
+          for (let j = 0; j <= segments; j++) {
+              const index = (i * (segments + 1) + j) * 3;
+              const x = positions[index];
+              const z = positions[index + 2];
+
+
+              
+              positions[index + 1] = this.initialYPositions[index / 3] + Math.sin(frequency * (x + time)) * amplitude * Math.sin(frequency * (z + time));
+
+              // Update the height map
+              this.heightMap[i][j] = positions[index + 1];
+          }
+      }
+
+      this.oceanMesh.geometry.attributes.position.needsUpdate = true;
+      requestAnimationFrame(this.WaveOcean.bind(this));
+    }
+
+    EbbOcean() {
+      const positions = this.oceanMesh.geometry.attributes.position.array;
+      const time = this.clock.getElapsedTime();
+      const waveFrequency = 2.0; // Frequency of the temporary wave
+      const waveAmplitude = 0.1; // Amplitude of the temporary wave
+
+      // Calculate temporary wave positions
+      for (let i = 0; i < this.initialYPositions.length; i++) {
+          const phaseShift = i * 0.1; // Adjust this value for phase shift
+          const wavePosition = Math.sin(waveFrequency * (time + phaseShift)) * waveAmplitude;
+          this.currentWavePositions[i] = wavePosition;
+      }
+
+      // Apply temporary wave to ocean mesh
+      for (let i = 0; i < positions.length; i += 3) {
+          positions[i + 1] = this.initialYPositions[i / 3] + this.currentWavePositions[i / 3];
+      }
+
+      this.oceanMesh.geometry.attributes.position.needsUpdate = true;
+      requestAnimationFrame(this.EbbOcean.bind(this));
+    }
+
+    getHeightAtPosition(x, z) {
+        const segmentSize = (this.radius * 2) / this.segments;
+        const gridX = Math.floor((x + this.radius) / segmentSize);
+        const gridZ = Math.floor((z + this.radius) / segmentSize);
+
+        // Ensure the position is within the height map bounds
+        if (gridX < 0 || gridX >= this.segments || gridZ < 0 || gridZ >= this.segments) {
+            return 0; // Return 0 if out of bounds, adjust as needed
+        }
+
+        // Bilinear interpolation to get the height at the exact position
+        const x1 = gridX * segmentSize - this.radius;
+        const x2 = (gridX + 1) * segmentSize - this.radius;
+        const z1 = gridZ * segmentSize - this.radius;
+        const z2 = (gridZ + 1) * segmentSize - this.radius;
+
+        const Q11 = this.heightMap[gridX][gridZ];
+        const Q12 = this.heightMap[gridX][gridZ + 1];
+        const Q21 = this.heightMap[gridX + 1][gridZ];
+        const Q22 = this.heightMap[gridX + 1][gridZ + 1];
+
+        const height = (Q11 * (x2 - x) * (z2 - z) +
+                        Q21 * (x - x1) * (z2 - z) +
+                        Q12 * (x2 - x) * (z - z1) +
+                        Q22 * (x - x1) * (z - z1)) / ((x2 - x1) * (z2 - z1));
+
+        return height;
+    }
+}
+
+
+new Ocean()
+function createDome() {
+  var gridSize = 100;
+  var planeSize = 120; // Adjust this size to your preference
+  var radius = sceneRadius * 2; // Adjust this radius for the dome's curvature
+
+  for (var i = 0; i < gridSize; i++) {
+    for (var j = 0; j < gridSize; j++) {
+      // Calculate spherical coordinates
+      var theta = (i / gridSize) * Math.PI; // Azimuthal angle
+      var phi = (j / gridSize) * Math.PI;   // Polar angle
+
+      // Convert spherical coordinates to Cartesian coordinates
+      var x = radius * Math.sin(phi) * Math.cos(theta);
+      var z = radius * Math.cos(phi);
+      var y = radius * Math.sin(phi) * Math.sin(theta);
+
+      
+    }
+  }
+}
+
+
+
+function createSky() {
+  const sceneRadius = FOV; // Define scene radius for cloud distribution
+
+  // Create cumulonimbus cloud particles
+  for (let i = 0; i < 3; i++) {
+    const cloudNodeCount = randomInRange(20, 78); // More particles for cumulonimbus clouds
+    const positions = new Float32Array(cloudNodeCount * 3);
+
+    for (let j = 0; j < cloudNodeCount; j++) {
+      const x = randomInRange(-randomInRange(40, 80), randomInRange(40, 80));
+      const y = randomInRange(0, 200); // Taller cloud structure
+      const z = randomInRange(-randomInRange(40, 80), randomInRange(40, 80));
+
+      positions[j * 3] = x;
+      positions[j * 3 + 1] = y;
+      positions[j * 3 + 2] = z;
+    }
+
+    const cloudGeometry = new THREE.BufferGeometry();
+    cloudGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const cloudMaterial = new THREE.PointsMaterial({ 
+      color: 0x495a75, 
+      size: randomInRange(20, 100), 
+      transparent: true, 
+      opacity: 0.6 
+    });
+    const cloud = new THREE.Points(cloudGeometry, cloudMaterial);
+    cloud.castShadow = true;
+    cloud.receiveShadow = true;
+    cloud.position.set(
+      randomInRange(-FOV * 3, FOV * 3),
+      randomInRange(0, 200), // Clouds height range
+      randomInRange(-FOV * 3, FOV * 3)
+    );
+    scene.add(cloud);
+    cloudParticles.push(cloud);
+  }
+}
+
+
+var al = new THREE.AmbientLight(0xffffce, 0.05);
+scene.add(al);
+al.position.set(0, 50, 0)
+
+
+function animateClouds() {
+  const cloudSpeed = .1; // Adjust the speed as needed
+  cloudParticles.forEach(cloud => {
+    cloud.position.x += cloudSpeed;
+    if (cloud.position.x > FOV) {
+      cloud.position.x = -FOV; // Wrap around to the other side
+    }
+  });
+}
+
+
+setInterval(createSky, 3000);
