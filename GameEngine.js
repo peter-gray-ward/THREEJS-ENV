@@ -18,7 +18,7 @@ window.ArrowRight = false;
 window.ArrowDown = false;
 window.ArrowLeft = false;
 window.isJumping = false;
-
+window.dom = []
 window.BVH = {}
 window.stage = {
 	devGridDots: false,
@@ -38,6 +38,8 @@ window.scene = new THREE.Scene();
 window.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
 window.camera.touches = new Set()
 window.camera.foot = null;
+window.camera.sectionTouched = null;
+window.camera.triangleTouched = null;
 window.scene.add(window.camera);
 window.renderer = new THREE.WebGLRenderer();
 window.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -58,7 +60,10 @@ window.addEventListener('keydown', function(e) {
     } else if (key == 'D') {
         window.d = true;
     } else if (key == ' ') {
-
+        if (!window.isJumping) {
+            window.isJumping = true;
+            window.jumpVelocity = 0.2; // Adjust the jump velocity as needed
+        }
     } else if (key == 'ARROWUP') {
         window.ArrowUp = true;
     } else if (key == 'ARROWDOWN') {
@@ -132,16 +137,16 @@ function buildBVH(triangles, depth = 0) {
 
 function checkCollision(cameraBoundingVolume, bvhNode) {
     if (!cameraBoundingVolume.intersectsBox(bvhNode.boundingBox)) {
-        return false;
+        return null;
     }
 
     if (bvhNode.triangles.length > 0) {
         for (const triangle of bvhNode.triangles) {
             if (cameraBoundingVolume.intersectsTriangle(triangle.triangle)) {
-                return true;
+                return triangle.triangle;
             }
         }
-        return false;
+        return null;
     }
 
     return (
@@ -149,68 +154,6 @@ function checkCollision(cameraBoundingVolume, bvhNode) {
         checkCollision(cameraBoundingVolume, bvhNode.right)
     );
 }
-
-const cellSize = 10; // Define your cell size
-let grid = {};
-
-function addToGrid(triangle) {
-    const boundingBox = triangle.geometry.boundingBox;
-    const minCell = new THREE.Vector3(
-        Math.floor(boundingBox.min.x / cellSize),
-        Math.floor(boundingBox.min.y / cellSize),
-        Math.floor(boundingBox.min.z / cellSize)
-    );
-    const maxCell = new THREE.Vector3(
-        Math.floor(boundingBox.max.x / cellSize),
-        Math.floor(boundingBox.max.y / cellSize),
-        Math.floor(boundingBox.max.z / cellSize)
-    );
-
-    for (let x = minCell.x; x <= maxCell.x; x++) {
-        for (let y = minCell.y; y <= maxCell.y; y++) {
-            for (let z = minCell.z; z <= maxCell.z; z++) {
-                const cellKey = `${x}_${y}_${z}`;
-                if (!grid[cellKey]) {
-                    grid[cellKey] = [];
-                }
-                grid[cellKey].push(triangle);
-            }
-        }
-    }
-}
-
-// Add all triangles to the grid
-
-function getCellKey(position) {
-    const cellX = Math.floor(position.x / cellSize);
-    const cellY = Math.floor(position.y / cellSize);
-    const cellZ = Math.floor(position.z / cellSize);
-    return `${cellX}_${cellY}_${cellZ}`;
-}
-
-function checkCollisionWithGrid(cameraBoundingVolume) {
-    const minCell = getCellKey(cameraBoundingVolume.min);
-    const maxCell = getCellKey(cameraBoundingVolume.max);
-
-    for (let x = minCell.x; x <= maxCell.x; x++) {
-        for (let y = minCell.y; y <= maxCell.y; y++) {
-            for (let z = minCell.z; z <= maxCell.z; z++) {
-                const cellKey = `${x}_${y}_${z}`;
-                const triangles = grid[cellKey];
-                if (triangles) {
-                    for (const triangle of triangles) {
-                        if (cameraBoundingVolume.intersectsTriangle(triangle.triangle)) {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return false;
-}
-
-
 
 
 function generatePointsInTriangle(v0, v1, v2, numPoints) {
@@ -236,22 +179,73 @@ function generatePointsInTriangle(v0, v1, v2, numPoints) {
     return points;
 }
 
-
-function touch(triangleMesh) {
+function getTriangleNormal(triangle) {
+    const v0 = new THREE.Vector3().subVectors(triangle.b, triangle.a);
+    const v1 = new THREE.Vector3().subVectors(triangle.c, triangle.a);
+    return new THREE.Vector3().crossVectors(v0, v1).normalize();
 }
-function checkCollisionsWithGrid(cameraBoundingBox, grid) {
-    for (const cellKey in grid) {
-        const triangles = grid[cellKey];
-        for (const triangle of triangles) {
-            if (checkCollision(cameraBoundingBox, triangle.triangle)) {
-                scene.add(triangle); // Visualize the intersecting triangle
-                camera.touches.add(triangle); // Add to touches
-                scene.add(cameraBoundingBox); // Visualize the camera bounding box
-                return; // Exit after first collision is detected
+
+function TriangleAsUnderFoot(cameraBoundingBox, triangle) {
+    const normal = getTriangleNormal(triangle);
+    const slope = Math.acos(normal.dot(new THREE.Vector3(0, 1, 0))) * (180 / Math.PI);
+
+    // Check if the triangle is within the camera bounding box vertically
+    const minZ = Math.min(triangle.a.z, triangle.b.z, triangle.c.z);
+    const maxZ = Math.max(triangle.a.z, triangle.b.z, triangle.c.z);
+
+    if (cameraBoundingBox.min.z <= maxZ && cameraBoundingBox.max.z >= minZ) {
+        return { Vector3: normal, slope: slope };
+    }
+    return null;
+}
+
+function TriangleAsAdjacent(triangle1, triangle2) {
+    const vertices1 = [triangle1.a, triangle1.b, triangle1.c];
+    const vertices2 = [triangle2.a, triangle2.b, triangle2.c];
+
+    const sharedVertices = vertices1.filter(v1 =>
+        vertices2.some(v2 => v1.equals(v2))
+    );
+
+    return sharedVertices.length === 2;
+}
+
+function TriangleAsOverhead(cameraBoundingBox, triangle) {
+    const normal = getTriangleNormal(triangle);
+    const slope = Math.acos(normal.dot(new THREE.Vector3(0, -1, 0))) * (180 / Math.PI);
+
+    // Check if the triangle is within the camera bounding box vertically
+    const minZ = Math.min(triangle.a.z, triangle.b.z, triangle.c.z);
+    const maxZ = Math.max(triangle.a.z, triangle.b.z, triangle.c.z);
+
+    if (cameraBoundingBox.min.z <= maxZ && cameraBoundingBox.max.z >= minZ) {
+        return { Vector3: normal, slope: slope };
+    }
+    return null;
+}
+
+
+function GetMeshForTriangle(triangle) {
+    for (var i = 0; i < dom.length; i++) {
+        if (dom[i].triangle == triangle) {
+            var cbb = new THREE.Box3().setFromCenterAndSize(
+                camera.position,
+                new THREE.Vector3(1, 1, 1) // Adjust the size as needed
+            );
+            return {
+                mesh: dom[i],
+                underFoot: TriangleAsUnderFoot(cbb, triangle),
+                overHead: TriangleAsOverhead(cbb, triangle)
             }
         }
     }
+    return null;
 }
+
+
+function touch(triangleMesh) {
+}
+
 
 
 
@@ -267,26 +261,6 @@ function getAdjacentIndices(mapIndex) {
     return adjacentIndices;
 }
 
-function calculateCentroid(vertices, a, b, c) {
-    const ax = vertices[a * 3];
-    const ay = vertices[a * 3 + 1];
-    const az = vertices[a * 3 + 2];
-
-    const bx = vertices[b * 3];
-    const by = vertices[b * 3 + 1];
-    const bz = vertices[b * 3 + 2];
-
-    const cx = vertices[c * 3];
-    const cy = vertices[c * 3 + 1];
-    const cz = vertices[c * 3 + 2];
-
-    return new THREE.Vector3(
-        (ax + bx + cx) / 3,
-        (ay + by + cy) / 3,
-        (az + bz + cz) / 3
-    );
-}
-
 var p = document.createElement('pre');
 p.style.background = 'rgba(0,0,0,0.8)'
 p.style.color = 'white'
@@ -299,7 +273,7 @@ p.style.maxHeight = '100vh';
 p.style.padding = '0.15rem 1rem'
 
 function Sun() {
-	var pointLight = new THREE.PointLight(0xfffefe, 999999);
+	var pointLight = new THREE.PointLight(0xfffefe, 999);
 
 	pointLight.castShadow = true;
 	var halfSize = 1000 * 2;
@@ -347,21 +321,49 @@ function TriangleMesh(vertices, a, b, c) {
     return triangleMesh
 }
 
+
+function generateCanvasTexture(width, height, perlinNoise) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const noiseValue = perlinNoise[y * width + x];
+            let color = { r: 0, g: 0, b: 0 };
+
+            if (noiseValue < 0.3) {
+                // Grassy areas
+                color = { r: 139, g: 69, b: 19 }; // Brown
+            } else if (noiseValue < 0.6) {
+                // Rocky areas
+                
+                color = { r: 34, g: 139, b: 34 }; // Green
+            } else {
+                // Snowy peaks
+                color = { r: 255, g: 250, b: 250 }; // White
+            }
+
+            ctx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
+            ctx.fillRect(x, y, 1, 1);
+        }
+    }
+
+    return new THREE.CanvasTexture(canvas);
+}
+
 function Terrain(T, v0, v1, v2, v3, segments, options = { slightBay: true }) {
-    // Initialize arrays to store vertices, indices, and uvs
     let vertices = [];
     let indices = [];
     let uvs = [];
-    const cellSize = 10; // Define cell size based on the desired radius
-
-    // Calculate segment size
+    const cellSize = 10;
     const segmentSize = 1 / segments;
 
     const noiseWidth = T;
     const noiseHeight = T * 2;
     const perlinNoise = PERLIN.generatePerlinNoise(noiseWidth, noiseHeight);
 
-    // Step 1: Create vertices and uvs
     for (let i = 0; i <= segments; i++) {
         for (let j = 0; j <= segments; j++) {
             let x = i * segmentSize;
@@ -374,7 +376,7 @@ function Terrain(T, v0, v1, v2, v3, segments, options = { slightBay: true }) {
 
             let noiseX = Math.floor(x * (noiseWidth - 1));
             let noiseY = Math.floor(y * (noiseHeight - 1));
-            let height = perlinNoise[noiseY * noiseWidth + noiseX] * 55; // Adjust the multiplier for desired height
+            let height = perlinNoise[noiseY * noiseWidth + noiseX] * 55;
 
             v.y += height;
 
@@ -383,38 +385,6 @@ function Terrain(T, v0, v1, v2, v3, segments, options = { slightBay: true }) {
         }
     }
 
-    // Function to calculate the centroid of a triangle
-    function calculateCentroid(vertices, a, b, c) {
-        const ax = vertices[a * 3];
-        const ay = vertices[a * 3 + 1];
-        const az = vertices[a * 3 + 2];
-
-        const bx = vertices[b * 3];
-        const by = vertices[b * 3 + 1];
-        const bz = vertices[b * 3 + 2];
-
-        const cx = vertices[c * 3];
-        const cy = vertices[c * 3 + 1];
-        const cz = vertices[c * 3 + 2];
-
-        return new THREE.Vector3(
-            (ax + bx + cx) / 3,
-            (ay + by + cy) / 3,
-            (az + bz + cz) / 3
-        );
-    }
-
-    // Function to determine the cell key based on a position
-    function getCellKey(position) {
-        const cellX = Math.floor(position.x / cellSize);
-        const cellY = Math.floor(position.y / cellSize);
-        const cellZ = Math.floor(position.z / cellSize);
-        return `${cellX}_${cellY}_${cellZ}`;
-    }
-
-    var triangles = []
-
-    // Step 2: Create indices for triangles and store in map
     for (let i = 0; i < segments; i++) {
         for (let j = 0; j < segments; j++) {
             let a = i + j * (segments + 1);
@@ -422,67 +392,47 @@ function Terrain(T, v0, v1, v2, v3, segments, options = { slightBay: true }) {
             let c = (i + 1) + (j + 1) * (segments + 1);
             let d = i + (j + 1) * (segments + 1);
 
-            // Add boundary checks
             if (a >= 0 && b >= 0 && c >= 0 && d >= 0 &&
                 a < vertices.length / 3 && b < vertices.length / 3 && c < vertices.length / 3 && d < vertices.length / 3) {
-                // Triangle 1
                 indices.push(a, b, d);
-                let centroid1 = calculateCentroid(vertices, a, b, d);
-                let partitionKey1 = getCellKey(centroid1);
-                if (!map[partitionKey1]) {
-                    map[partitionKey1] = [];
-                }
-                const t1 = TriangleMesh(vertices, a, b, d)
-                map[partitionKey1].push(t1);
-
-
-                // Triangle 2
                 indices.push(b, c, d);
-                let centroid2 = calculateCentroid(vertices, b, c, d);
-                let partitionKey2 = getCellKey(centroid2);
-                if (!map[partitionKey2]) {
-                    map[partitionKey2] = [];
-                }
+
+                const t1 = TriangleMesh(vertices, a, b, d)
                 const t2 = TriangleMesh(vertices, b, c, d)
-                map[partitionKey2].push(t2);
 
-                triangles.push(t1, t2);
-
+                dom.push(t1, t2);
             } else {
                 console.warn(`Invalid indices detected: a=${a}, b=${b}, c=${c}, d=${d}`);
             }
         }
-
-        window.BVH = buildBVH(triangles);
     }
 
-    // Step 3: Create geometry and mesh
+    const terrainTexture = generateCanvasTexture(noiseWidth, noiseHeight, perlinNoise);
+    terrainTexture.wrapS = THREE.RepeatWrapping;
+    terrainTexture.wrapT = THREE.RepeatWrapping;
+
     var planeGeometry = new THREE.BufferGeometry();
     planeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-    planeGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); // Adding UVs to geometry
+    planeGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     planeGeometry.setIndex(indices);
     planeGeometry.computeVertexNormals();
     planeGeometry.computeBoundingBox();
 
     var material = new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        wireframe: true,
-        side: THREE.DoubleSide
+        map: terrainTexture,
+        side: THREE.DoubleSide // Ensures both sides of the triangles are rendered
     });
     var mesh = new THREE.Mesh(planeGeometry, material);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
 
-
     mesh.position.set(0, 0, 0);
     scene.add(mesh);
 
-    
+    window.BVH = buildBVH(dom);
 
     return mesh;
 }
-
-
 
 
 
@@ -496,69 +446,251 @@ function Watch() {
 	requestAnimationFrame(Watch)
 	p.innerHTML = `
 CAMERA:   ${camera.position.x}, ${camera.position.y}, ${camera.position.z}
-HAS COLLISION:   ${camera.hasCollision}
-TOUCHING: (${Array.from(camera.touches).length}) <table style="overflow: auto;wmax-width:100vw;">
+HAS COLLISION:   ${camera.hasCollision}  ${ camera.hasCollision ? `
+    ${camera.triangleTouched.a.x}, ${camera.triangleTouched.a.y}, ${camera.triangleTouched.a.z}
+    ${camera.triangleTouched.b.x}, ${camera.triangleTouched.b.y}, ${camera.triangleTouched.b.z}
+    ${camera.triangleTouched.c.x}, ${camera.triangleTouched.c.y}, ${camera.triangleTouched.c.z}
+` : ''}
+SECTION TOUCHED: <table style="overflow: auto;wmax-width:100vw;">
 	<tr>
 		<th>uuid</th>
-		<th>position</th>
-		<th>distance</th>
+        <th>touch type</th>
+        <th>slope</th>
 	</tr>
-	${Array.from(camera.touches)
-        .filter(a => a instanceof THREE.Vector3)
-		.map(o => `<tr>
-		<td style="border: 1px solid rgba(255,11,11,0.5)">${o.uuid}</td>
-		<td style="border: 1px solid rgba(255,255,11,0.5)">${o.x.toFixed(3)}, ${o.y.toFixed(3)}, ${o.z.toFixed(3)}</td>
-		<td style="border: 1px solid rgba(255,11,255,0.5)">${camera.position.distanceTo(o)}</td>
-	</tr>`).join('')}
+    ${ camera.sectionTouched && camera.sectionTouched.mesh ? `
+        <tr>
+            <td>${camera.sectionTouched.mesh.uuid}</td>
+            <td>${(
+                camera.sectionTouched.underFoot ? 'under-foot' : (
+                    camera.sectionTouched.overHead ? 'over-head' : '?'
+                )
+            )}</td>
+            <td>
+                ${(
+                    camera.sectionTouched.underFoot ? camera.sectionTouched.underFoot.slope : (
+                        camera.sectionTouched.overHead ? camera.sectionTouched.overHead.slope : '?'
+                    )
+                )}
+            </td>
+        </tr>` : ''
+    }
 </table>
 `
 }
 
 
+// window.Animate = function() {
+//     window.requestAnimationFrame(Animate);
+
+//     if (window.w || window.a || window.s || window.d) {
+//         var direction = new THREE.Vector3();
+//         var right = new THREE.Vector3();
+//         var forwardMovement = new THREE.Vector3();
+//         var rightMovement = new THREE.Vector3();
+
+//         if (window.w) {
+//             window.camera.getWorldDirection(direction);
+//             forwardMovement.add(direction.multiplyScalar(window.wS));
+//         }
+//         if (window.a) {
+//             window.camera.getWorldDirection(direction);
+//             right.crossVectors(window.camera.up, direction).normalize();
+//             rightMovement.add(right.multiplyScalar(window.aS));
+//         }
+//         if (window.s) {
+//             window.camera.getWorldDirection(direction);
+//             forwardMovement.add(direction.multiplyScalar(-window.sS));
+//         }
+//         if (window.d) {
+//             window.camera.getWorldDirection(direction);
+//             right.crossVectors(window.camera.up, direction).normalize();
+//             rightMovement.add(right.multiplyScalar(-window.dS));
+//         }
+
+//         var combinedMovement = new THREE.Vector3();
+//         combinedMovement.add(forwardMovement).add(rightMovement);
+
+//         if (camera.hasCollision && camera.triangleTouched) {
+//             var triangleNormal = new THREE.Vector3();
+//             camera.triangleTouched.getNormal(triangleNormal);
+//             combinedMovement.projectOnPlane(triangleNormal);
+
+//             var newPosition = new THREE.Vector3().copy(window.camera.position).add(combinedMovement);
+//             var isInsideTriangle = isPointInTriangle(newPosition, camera.triangleTouched);
+
+//             if (isInsideTriangle) {
+//                 window.camera.position.copy(newPosition);
+//             }
+//         } else {
+//             window.camera.position.add(combinedMovement);
+//         }
+//     }
+
+//     if (window.ArrowUp || window.ArrowDown) {
+//         if (window.ArrowUp) {
+//             camera.rotateX(window.tS);
+//         }
+//         if (window.ArrowDown) {
+//             camera.rotateX(-window.tS);
+//         }
+//     }
+
+//     if (window.ArrowLeft || window.ArrowRight) {
+//         let quaternionY = new THREE.Quaternion();
+//         let quaternionX = new THREE.Quaternion();
+
+//         if (window.ArrowLeft) {
+//             quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), window.tS);
+//         }
+
+//         if (window.ArrowRight) {
+//             quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -window.tS);
+//         }
+
+//         camera.quaternion.multiplyQuaternions(quaternionY, window.camera.quaternion);
+//     }
+
+//     const cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
+//         camera.position,
+//         new THREE.Vector3(1, 1, 1) // Adjust the size as needed
+//     );
+//     const collisionDetected = checkCollision(cameraBoundingBox, window.BVH);
+//     if (collisionDetected) {
+//         camera.hasCollision = true;
+//         camera.triangleTouched = collisionDetected;
+//         var section = GetMeshForTriangle(collisionDetected);
+//         camera.sectionTouched = section;
+//         camera.touches.add(section.mesh);
+//         scene.add(section.mesh);
+
+//         // todo: Movements align with the triangle
+//     } else {
+//         camera.hasCollision = false;
+//         camera.position.y += -0.009;
+//     }
+
+//     window.renderer.render(window.scene, window.camera);
+// }
 
 
 
 window.Animate = function() {
-    window.requestAnimationFrame(Animate)
-    if (window.w) {
-        var direction = new THREE.Vector3();
-        window.camera.getWorldDirection(direction);
-        direction.multiplyScalar(window.wS);
-        window.camera.position.add(direction);
-    }
-    if (window.a) {
+    window.requestAnimationFrame(Animate);
+
+    var combinedMovement = new THREE.Vector3();
+
+    // Handle movement
+    if (window.w || window.a || window.s || window.d) {
         var direction = new THREE.Vector3();
         var right = new THREE.Vector3();
-        window.camera.getWorldDirection(direction);
-        right.crossVectors(window.camera.up, direction).normalize();
-        right.multiplyScalar(window.aS);
-        window.camera.position.add(right);
+        var forwardMovement = new THREE.Vector3();
+        var rightMovement = new THREE.Vector3();
+
+        if (window.w) {
+            window.camera.getWorldDirection(direction);
+            forwardMovement.add(direction.multiplyScalar(window.wS));
+        }
+        if (window.a) {
+            window.camera.getWorldDirection(direction);
+            right.crossVectors(window.camera.up, direction).normalize();
+            rightMovement.add(right.multiplyScalar(window.aS));
+        }
+        if (window.s) {
+            window.camera.getWorldDirection(direction);
+            forwardMovement.add(direction.multiplyScalar(-window.sS));
+        }
+        if (window.d) {
+            window.camera.getWorldDirection(direction);
+            right.crossVectors(window.camera.up, direction).normalize();
+            rightMovement.add(right.multiplyScalar(-window.dS));
+        }
+
+        combinedMovement.add(forwardMovement).add(rightMovement);
     }
-    if (window.s) {
-        var direction = new THREE.Vector3();
-        window.camera.getWorldDirection(direction);
-        direction.multiplyScalar(-window.sS);
-        window.camera.position.add(direction);
+
+    // Handle jump and gravity
+    if (window.isJumping) {
+        window.camera.position.y += window.jumpVelocity;
+        window.jumpVelocity -= 0.01; // Adjust the gravity effect on jump
+
+        if (window.jumpVelocity < 0) {
+            window.isJumping = false
+
+        } else {
+             // Check for collision with ground
+            const cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
+                camera.position,
+                new THREE.Vector3(1, 1, 1) // Adjust the size as needed
+            );
+            const collisionDetected = checkCollision(cameraBoundingBox, window.BVH);
+            if (collisionDetected) {
+                camera.hasCollision = true;
+                camera.triangleTouched = collisionDetected;
+                var section = GetMeshForTriangle(collisionDetected);
+                camera.sectionTouched = section;
+                camera.touches.add(section.mesh);
+                scene.add(section.mesh);
+
+                // Stop the jump when hitting the ground
+                if (window.jumpVelocity <= 0) {
+                    window.isJumping = false;
+                    window.jumpVelocity = 0;
+                    window.camera.position.y = section.mesh.position.y + 1; // Adjust for the height of the triangle surface
+                }
+            }
+        }
+    } else if (!camera.hasCollision) {
+        window.camera.position.y += -0.09; // Gravity
     }
-    if (window.d) {
-        var direction = new THREE.Vector3();
-        var right = new THREE.Vector3();
-        window.camera.getWorldDirection(direction);
-        right.crossVectors(window.camera.up, direction).normalize();
-        right.multiplyScalar(-window.dS);
-        window.camera.position.add(right);
+
+    // Handle collision detection for horizontal movements
+    const cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
+        camera.position,
+        new THREE.Vector3(1, 1, 1) // Adjust the size as needed
+    );
+    const collisionDetected = checkCollision(cameraBoundingBox, window.BVH);
+    if (collisionDetected) {
+        camera.hasCollision = true;
+        camera.triangleTouched = collisionDetected;
+        var section = GetMeshForTriangle(collisionDetected);
+        camera.sectionTouched = section;
+        camera.touches.add(section.mesh);
+        scene.add(section.mesh);
+
+        // Adjust position to stay on top of the triangle
+        if (window.camera.position.y < section.mesh.position.y + 1) {
+            window.camera.position.y = section.mesh.position.y + 1
+        }
+
+        if (combinedMovement.length() > 0) {
+            var triangleNormal = new THREE.Vector3();
+            camera.triangleTouched.getNormal(triangleNormal);
+            combinedMovement.projectOnPlane(triangleNormal);
+
+            var newPosition = new THREE.Vector3().copy(window.camera.position).add(combinedMovement);
+            var isInsideTriangle = isPointInTriangle(newPosition, camera.triangleTouched);
+
+            if (isInsideTriangle) {
+                window.camera.position.copy(newPosition);
+            } else {
+                window.camera.position.add(combinedMovement);
+            }
+        }
+    } else {
+        camera.hasCollision = false;
+        window.camera.position.add(combinedMovement);
     }
+
+    // Handle rotation
     if (window.ArrowUp || window.ArrowDown) {
-
         if (window.ArrowUp) {
-            camera.rotateX(window.tS)
+            camera.rotateX(window.tS);
         }
-
         if (window.ArrowDown) {
-            camera.rotateX(-window.tS)
+            camera.rotateX(-window.tS);
         }
-
     }
+
     if (window.ArrowLeft || window.ArrowRight) {
         let quaternionY = new THREE.Quaternion();
         let quaternionX = new THREE.Quaternion();
@@ -574,69 +706,201 @@ window.Animate = function() {
         camera.quaternion.multiplyQuaternions(quaternionY, window.camera.quaternion);
     }
 
-    const cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
-        camera.position,
-        new THREE.Vector3(1, 1, 1) // Adjust the size as needed
-    );
-    const collisionDetected = checkCollision(cameraBoundingBox, window.BVH);
-    if (collisionDetected) {
-        camera.hasCollision = true;
-    } else {
-        camera.hasCollision = false;
-    }
-
-    window.renderer.render(window.scene, window.camera)
+    window.renderer.render(window.scene, window.camera);
 }
 
-function UPDATE(cameraPosition, map) {
-    const cellSize = 10; // Should match the cell size used in Terrain function
 
-    // Determine the current map index based on the camera position
-    const currentX = Math.floor(cameraPosition.x / cellSize);
-    const currentY = Math.floor(cameraPosition.y / cellSize);
-    const currentZ = Math.floor(cameraPosition.z / cellSize);
-    const currentMapIndex = `${currentX}_${currentY}_${currentZ}`;
 
-    // Update activeMapIndex and priorMapIndex
-    if (window.activeMapIndex !== currentMapIndex) {
-        window.priorMapIndex = window.activeMapIndex;
-        window.activeMapIndex = currentMapIndex;
 
-        // Remove meshes from the prior map index
-        if (window.priorMapIndex !== -1) {
-            let priorIndices = getAdjacentIndices(window.priorMapIndex);
-            priorIndices.forEach(index => {
-                if (map[index]) {
-                    map[index].forEach(mesh => scene.remove(mesh));
-                }
-            });
-        }
 
-        camera.touches = new Set()
+// Helper function to check if a point is inside a triangle
+function isPointInTriangle(point, triangle) {
+    var v0 = new THREE.Vector3().subVectors(triangle.c, triangle.a);
+    var v1 = new THREE.Vector3().subVectors(triangle.b, triangle.a);
+    var v2 = new THREE.Vector3().subVectors(point, triangle.a);
 
-        // // Add meshes for the active map index and its neighbors
-        let activeIndices = getAdjacentIndices(window.activeMapIndex);
-        var mindist = Infinity
-        var triangles = []
-        activeIndices.forEach(index => {
-            if (map[index]) {
-                map[index].forEach(cell => {
-                    const cameraBoundingBox = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 'red', wireframe: true }))
-                    if (cameraBoundingBox.intersectsTriangle(cell.triangle)) {
-                        scene.add(cell);
-                        camera.touches.add(cell)
-                        scene.add(cameraBoundingBox);
-                    }
-                });
-            }
-        });
-    }
+    var dot00 = v0.dot(v0);
+    var dot01 = v0.dot(v1);
+    var dot02 = v0.dot(v2);
+    var dot11 = v1.dot(v1);
+    var dot12 = v1.dot(v2);
 
-    if (window.camera.foot == null) {
-        window.camera.position.y += -0.01;
-    }
+    var invDenom = 1 / (dot00 * dot11 - dot01 * dot01);
+    var u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+    var v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+
+    return (u >= 0) && (v >= 0) && (u + v < 1);
 }
 
+
+// window.Animate = function() {
+//     window.requestAnimationFrame(Animate);
+
+//     if (window.w || window.a || window.s || window.d) {
+//         var direction = new THREE.Vector3();
+//         var right = new THREE.Vector3();
+//         var forwardMovement = new THREE.Vector3();
+//         var rightMovement = new THREE.Vector3();
+
+//         if (window.w) {
+//             window.camera.getWorldDirection(direction);
+//             forwardMovement.add(direction.multiplyScalar(window.wS));
+//         }
+//         if (window.a) {
+//             window.camera.getWorldDirection(direction);
+//             right.crossVectors(window.camera.up, direction).normalize();
+//             rightMovement.add(right.multiplyScalar(window.aS));
+//         }
+//         if (window.s) {
+//             window.camera.getWorldDirection(direction);
+//             forwardMovement.add(direction.multiplyScalar(-window.sS));
+//         }
+//         if (window.d) {
+//             window.camera.getWorldDirection(direction);
+//             right.crossVectors(window.camera.up, direction).normalize();
+//             rightMovement.add(right.multiplyScalar(-window.dS));
+//         }
+
+//         var combinedMovement = new THREE.Vector3();
+//         combinedMovement.add(forwardMovement).add(rightMovement);
+
+//         if (camera.hasCollision && camera.triangleTouched) {
+//             var triangleNormal = new THREE.Vector3();
+//             camera.triangleTouched.getNormal(triangleNormal);
+//             combinedMovement.projectOnPlane(triangleNormal);
+//         }
+
+//         window.camera.position.add(combinedMovement);
+//     }
+
+//     if (window.ArrowUp || window.ArrowDown) {
+//         if (window.ArrowUp) {
+//             camera.rotateX(window.tS);
+//         }
+//         if (window.ArrowDown) {
+//             camera.rotateX(-window.tS);
+//         }
+//     }
+
+//     if (window.ArrowLeft || window.ArrowRight) {
+//         let quaternionY = new THREE.Quaternion();
+//         let quaternionX = new THREE.Quaternion();
+
+//         if (window.ArrowLeft) {
+//             quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), window.tS);
+//         }
+
+//         if (window.ArrowRight) {
+//             quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -window.tS);
+//         }
+
+//         camera.quaternion.multiplyQuaternions(quaternionY, window.camera.quaternion);
+//     }
+
+//     const cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
+//         camera.position,
+//         new THREE.Vector3(1, 1, 1) // Adjust the size as needed
+//     );
+//     const collisionDetected = checkCollision(cameraBoundingBox, window.BVH);
+//     if (collisionDetected) {
+//         camera.hasCollision = true;
+//         camera.triangleTouched = collisionDetected;
+//         var section = GetMeshForTriangle(collisionDetected);
+//         camera.sectionTouched = section;
+//         camera.touches.add(section.mesh);
+//         scene.add(section.mesh);
+
+//         // todo: Movements align with the triangle
+//     } else {
+//         camera.hasCollision = false;
+//         camera.position.y += -0.09;
+//     }
+
+//     window.renderer.render(window.scene, window.camera);
+// }
+
+
+
+
+// window.Animate = function() {
+//     window.requestAnimationFrame(Animate)
+//     if (window.w) {
+//         var direction = new THREE.Vector3();
+//         window.camera.getWorldDirection(direction);
+//         direction.multiplyScalar(window.wS);
+//         window.camera.position.add(direction);
+//     }
+//     if (window.a) {
+//         var direction = new THREE.Vector3();
+//         var right = new THREE.Vector3();
+//         window.camera.getWorldDirection(direction);
+//         right.crossVectors(window.camera.up, direction).normalize();
+//         right.multiplyScalar(window.aS);
+//         window.camera.position.add(right);
+//     }
+//     if (window.s) {
+//         var direction = new THREE.Vector3();
+//         window.camera.getWorldDirection(direction);
+//         direction.multiplyScalar(-window.sS);
+//         window.camera.position.add(direction);
+//     }
+//     if (window.d) {
+//         var direction = new THREE.Vector3();
+//         var right = new THREE.Vector3();
+//         window.camera.getWorldDirection(direction);
+//         right.crossVectors(window.camera.up, direction).normalize();
+//         right.multiplyScalar(-window.dS);
+//         window.camera.position.add(right);
+//     }
+//     if (window.ArrowUp || window.ArrowDown) {
+
+//         if (window.ArrowUp) {
+//             camera.rotateX(window.tS)
+//         }
+
+//         if (window.ArrowDown) {
+//             camera.rotateX(-window.tS)
+//         }
+
+//     }
+//     if (window.ArrowLeft || window.ArrowRight) {
+//         let quaternionY = new THREE.Quaternion();
+//         let quaternionX = new THREE.Quaternion();
+
+//         if (window.ArrowLeft) {
+//             quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), window.tS);
+//         }
+
+//         if (window.ArrowRight) {
+//             quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -window.tS);
+//         }
+
+//         camera.quaternion.multiplyQuaternions(quaternionY, window.camera.quaternion);
+//     }
+
+//     const cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
+//         camera.position,
+//         new THREE.Vector3(1, 1, 1) // Adjust the size as needed
+//     );
+//     const collisionDetected = checkCollision(cameraBoundingBox, window.BVH);
+//     if (collisionDetected) {
+//         camera.hasCollision = true;
+//         camera.triangleTouched = collisionDetected
+//         var section = GetMeshForTriangle(collisionDetected);
+//         camera.sectionTouched = section;
+//         camera.touches.add(section.mesh);
+//         scene.add(section.mesh);
+
+
+//     } else {
+//         camera.hasCollision = false;
+//         camera.position.y += -0.009;
+//     }
+
+
+
+//     window.renderer.render(window.scene, window.camera)
+// }
 
 var T = 64
 var terrain = Terrain(T,

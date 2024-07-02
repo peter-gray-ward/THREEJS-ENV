@@ -44,12 +44,79 @@ app
 })
 .get('/image', (req, res) => {
   var id = req.query.id;
-  connection.query(`
-    select image
-    from fun.images
-    where id = '${id}'`, (err, results) => {
-      res.end(results[0].image)
+  if (id) {
+    connection.query(`
+      select image
+      from fun.images
+      where id = '${id}'`, (err, results) => {
+        res.end(results[0].image)
     })
+  }
+})
+.get('/browse-images', (req, res) => {
+  connection.query(
+    `SELECT DISTINCT tag AS name, COUNT(tag) AS countOf 
+     FROM images 
+     GROUP BY tag 
+     ORDER BY tag ASC`,
+    (err, rTags) => {
+      if (err) {
+        console.error(err);
+        res.status(500).send('Error fetching tags');
+        return;
+      }
+
+      let tags = {};
+      let tagPromises = rTags.map(tag => {
+        return new Promise((resolve, reject) => {
+          connection.query(
+            `SELECT id 
+             FROM images 
+             WHERE tag IS NOT NULL AND tag = ?`,
+            [tag.name],
+            (err, ids) => {
+              if (err) {
+                return reject(err);
+              }
+              tags[tag.name] = ids.map(id => "/image?id=" + id.id)
+             
+              resolve();
+            }
+          );
+        });
+      });
+
+      Promise.all(tagPromises)
+        .then(() => {
+          res.send(`
+            <html>
+              <head>
+                <title>Browse Images</title>
+              </head>
+              <body>
+                <h1>Image Tags and IDs</h1>
+                <table>
+                  ${
+                    Object.keys(tags).map(tagName => {
+                      return `<tr>
+                        <th>${tagName}</th>
+                        <td>${tags[tagName].map(src => {
+                          return `<img height=100 src="${src}" />`
+                        })}</td>
+                      </tr>`
+                    }).join('')
+                  }
+                </table>
+              </body>
+            </html>
+          `);
+        })
+        .catch(err => {
+          console.error(err);
+          res.status(500).send('Error fetching image IDs');
+        });
+    }
+  );
 })
 .get('/:filename', (req, res) => res.sendFile(dir(req.params.filename)))
 .post('/save', (req, res) => {
