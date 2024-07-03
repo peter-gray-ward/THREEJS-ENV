@@ -1,6 +1,7 @@
 import * as THREE from '/three';
 import * as PERLIN from '/perlin-noise';
 
+var T = 64
 window.THREE = THREE;
 
 window.w = false;
@@ -33,6 +34,15 @@ window.stage = {
     sun: {}
 }
 const FOV = 300
+var Grass = [
+    '#33462d', //
+    '#435c3a', //
+    '#4e5e3e', //
+    '#53634c', //
+    '#53634c', // (duplicate, same as above)
+    '#536c46', //
+    '#5d6847', //
+];
 let cloudParticles = [];
 window.sunMaxDist = -Infinity;
 window.sunMinDist = Infinity
@@ -126,6 +136,7 @@ class BVHNode {
     }
 }
 
+
 function buildBVH(triangles, depth = 0) {
     if (triangles.length === 1) {
         return new BVHNode(triangles[0].geometry.boundingBox, [triangles[0]]);
@@ -193,11 +204,13 @@ function generatePointsInTriangle(v0, v1, v2, numPoints) {
     return points;
 }
 
+
 function getTriangleNormal(triangle) {
     const v0 = new THREE.Vector3().subVectors(triangle.b, triangle.a);
     const v1 = new THREE.Vector3().subVectors(triangle.c, triangle.a);
     return new THREE.Vector3().crossVectors(v0, v1).normalize();
 }
+
 
 function TriangleAsUnderFoot(cameraBoundingBox, triangle) {
     const normal = getTriangleNormal(triangle);
@@ -213,6 +226,7 @@ function TriangleAsUnderFoot(cameraBoundingBox, triangle) {
     return null;
 }
 
+
 function TriangleAsAdjacent(triangle1, triangle2) {
     const vertices1 = [triangle1.a, triangle1.b, triangle1.c];
     const vertices2 = [triangle2.a, triangle2.b, triangle2.c];
@@ -223,6 +237,7 @@ function TriangleAsAdjacent(triangle1, triangle2) {
 
     return sharedVertices.length === 2;
 }
+
 
 function TriangleAsOverhead(cameraBoundingBox, triangle) {
     const normal = getTriangleNormal(triangle);
@@ -261,9 +276,6 @@ function touch(triangleMesh) {
 }
 
 
-
-
-// Function to get the adjacent indices
 function getAdjacentIndices(mapIndex) {
     const [x, y, z] = mapIndex.split('_').map(Number);
     const adjacentIndices = [
@@ -287,7 +299,7 @@ p.style.maxHeight = '100vh';
 p.style.padding = '0.15rem 1rem'
 
 function Sun() {
-	var pointLight = new THREE.DirectionalLight(0xfffefe, 20);
+	var pointLight = new THREE.DirectionalLight(0xfffefe, 1);
 
 	pointLight.castShadow = true;
 	var halfSize = 1000 * 2;
@@ -357,8 +369,13 @@ function TriangleMesh(vertices, a, b, c) {
     return triangleMesh
 }
 
+function heightAt(x, y, noiseWidth, noiseHeight, perlinNoise) {
+    const noiseX = Math.floor(x * (noiseWidth - 1));
+    const noiseY = Math.floor(y * (noiseHeight - 1));
+    return perlinNoise[noiseY * noiseWidth + noiseX] * 55; // Adjust the multiplier for desired height
+}
 
-function generateCanvasTexture(width, height, perlinNoise) {
+function generateCanvasTexture(width, height, perlinNoise, noiseWidth, noiseHeight, v0, v1, v2, v3) {
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
@@ -370,15 +387,49 @@ function generateCanvasTexture(width, height, perlinNoise) {
             let color = { r: 0, g: 0, b: 0 };
 
             if (noiseValue < 0.3) {
-                // Grassy areas
-                color = { r: 139, g: 69, b: 19 }; // Brown
+                color = { r: 218, g: 224, b: 201 }; 
             } else if (noiseValue < 0.6) {
-                // Rocky areas
-                
-                color = { r: 34, g: 139, b: 34 }; // Green
+                color = { r: 35, g: 196, b: 34 }; 
+
+                if (Math.random() < 0.5) {
+                    color = { r: 189, g: 224, b: 93 };
+
+                    if (Math.random() < 0.005 && Math.random() < 0.005) {
+                        // Calculate 3D position for the tree
+                        const terrainX = x / width;
+                        const terrainY = y / height;
+                        const heightValue = heightAt(terrainX, terrainY, noiseWidth, noiseHeight, perlinNoise);
+                        const treePos = new THREE.Vector3(
+                            (1 - terrainX) * (1 - terrainY) * v0.x + terrainX * (1 - terrainY) * v1.x + terrainX * terrainY * v2.x + (1 - terrainX) * terrainY * v3.x,
+                            heightValue,
+                            (1 - terrainX) * (1 - terrainY) * v0.z + terrainX * (1 - terrainY) * v1.z + terrainX * terrainY * v2.z + (1 - terrainX) * terrainY * v3.z
+                        );
+
+                        if (treePos.y < (T * 2) * 0.7 && Math.random() < 0.1) {
+
+                        
+                            CREATE_A_TREE(treePos.x, treePos.y, treePos.z);
+                        }
+                    }
+                }
             } else {
-                // Snowy peaks
-                color = { r: 255, g: 250, b: 250 }; // White
+                color = { r: 16, g: 87, b: 67 }; 
+
+                if (Math.random() < 0.5) {
+                    color = { r: 27, g: 167, b: 93 };
+
+                    // Calculate 3D position for the tree
+                    const terrainX = x / width;
+                    const terrainY = y / height;
+                    const heightValue = heightAt(terrainX, terrainY, noiseWidth, noiseHeight, perlinNoise);
+                    const treePos = new THREE.Vector3(
+                        (1 - terrainX) * (1 - terrainY) * v0.x + terrainX * (1 - terrainY) * v1.x + terrainX * terrainY * v2.x + (1 - terrainX) * terrainY * v3.x,
+                        heightValue,
+                        (1 - terrainX) * (1 - terrainY) * v0.z + terrainX * (1 - terrainY) * v1.z + terrainX * terrainY * v2.z + (1 - terrainX) * terrainY * v3.z
+                    );
+
+                    CREATE_A_TREE(treePos.x, treePos.y, treePos.z);
+                }
             }
 
             ctx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
@@ -443,7 +494,9 @@ function Terrain(T, v0, v1, v2, v3, segments, options = { slightBay: true }) {
         }
     }
 
-    const terrainTexture = generateCanvasTexture(noiseWidth, noiseHeight, perlinNoise);
+    window.BVH = buildBVH(dom) 
+
+    const terrainTexture = generateCanvasTexture(noiseWidth, noiseHeight, perlinNoise, noiseWidth, noiseHeight, v0, v1, v2, v3);
     terrainTexture.wrapS = THREE.RepeatWrapping;
     terrainTexture.wrapT = THREE.RepeatWrapping;
 
@@ -456,7 +509,6 @@ function Terrain(T, v0, v1, v2, v3, segments, options = { slightBay: true }) {
 
     var material = new THREE.MeshStandardMaterial({
         map: terrainTexture,
-        // color: 'green',
         side: THREE.DoubleSide // Ensures both sides of the triangles are rendered
     });
     var mesh = new THREE.Mesh(planeGeometry, material);
@@ -465,8 +517,6 @@ function Terrain(T, v0, v1, v2, v3, segments, options = { slightBay: true }) {
 
     mesh.position.set(0, 0, 0);
     scene.add(mesh);
-
-    window.BVH = buildBVH(dom);
 
     return mesh;
 }
@@ -683,7 +733,6 @@ function isPointInTriangle(point, triangle) {
 
 
 
-var T = 64
 var terrain = Terrain(T,
     { x: -T, y: 0, z: T },
     { x: T, y: 0, z: T },
@@ -967,3 +1016,104 @@ function animateClouds() {
 
 
 setInterval(createSky, 3000);
+
+
+
+
+function CREATE_A_TREE(x, y, z) {
+    var trunkHeight = randomInRange(4, 6)
+    var trunkBaseRadius = randomInRange(.01, .2)
+    var rr = randomInRange(.01, .1)
+    var trunkCurve = []
+    var trunkRadius = []
+
+    var zS = z
+    var xS = x
+    var yS = y;
+
+    for (; yS < y + trunkHeight; yS += 0.02) {
+        if (Math.random() < 0.13) {
+            zS += randomInRange(-rr, rr)
+        }
+        if (Math.random() < 0.13) {
+            xS += randomInRange(-rr, rr)
+        }
+        var r = trunkBaseRadius
+        trunkRadius.push(r)
+        trunkCurve.push(
+            new THREE.Vector3(
+                xS,
+                yS, 
+                zS
+            )
+        )
+    }
+
+     // Create foliage
+    var foliageRadius = randomInRange(1, 1.5)
+
+
+    segments = 10
+    const sphereGeometry = new THREE.SphereGeometry(foliageRadius, 10, 10);
+    let sphereMaterial = new THREE.MeshStandardMaterial({
+        color: 'lawngreen'
+    });
+    
+    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+    sphere.lights = true;
+    sphere.castShadow = true
+    sphere.receiveShadow = true
+    sphere.position.set(xS, yS - foliageRadius, zS); // Set foliage position
+    scene.add(sphere);
+
+    var {
+        array,
+        itemSize
+    } = sphereGeometry.attributes.position
+    for (let i = 0; i < 21; i++) {
+        for (var j = 0; j < 21; j++) {
+            var vertexIndex = (i * (21 + 1) + j) * itemSize
+            var x = array[vertexIndex]
+            var z = array[vertexIndex + 1]
+            var y = array[vertexIndex + 2]
+
+            
+            array[vertexIndex] = randomInRange(x - (foliageRadius * 1.1),     x + foliageRadius * 1.1)
+            array[vertexIndex + 1] = randomInRange(y - (foliageRadius * 1.1), y + foliageRadius * 1.1)
+            array[vertexIndex + 2] = randomInRange(y - (foliageRadius * 1.1), z + foliageRadius * 1.1)
+        }
+    }
+
+    const path = new THREE.CatmullRomCurve3(trunkCurve);
+
+    var segments = Math.floor(randomInRange(5, 11))
+
+
+    var radialSegments = 15
+
+
+     // Create the tube geometry
+    const tubeGeometry = new THREE.TubeGeometry(path, segments, trunkBaseRadius);
+
+ 
+
+    var colors = ['#964B00', '#654321', '#CD853F', '#F5F5F5'];
+
+    var foliageColors = Grass.concat(['#00FF00', '#00EE00', '#00DD00', '#00CC00', '#00BB00'])//[0xf0FF00, 0x00FF0f, 0x0fFF00, 0x00FFf0, 0xf0FF0f]
+    var foliageColor = foliageColors[Math.floor(Math.random() * foliageColors.length)]
+    var color = colors[Math.floor(Math.random() * colors.length)]
+    const material = new THREE.MeshStandardMaterial({ 
+        color: "#403327"
+    });
+
+    // Create the mesh
+    const tubeMesh = new THREE.Mesh(tubeGeometry, material);
+    tubeMesh.castShadow = true
+    tubeMesh.lights = true
+    tubeMesh.receiveShadow = true
+    tubeMesh.position.y -= 2
+
+
+    // Add the mesh to the scene
+    scene.add(tubeMesh);  
+}

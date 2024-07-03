@@ -130,4 +130,4 @@ app
 .get('/load', (req, res) => {
   return fs.readFileSync('./db.json');
 })
-.listen(4200, () => console.log('http://localhost:4200'));
+.listen(8080, () => console.log('http://localhost:4200'));
