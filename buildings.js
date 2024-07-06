@@ -1,114 +1,171 @@
+import * as THREE from '/three'
 
-function GenerateRandomFrankGehryEdifice(centroid, baseSize, maxHeight, levels) {
-	const geometry = new THREE.BufferGeometry();
-	const vertices = [];
-	const indices = [];
+function GenerateRandomFrankGehryEdifice(triangleMesh) {
+    // Extract vertices from the input triangle mesh
+    const positions = triangleMesh.geometry.attributes.position.array;
+    const vertices = [
+        new THREE.Vector3(positions[0], positions[1], positions[2]),
+        new THREE.Vector3(positions[3], positions[4], positions[5]),
+        new THREE.Vector3(positions[6], positions[7], positions[8])
+    ];
 
-	for (let i = 0; i < levels; i++) {
-	    const height = centroid.y + (i * (maxHeight / levels));
-	    const xOffset = Math.random() * baseSize - (baseSize / 2);
-	    const zOffset = Math.random() * baseSize - (baseSize / 2);
+    // Calculate the centroid of the triangle
+    const centroid = new THREE.Vector3();
+    vertices.forEach(v => centroid.add(v));
+    centroid.divideScalar(vertices.length);
 
-	    vertices.push(
-	        centroid.x + xOffset - baseSize, height, centroid.z + zOffset - baseSize,
-	        centroid.x + xOffset + baseSize, height, centroid.z + zOffset - baseSize,
-	        centroid.x + xOffset + baseSize, height, centroid.z + zOffset + baseSize,
-	        centroid.x + xOffset - baseSize, height, centroid.z + zOffset + baseSize,
-	        centroid.x + xOffset - baseSize, height + (maxHeight / levels), centroid.z + zOffset - baseSize,
-	        centroid.x + xOffset + baseSize, height + (maxHeight / levels), centroid.z + zOffset - baseSize,
-	        centroid.x + xOffset + baseSize, height + (maxHeight / levels), centroid.z + zOffset + baseSize,
-	        centroid.x + xOffset - baseSize, height + (maxHeight / levels), centroid.z + zOffset + baseSize
-	    );
-
-	    const offset = i * 8;
-	    indices.push(
-	        offset, offset + 1, offset + 5,
-	        offset, offset + 5, offset + 4,
-	        offset + 1, offset + 2, offset + 6,
-	        offset + 1, offset + 6, offset + 5,
-	        offset + 2, offset + 3, offset + 7,
-	        offset + 2, offset + 7, offset + 6,
-	        offset + 3, offset, offset + 4,
-	        offset + 3, offset + 4, offset + 7,
-	        offset + 4, offset + 5, offset + 6,
-	        offset + 4, offset + 6, offset + 7
-	    );
-	}
-
-	geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
-	geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
-	geometry.computeVertexNormals();
-
-	const material = new THREE.MeshStandardMaterial({ color: 0x6A5ACD, 
-	  transparent: true,
-	  opacity: 0.5,
-	  side: THREE.DoubleSide 
-	});
-	const mesh = new THREE.Mesh(geometry, material);
-	mesh.castShadow = true;
-	mesh.receiveShadow = true;
-	return mesh;
-}
-
-function GenerateRandomIMPeiEdifice(centroid, baseSize, height, levels) {
-    // Validate parameters
-    if (!centroid || typeof baseSize !== 'number' || typeof height !== 'number' || typeof levels !== 'number' || levels <= 0) {
-        throw new Error('Invalid parameters');
-    }
+    // Define parameters for the edifice
+    const levels = 10; // Number of levels
+    const maxHeight = 10; // Maximum height of the edifice
+    const size = .5; // Base size for random offsets
 
     const geometry = new THREE.BufferGeometry();
-    const vertices = [];
+    const edificeVertices = [];
     const indices = [];
-    const segmentHeight = height / levels;
 
+    // Generate levels of the edifice
     for (let i = 0; i < levels; i++) {
-        const levelHeight = centroid.y + i * segmentHeight;
-        const currentSize = baseSize * (1 - i / levels);
+        let baseSize = randomInRange(size * .8, size * 1.8);
+        const height = centroid.y + (i * (maxHeight / levels));
+        const xOffset = Math.random() * baseSize - (baseSize / 2);
+        const zOffset = Math.random() * baseSize - (baseSize / 2);
 
-        // Define vertices for the current level
-        vertices.push(
-            centroid.x - currentSize, levelHeight, centroid.z - currentSize,
-            centroid.x + currentSize, levelHeight, centroid.z - currentSize,
-            centroid.x + currentSize, levelHeight, centroid.z + currentSize,
-            centroid.x - currentSize, levelHeight, centroid.z + currentSize,
-            centroid.x, levelHeight + segmentHeight, centroid.z
+        edificeVertices.push(
+            centroid.x + xOffset - baseSize, height, centroid.z + zOffset - baseSize,
+            centroid.x + xOffset + baseSize, height, centroid.z + zOffset - baseSize,
+            centroid.x + xOffset + baseSize, height, centroid.z + zOffset + baseSize,
+            centroid.x + xOffset - baseSize, height, centroid.z + zOffset + baseSize,
+            centroid.x + xOffset - baseSize, height + (maxHeight / levels), centroid.z + zOffset - baseSize,
+            centroid.x + xOffset + baseSize, height + (maxHeight / levels), centroid.z + zOffset - baseSize,
+            centroid.x + xOffset + baseSize, height + (maxHeight / levels), centroid.z + zOffset + baseSize,
+            centroid.x + xOffset - baseSize, height + (maxHeight / levels), centroid.z + zOffset + baseSize
         );
 
-        // Define indices for the current level
-        const offset = i * 5;
+        const offset = i * 8;
         indices.push(
-            offset, offset + 1, offset + 4,
-            offset + 1, offset + 2, offset + 4,
-            offset + 2, offset + 3, offset + 4,
+            offset, offset + 1, offset + 5,
+            offset, offset + 5, offset + 4,
+            offset + 1, offset + 2, offset + 6,
+            offset + 1, offset + 6, offset + 5,
+            offset + 2, offset + 3, offset + 7,
+            offset + 2, offset + 7, offset + 6,
             offset + 3, offset, offset + 4,
-            offset, offset + 1, offset + 2,
-            offset, offset + 2, offset + 3
+            offset + 3, offset + 4, offset + 7,
+            offset + 4, offset + 5, offset + 6,
+            offset + 4, offset + 6, offset + 7
         );
     }
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(edificeVertices), 3));
     geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
     geometry.computeVertexNormals();
 
-    const material = new THREE.MeshStandardMaterial({
-        color: 0x00BFFF,
-        transparent: true,
-        opacity: 0.5,
-        side: THREE.DoubleSide
+    const material = new THREE.MeshStandardMaterial({ 
+        // // color: 0x6A5ACD, 
+        // transparent: true,
+        // opacity: 0.85,
+        side: THREE.DoubleSide,
+        map: new THREE.TextureLoader().load("/moss2")
     });
-
+    
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
-    mesh.position.set(centroid.x, centroid.y, centroid.z);
 
     return mesh;
 }
 
-function GenerateRandomLeCorbusierEdifice(centroid, baseSize, ceilingHeight, levels, withPilotis) {
+const buildingTexture = new THREE.TextureLoader().load("image?id=60bc4a2c-087d-4fe3-956b-c2f468983f73");
+console.log(buildingTexture)
+function building(triangleMesh) {
+    var base = 1;
+    // Extract vertices from the input triangle mesh
+    const positions = triangleMesh.geometry.attributes.position.array;
+    const vertices = [
+        new THREE.Vector3(positions[0], positions[1], positions[2]),
+        new THREE.Vector3(positions[3], positions[4], positions[5]),
+        new THREE.Vector3(positions[6], positions[7], positions[8])
+    ];
+
+    // Calculate the centroid of the triangle
+    const centroid = new THREE.Vector3();
+    vertices.forEach(v => centroid.add(v));
+    centroid.divideScalar(vertices.length);
+
+    // Define parameters for the edifice
+    const levels = randomInRange(3, 11); // Number of levels
+    const maxHeight = levels; // Maximum height of the edifice
+    const baseSize = randomInRange(base, base * 1.1); // Base size for random offsets
+
     const geometry = new THREE.BufferGeometry();
-    const vertices = [];
+    const edificeVertices = [];
     const indices = [];
+
+    // Generate levels of the edifice
+    for (let i = 0; i < levels; i++) {
+        const height = centroid.y + (i * (maxHeight / levels));
+        const xOffset = 0//Math.random() * baseSize - (baseSize / 2) * randomInRange(1, 3);
+        const zOffset = 0//Math.random() * baseSize - (baseSize / 2) * randomInRange(1, 3);
+
+        edificeVertices.push(
+            centroid.x + xOffset - baseSize, height, centroid.z + zOffset - baseSize,
+            centroid.x + xOffset + baseSize, height, centroid.z + zOffset - baseSize,
+            centroid.x + xOffset + baseSize, height, centroid.z + zOffset + baseSize,
+            centroid.x + xOffset - baseSize, height, centroid.z + zOffset + baseSize,
+            centroid.x + xOffset - baseSize, height + (maxHeight / levels), centroid.z + zOffset - baseSize,
+            centroid.x + xOffset + baseSize, height + (maxHeight / levels), centroid.z + zOffset - baseSize,
+            centroid.x + xOffset + baseSize, height + (maxHeight / levels), centroid.z + zOffset + baseSize,
+            centroid.x + xOffset - baseSize, height + (maxHeight / levels), centroid.z + zOffset + baseSize
+        );
+
+        const offset = i * 8;
+        indices.push(
+            offset, offset + 1, offset + 5,
+            offset, offset + 5, offset + 4,
+            offset + 1, offset + 2, offset + 6,
+            offset + 1, offset + 6, offset + 5,
+            offset + 2, offset + 3, offset + 7,
+            offset + 2, offset + 7, offset + 6,
+            offset + 3, offset, offset + 4,
+            offset + 3, offset + 4, offset + 7,
+            offset + 4, offset + 5, offset + 6,
+            offset + 4, offset + 6, offset + 7
+        );
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(edificeVertices), 3));
+    geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
+    geometry.computeVertexNormals();
+
+    const material = new THREE.MeshStandardMaterial({ 
+        // color: 0x6A5ACD, 
+        color: new THREE.Color(Math.random(), Math.random(), Math.random()),
+        opacity: 0.8,
+        transparent: true,
+        side: THREE.DoubleSide 
+    });
+    
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    return mesh;
+}
+
+
+function GenerateRandomLeCorbusierEdifice(triangleMesh) { 
+    const positions = triangleMesh.geometry.attributes.position.array;
+    const vertices = [
+        new THREE.Vector3(positions[0], positions[1], positions[2]),
+        new THREE.Vector3(positions[3], positions[4], positions[5]),
+        new THREE.Vector3(positions[6], positions[7], positions[8])
+    ];
+    var indices = []
+    // Calculate the centroid of the triangle
+    const centroid = new THREE.Vector3();
+    vertices.forEach(v => centroid.add(v));
+    centroid.divideScalar(vertices.length);
+
     const levelHeight = ceilingHeight;
 
     // Generate vertices for levels
@@ -315,17 +372,35 @@ function GenerateFantasticalRenzoPianoEdifice(centroid, baseWidth, baseDepth, he
     return group;
 }
 
-function GenerateRandomNormanFosterEdifice(centroid, width, depth, height, levels) {
-    const geometry = new THREE.BufferGeometry();
-    const vertices = [];
-    const indices = [];
+function GenerateRandomNormanFosterEdifice(triangleMesh) {
+    // Extract vertices from the input triangle mesh
+    const positions = triangleMesh.geometry.attributes.position.array;
+    const vertices = [
+        new THREE.Vector3(positions[0], positions[1], positions[2]),
+        new THREE.Vector3(positions[3], positions[4], positions[5]),
+        new THREE.Vector3(positions[6], positions[7], positions[8])
+    ];
+
+    // Calculate the centroid of the triangle
+    const centroid = triangleMesh.position.clone();
+
+    // Define parameters for the edifice
+    const width = .5; // Width of the base
+    const depth = .5; // Depth of the base
+    const height = 3; // Total height of the edifice
+    const levels = 5; // Number of levels
     const levelHeight = height / levels;
 
+    const geometry = new THREE.BufferGeometry();
+    const edificeVertices = [];
+    const indices = [];
+
+    // Generate levels of the edifice
     for (let i = 0; i < levels; i++) {
         const baseHeight = centroid.y + i * levelHeight;
         const taper = (1 - i / levels) * 0.5;
 
-        vertices.push(
+        edificeVertices.push(
             centroid.x - width * taper / 2, baseHeight, centroid.z - depth * taper / 2,
             centroid.x + width * taper / 2, baseHeight, centroid.z - depth * taper / 2,
             centroid.x + width * taper / 2, baseHeight, centroid.z + depth * taper / 2,
@@ -351,21 +426,27 @@ function GenerateRandomNormanFosterEdifice(centroid, width, depth, height, level
         );
     }
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(edificeVertices), 3));
     geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
     geometry.computeVertexNormals();
 
-    const frameMaterial = new THREE.MeshStandardMaterial({ color: 0xCCCCCC, 
-      transparent: true,
-      opacity: 0.5,
-      side: THREE.DoubleSide 
+    const frameMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0xCCCCCC, 
+        transparent: true,
+        opacity: 0.5,
+        side: THREE.DoubleSide 
     });
     const frameMesh = new THREE.Mesh(geometry, frameMaterial);
     frameMesh.castShadow = true;
     frameMesh.receiveShadow = true;
+
     // Create glass panels
     const glassGeometry = new THREE.BoxGeometry(width, height, depth);
-    const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x87CEEB, transparent: true, opacity: 0.5 });
+    const glassMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x87CEEB, 
+        transparent: true, 
+        opacity: 0.5 
+    });
     const glassMesh = new THREE.Mesh(glassGeometry, glassMaterial);
     glassMesh.position.set(centroid.x, centroid.y + height / 2, centroid.z);
 
@@ -377,6 +458,7 @@ function GenerateRandomNormanFosterEdifice(centroid, width, depth, height, level
 
     return group;
 }
+
 
 function GenerateRandomEeroSaarinenEdifice(centroid, width, depth, height, curvature) {
     const geometry = new THREE.BufferGeometry();
@@ -575,56 +657,23 @@ function GenerateRandomTadaoAndoEdifice(centroid, length, width, height, levels)
     return mesh;
 }
 
-
-var building = GenerateRandomFrankGehryEdifice(
-	{ x:20, y:0, z:20 },
-	5,
-	50,
-	4
-)
-scene.add(building);
-var building2 = GenerateRandomIMPeiEdifice(
-	{ x:-20, y:0, z:-20 },
-	10,
-	110,
-	10
-)
-scene.add(building2);
-var building3 = GenerateRandomLeCorbusierEdifice(
-	{ x:-20, y:0, z:20 },
-	6,
-	10,
-	10,
-	10
-)
-scene.add(building3);
-
-var building4 = GenerateRandomZahaHadidEdifice({ x:20, y:0, z:-20 },
-	5, 30, 12)
-scene.add(building4)
+function randomInRange(from, to, startDistance = 0) {
+   const min = Math.min(from, to) + startDistance;
+   const max = Math.max(from, to) + startDistance;
+   const val = Math.random() * (max - min) + min;
+   return val;
+}
 
 
-var LouisKahnEdifice = GenerateRandomLouisKahnEdifice({ x:5, y:0, z:-20 }, 10, 20, 20, 5);
-scene.add(LouisKahnEdifice)
-
-var RenzoPianoEdifice = GenerateFantasticalRenzoPianoEdifice({ x:-5, y:0, z:-2 }, 10, 11, 3, 3);
-scene.add(RenzoPianoEdifice)
-
-
-var NormanFosterEdifice = GenerateRandomNormanFosterEdifice({ x:11, y:0, z:2 }, 10, 11, 13, 13);
-scene.add(NormanFosterEdifice)
-
-var EeroSaarinenEdiface = GenerateRandomEeroSaarinenEdifice({ x:3, y:0, z:0 }, 2, 2, 10, Math.random() * Math.PI * 2)
-scene.add(EeroSaarinenEdiface)
-
-
-var AntoniGaudiEdifice = GenerateRandomAntoniGaudiEdifice({ x:-25, y:0, z:1 }, 95, 5, 11)
-scene.add(AntoniGaudiEdifice)
-
-
-var TadaoAndoEdifice = GenerateRandomTadaoAndoEdifice({ x:-1, y:0, z:-11 }, 15, 10, 50, 11)
-scene.add(TadaoAndoEdifice)
-
-
-var MiesVanDerRoheEdifice = GenerateRandomMiesVanDerRoheEdifice({ x:1, y:0, z:11 }, 5,  20)
-scene.add(MiesVanDerRoheEdifice)
+export {
+    GenerateRandomFrankGehryEdifice
+    ,building
+    ,GenerateRandomZahaHadidEdifice
+    ,GenerateRandomLouisKahnEdifice
+    ,GenerateFantasticalRenzoPianoEdifice
+    ,GenerateRandomNormanFosterEdifice
+    ,GenerateRandomEeroSaarinenEdifice
+    ,GenerateRandomAntoniGaudiEdifice
+    ,GenerateRandomMiesVanDerRoheEdifice
+    ,GenerateRandomTadaoAndoEdifice
+}

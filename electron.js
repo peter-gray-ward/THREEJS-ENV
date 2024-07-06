@@ -29,6 +29,12 @@ expressApp
     var fp = path.join(__dirname, 'node_modules/perlin-noise/index.js')
     res.sendFile(fp)
   })
+  .get('/housing', (req, res) => {
+    res.sendFile(path.join(__dirname, 'buildings.js'))
+  })
+  .get('/moss:which', (req, res) => {
+    return res.sendFile(path.join(__dirname, '/moss' + req.params.which + '.jpg'));
+  })
   .get('/image-tags', (req, res) => {
     connection.query(`
       select distinct tag as name, count(tag) as countOf from fun.images 
@@ -49,6 +55,21 @@ expressApp
         res.jsonp(results.map(r => r.id))
       }
     })
+  })
+  .get('/gltf-loader', (req, res) => {
+    return res.sendFile(path.join(__dirname, '/node_modules/three-gltf-loader'))
+  })
+  .get('/mtl-loader', (req, res) => {
+    return res.sendFile(path.join(__dirname, '/node_modules/three-mtl-loader'))
+  })
+  .get('/obj-loader', (req, res) => {
+    return res.sendFile(path.join(__dirname, '/node_modules/three-obj-loader'))
+  })
+  .get('/tds-loader', (req, res) => {
+    return res.sendFile(path.join(__dirname, '/node_modules/three/examples/jsm/loaders/TDSLoader.js'))
+  })
+  .get('/tree1', (req, res) => {
+    return res.sendFile(path.join(__dirname, '/Tree1/Tree1.3ds'))
   })
   .get('/image', (req, res) => {
     var id = req.query.id;
