@@ -56,6 +56,7 @@ app
     })
   }
 })
+
 .get('/browse-images', (req, res) => {
   connection.query(
     `SELECT DISTINCT tag AS name, COUNT(tag) AS countOf 

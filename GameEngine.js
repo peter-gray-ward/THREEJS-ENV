@@ -20,11 +20,11 @@ window.w = false;
 window.a = false;
 window.s = false;
 window.d = false;
-window.wS = .1;
-window.aS = .1;
-window.sS = .05;
-window.dS = .1;
-window.tS = 0.075
+window.wS = .2;
+window.aS = .2;
+window.sS = .2;
+window.dS = .2;
+window.tS = 0.1
 window.space = false;
 window.ArrowUp = false;
 window.ArrowRight = false;
@@ -47,6 +47,7 @@ window.stage = {
     sun: {}
 }
 const FOV = 1300
+const TERMINAL_VELOCITY = -.8;
 var Grass = [
     '#33462d', //
     '#435c3a', //
@@ -68,6 +69,8 @@ window.sceneRadius = 150
 window.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, FOV);
 window.camera.touches = new Set()
 window.camera.foot = null;
+window.camera.velocity = new THREE.Vector3(0, 0, 0);
+
 window.camera.sectionTouched = null;
 window.camera.triangleTouched = null;
 window.scene.add(window.camera);
@@ -91,10 +94,9 @@ window.addEventListener('keydown', function(e) {
     } else if (key == 'D') {
         window.d = true;
     } else if (key == ' ') {
-        if (!window.isJumping) {
-            window.isJumping = true;
-            window.jumpVelocity = 0.2; // Adjust the jump velocity as needed
-        }
+        window.isJumping = true;
+        window.jumpVelocity = 0.52;
+
     } else if (key == 'ARROWUP') {
         window.ArrowUp = true;
     } else if (key == 'ARROWDOWN') {
@@ -369,7 +371,8 @@ function TriangleMesh(vertices, a, b, c) {
     triangleGeometry.computeBoundingBox();
 
     const triangleMaterial = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(Math.random(), Math.random(), Math.random()), // Random color for the triangles
+        // color: new THREE.Color(Math.random(), Math.random(), Math.random()), // Random color for the triangles
+        color: 'lawngreen',
         side: THREE.DoubleSide
     });
     const triangleMesh = new THREE.Mesh(triangleGeometry, triangleMaterial);
@@ -398,95 +401,52 @@ function heightAt(x, y, noiseWidth, noiseHeight, perlinNoise) {
     return perlinNoise[noiseY * noiseWidth + noiseX] * 55; // Adjust the multiplier for desired height
 }
 
+
 function generateCanvasTexture(width, height, perlinNoise, noiseWidth, noiseHeight, v0, v1, v2, v3) {
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d');
 
+    const gradientMap = {
+        beach: [{ r: 218, g: 224, b: 201 }, { r: 200, g: 210, b: 180 }],
+        moss: [{ r: 93, g: 183, b: 93 }, { r: 115, g: 200, b: 115 }],
+        grass: [{ r: 35, g: 196, b: 34 }, { r: 189, g: 224, b: 93 }],
+        rock: [{ r: 100, g: 100, b: 100 }, { r: 120, g: 120, b: 120 }],
+        forest: [{ r: 16, g: 87, b: 67 }, { r: 27, g: 167, b: 93 }]
+    };
+
+    function blendColors(color1, color2, blendFactor) {
+        const r = color1.r * (1 - blendFactor) + color2.r * blendFactor;
+        const g = color1.g * (1 - blendFactor) + color2.g * blendFactor;
+        const b = color1.b * (1 - blendFactor) + color2.b * blendFactor;
+        return { r, g, b };
+    }
+
+    function getColor(noiseValue) {
+        if (noiseValue < 0.3) {
+            return blendColors(gradientMap.beach[0], gradientMap.beach[1], Math.random());
+        } else if (noiseValue < 0.4) {
+            return blendColors(gradientMap.moss[0], gradientMap.moss[1], Math.random());
+        } else if (noiseValue < 0.6) {
+            return blendColors(gradientMap.grass[0], gradientMap.grass[1], Math.random());
+        } else if (noiseValue < 0.8) {
+            return blendColors(gradientMap.rock[0], gradientMap.rock[1], Math.random());
+        } else {
+            return blendColors(gradientMap.forest[0], gradientMap.forest[1], Math.random());
+        }
+    }
+
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
             const noiseValue = perlinNoise[y * width + x];
-            let color = { r: 0, g: 0, b: 0 };
-
-            if (noiseValue < 0.3) {
-                // Beach
-                color = { r: 218, g: 224, b: 201 };
-            } else if (noiseValue < 0.4) {
-                // Moss patches
-                color = { r: 93, g: 183, b: 93 };
-
-                if (Math.random() < 0.5) {
-                    color = { r: 115, g: 200, b: 115 };
-                }
-            } else if (noiseValue < 0.6) {
-                // Grass
-                color = { r: 35, g: 196, b: 34 };
-
-                if (Math.random() < 0.5) {
-                    color = { r: 189, g: 224, b: 93 };
-
-                    if (Math.random() < 0.005) {
-                        // Calculate 3D position for the tree
-                        const terrainX = x / width;
-                        const terrainY = y / height;
-                        const heightValue = heightAt(terrainX, terrainY, noiseWidth, noiseHeight, perlinNoise);
-                        const treePos = new THREE.Vector3(
-                            (1 - terrainX) * (1 - terrainY) * v0.x + terrainX * (1 - terrainY) * v1.x + terrainX * terrainY * v2.x + (1 - terrainX) * terrainY * v3.x,
-                            heightValue,
-                            (1 - terrainX) * (1 - terrainY) * v0.z + terrainX * (1 - terrainY) * v1.z + terrainX * terrainY * v2.z + (1 - terrainX) * terrainY * v3.z
-                        );
-
-                        if (treePos.y < (T * 2) * 0.7 && Math.random() < 0.1 && isFlatSurface(x, y, width, height, perlinNoise)) {
-                            CREATE_A_TREE(treePos.x, treePos.y, treePos.z);
-                        }
-                    }
-                }
-            } else if (noiseValue < 0.8) {
-                // Rock faces
-                color = { r: 100, g: 100, b: 100 };
-
-                if (Math.random() < 0.5) {
-                    color = { r: 120, g: 120, b: 120 };
-                }
-
-                if (Math.random() < 0.01) {
-                    // Add rocks to climb
-                    const terrainX = x / width;
-                    const terrainY = y / height;
-                    const heightValue = heightAt(terrainX, terrainY, noiseWidth, noiseHeight, perlinNoise);
-                    const rockPos = new THREE.Vector3(
-                        (1 - terrainX) * (1 - terrainY) * v0.x + terrainX * (1 - terrainY) * v1.x + terrainX * terrainY * v2.x + (1 - terrainX) * terrainY * v3.x,
-                        heightValue,
-                        (1 - terrainX) * (1 - terrainY) * v0.z + terrainX * (1 - terrainY) * v1.z + terrainX * terrainY * v2.z + (1 - terrainX) * terrainY * v3.z
-                    );
-
-                    CREATE_A_ROCK(rockPos.x, rockPos.y, rockPos.z);
-                }
-            } else {
-                // Forest
-                color = { r: 16, g: 87, b: 67 };
-
-                if (Math.random() < 0.5) {
-                    color = { r: 27, g: 167, b: 93 };
-
-                    const terrainX = x / width;
-                    const terrainY = y / height;
-                    const heightValue = heightAt(terrainX, terrainY, noiseWidth, noiseHeight, perlinNoise);
-                    const treePos = new THREE.Vector3(
-                        (1 - terrainX) * (1 - terrainY) * v0.x + terrainX * (1 - terrainY) * v1.x + terrainX * terrainY * v2.x + (1 - terrainX) * terrainY * v3.x,
-                        heightValue,
-                        (1 - terrainX) * (1 - terrainY) * v0.z + terrainX * (1 - terrainY) * v1.z + terrainX * terrainY * v2.z + (1 - terrainX) * terrainY * v3.z
-                    );
-
-                    if (isFlatSurface(x, y, width, height, perlinNoise)) {
-                        CREATE_A_TREE(treePos.x, treePos.y, treePos.z);
-                    }
-                }
-            }
+            const color = getColor(noiseValue);
 
             ctx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
             ctx.fillRect(x, y, 1, 1);
+
+            // Add detailed textures or additional noise if needed
+            // e.g., using ctx.drawImage() to overlay a texture image
         }
     }
 
@@ -583,6 +543,11 @@ function moveMeshAlongNormal(mesh, offset) {
 var logcount = 0
 var lightcount = 0
 function MakeTrianglesFromTerrainSegments(segments, vertices, indices, dom, scene) {
+    var result = {
+        cliffs: [],
+        ground: [],
+        other: []
+    }
     for (let i = 0; i < segments; i++) {
         for (let j = 0; j < segments; j++) {
             let a = i + j * (segments + 1);
@@ -612,27 +577,32 @@ function MakeTrianglesFromTerrainSegments(segments, vertices, indices, dom, scen
                     const slope = t.slope;
                     if (slope > 160) {
                         //console.log('creating a flat ground')
-                        moveMeshAlongNormal(t, -0.05)
-                    
-
+                        moveMeshAlongNormal(t, -0.03)
+                
+                        // t.material.color = 0xffffff
                         scene.add(t);
                         dom.push(t)
 
-                        if (t.triangle.a.y > 20) {
-                            CREATE_A_TREE(t.triangle.a.x, t.triangle.a.y, t.triangle.a.z, 1);
+                        result.ground.push(t.triangle)
+
+                        if (t.triangle.a.y > 20 && Math.random() < 0.5) {
+                            CREATE_A_TREE(t.triangle.a.x - (t.triangle.c.x - t.triangle.a.x) / 2, t.triangle.a.y, t.triangle.a.z, 1);
                         }
 
-                    } else if (slope < 107) {
-                        moveMeshAlongNormal(t, -0.05)
-                        t.material.color.set('turquoise')
 
-                        scene.add(t);
+                    } else if (slope < 107) {
+                        moveMeshAlongNormal(t, -0.03)
+
+
+                        // scene.add(t);
                         dom.push(t)
 
-
+                        result.cliffs.push(t.triangle)
 
                     } else {
                         dom.push(t)
+
+                        result.other.push(t.triangle)
                     }
 
                 });
@@ -641,6 +611,141 @@ function MakeTrianglesFromTerrainSegments(segments, vertices, indices, dom, scen
             }
         }
     }
+
+    clusterResult(result)
+}
+
+// Helper function to check if two triangles share an edge
+function shareEdge(triangle1, triangle2) {
+    const edges1 = [
+        [triangle1.a, triangle1.b],
+        [triangle1.b, triangle1.c],
+        [triangle1.c, triangle1.a]
+    ];
+
+    const edges2 = [
+        [triangle2.a, triangle2.b],
+        [triangle2.b, triangle2.c],
+        [triangle2.c, triangle2.a]
+    ];
+
+    for (let edge1 of edges1) {
+        for (let edge2 of edges2) {
+            if (
+                (edge1[0].equals(edge2[0]) && edge1[1].equals(edge2[1])) ||
+                (edge1[0].equals(edge2[1]) && edge1[1].equals(edge2[0]))
+            ) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Helper function to find connected clusters
+function findClusters(triangles) {
+    const clusters = [];
+    const visited = new Array(triangles.length).fill(false);
+
+    function shareEdge(triangle1, triangle2) {
+        const edges1 = [
+            [triangle1.a, triangle1.b],
+            [triangle1.b, triangle1.c],
+            [triangle1.c, triangle1.a]
+        ];
+        const edges2 = [
+            [triangle2.a, triangle2.b],
+            [triangle2.b, triangle2.c],
+            [triangle2.c, triangle2.a]
+        ];
+        for (let edge1 of edges1) {
+            for (let edge2 of edges2) {
+                if (
+                    (edge1[0].equals(edge2[0]) && edge1[1].equals(edge2[1])) ||
+                    (edge1[0].equals(edge2[1]) && edge1[1].equals(edge2[0]))
+                ) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    function dfs(index, cluster) {
+        visited[index] = true;
+        cluster.push(triangles[index]);
+
+        for (let i = 0; i < triangles.length; i++) {
+            if (!visited[i] && shareEdge(triangles[index], triangles[i])) {
+                dfs(i, cluster);
+            }
+        }
+    }
+
+    for (let i = 0; i < triangles.length; i++) {
+        if (!visited[i]) {
+            const cluster = [];
+            dfs(i, cluster);
+            clusters.push(cluster);
+        }
+    }
+
+    return clusters;
+}
+
+function createBufferGeometryFromCluster(cluster) {
+    const vertices = [];
+    const indices = [];
+    const uvs = [];
+
+    cluster.forEach((triangle, index) => {
+        const startIndex = vertices.length / 3;
+        vertices.push(
+            triangle.a.x, triangle.a.y, triangle.a.z,
+            triangle.b.x, triangle.b.y, triangle.b.z,
+            triangle.c.x, triangle.c.y, triangle.c.z
+        );
+        uvs.push(
+            0, 0,
+            1, 0,
+            1, 1
+        );
+        indices.push(startIndex, startIndex + 1, startIndex + 2);
+    });
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+
+    return geometry;
+}
+
+
+// Main function to process the result object and create geometries for clusters
+function clusterResult(result) {
+    var rockTexture = new THREE.TextureLoader().load("/random-image?tag=wall")
+    // rockTexture.wrapS = THREE.RepeatWrapping;
+    // rockTexture.wrapT = THREE.RepeatWrapping;
+    // rockTexture.repeat.set(2, 2); // Adjust the repeat value to control the texture scaling
+    
+    // Process cliff triangles
+    const cliffClusters = findClusters(result.cliffs);
+    cliffClusters.forEach(cluster => {
+        const geometry = createBufferGeometryFromCluster(cluster);
+        const material = new THREE.MeshStandardMaterial({ 
+            // map: rockTexture,
+            color: Math.random () < 0.5 ? 'gray' : 'darkgray',
+            side: THREE.DoubleSide 
+        });
+            
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.receiveShadow = true;
+        mesh.castShadow = true;
+        moveMeshAlongNormal(mesh, -0.03);
+        scene.add(mesh);
+    });
 }
 
 var dimFairyLight = new THREE.AmbientLight(new THREE.Color('turquoise'), 0.05);
@@ -727,8 +832,7 @@ HAS COLLISION:   ${camera.hasCollision}  ${ camera.hasCollision ? `
     ${camera.triangleTouched.b.x}, ${camera.triangleTouched.b.y}, ${camera.triangleTouched.b.z}
     ${camera.triangleTouched.c.x}, ${camera.triangleTouched.c.y}, ${camera.triangleTouched.c.z}
 ` : ''}
-SUN ANGLE: ${stage.sunAngle}
-SUN POSITION: ${stage.sun.position.x}, ${stage.sun.position.y}, ${stage.sun.position.z}
+JUMPING: ${window.isJumping}
 SECTION TOUCHED: <table style="overflow: auto;wmax-width:100vw;">
 	<tr>
 		<th>uuid</th>
@@ -791,28 +895,33 @@ window.Animate = function() {
 
         combinedMovement.add(forwardMovement).add(rightMovement);
     }
+
     // Handle jump and gravity
     if (window.isJumping) {
         window.camera.position.y += window.jumpVelocity;
-        window.jumpVelocity -= 0.01; // Adjust the gravity effect on jump
+        window.jumpVelocity -= 0.03; // Adjust the gravity effect on jump
 
-        if (window.jumpVelocity < -0.05) {
+        // Check for collision with ground using raycasting
+        const raycaster = new THREE.Raycaster(window.camera.position, new THREE.Vector3(0, -1, 0));
+        const intersects = raycaster.intersectObject(window.terrain, true);
+
+        if (intersects.length > 0 && intersects[0].distance < 1) { // Adjust distance as needed
+            const intersection = intersects[0];
             window.isJumping = false;
-        } else {
-            // Check for collision with ground using raycasting
-            const raycaster = new THREE.Raycaster(window.camera.position, new THREE.Vector3(0, -1, 0));
-            const intersects = raycaster.intersectObject(window.terrain, true);
-
-            if (intersects.length > 0 && intersects[0].distance < 1) { // Adjust distance as needed
-                const intersection = intersects[0];
-                window.isJumping = false;
-                window.jumpVelocity = 0;
-                window.camera.position.y = intersection.point.y + 1; // Adjust for the height of the triangle surface
-            }
+            window.jumpVelocity = 0;
+            window.camera.position.y = intersection.point.y + 1; // Adjust for the height of the triangle surface
         }
     } else {
         // Gravity
-        window.camera.position.y += -0.09;
+        window.camera.velocity.y += -0.01; // Gravity effect
+
+        // Limit falling speed to terminal velocity
+        if (window.camera.velocity.y < TERMINAL_VELOCITY) {
+            window.camera.velocity.y = TERMINAL_VELOCITY;
+        }
+
+        window.camera.position.y += window.camera.velocity.y;
+
         // Check for ground collision using raycasting
         const raycaster = new THREE.Raycaster(window.camera.position, new THREE.Vector3(0, -1, 0));
         const intersects = raycaster.intersectObject(window.terrain, true);
@@ -820,6 +929,7 @@ window.Animate = function() {
         if (intersects.length > 0 && intersects[0].distance < 1) { // Adjust distance as needed
             const intersection = intersects[0];
             window.camera.position.y = intersection.point.y + 1; // Adjust for the height of the triangle surface
+            window.camera.velocity.y = 0; // Reset vertical velocity upon collision
         }
     }
 
@@ -835,11 +945,11 @@ window.Animate = function() {
         var section = GetMeshForTriangle(collisionDetected);
         camera.sectionTouched = section;
         camera.touches.add(section.mesh);
-        scene.add(section.mesh);
+        // scene.add(section.mesh);
 
         // Adjust position to stay on top of the triangle
         if (window.camera.position.y < section.mesh.position.y + 1) {
-            window.camera.position.y = section.mesh.position.y + 1
+            window.camera.position.y = section.mesh.position.y + 1;
         }
 
         if (combinedMovement.length() > 0) {
@@ -860,7 +970,6 @@ window.Animate = function() {
         camera.hasCollision = false;
         window.camera.position.add(combinedMovement);
     }
-
 
     // Handle rotation
     if (window.ArrowUp || window.ArrowDown) {
@@ -887,13 +996,9 @@ window.Animate = function() {
         camera.quaternion.multiplyQuaternions(quaternionY, window.camera.quaternion);
     }
 
-
-
-
     // Nature animations....
-
-    animateClouds()
-    AnimateSky()
+    animateClouds();
+    AnimateSky();
 
     if (camera.position.y < 0) {
         if (oceanBackground == null) {
@@ -904,14 +1009,12 @@ window.Animate = function() {
     } else {
         if (oceanBackground !== null) {
             oceanBackground.remove();
-            oceanBackground = null
+            oceanBackground = null;
         }
     }
 
-
     window.renderer.render(window.scene, window.camera);
-}
-
+};
 
 
 
@@ -1222,8 +1325,8 @@ function createSky() {
     scene.add(sky)
 }
 
-createDome()
-// createSky()
+// createDome()
+createSky()
 
 function AnimateSky() {
   var T2 = T * 2;
@@ -1267,7 +1370,7 @@ function AnimateSky() {
         stage.Sky[i].material.opacity = Math.pow(intensity, 3)
       }
       // if (distanceToSun > maxDistance) stage.Sky[i].material.opacity = Math.sqrt(opacity, 3);
-      // stage.Sky[i].lookAt(camera.position.x, camera.position.y, camera.position.z);
+      stage.Sky[i].lookAt(camera.position.x, camera.position.y, camera.position.z);
   }
 
 
@@ -1339,7 +1442,13 @@ function animateClouds() {
 // setInterval(createClouds, 3000);
 
 
-
+function getRandomShadeOfGreen() {
+    // Generate a random green value between 0 and 255
+    const greenValue = Math.floor(Math.random() * 256);
+    // Create a new THREE.Color object with the random green value
+    const color = new THREE.Color(Math.random() < 0.05 ? randomInRange(0, 0.5) : 0, greenValue / 255, Math.random() < 0.5 ? randomInRange(0, 0.1) : 0);
+    return color;
+}
 
 function CREATE_A_TREE(x, y, z, alternate) {
     var trunkHeight = randomInRange(4, 6)
@@ -1347,6 +1456,8 @@ function CREATE_A_TREE(x, y, z, alternate) {
     var rr = alternate ? randomInRange(.01, .1) : randomInRange(.1, .5)
     var trunkCurve = []
     var trunkRadius = []
+
+    const barkTexture = new THREE.TextureLoader().load("/tree1/bark.jpg")
 
     var zS = z
     var xS = x
@@ -1372,10 +1483,11 @@ function CREATE_A_TREE(x, y, z, alternate) {
 
     // Default foliage (spherical)
     var foliageRadius = randomInRange(1, 1.5)
-
     const sphereGeometry = new THREE.SphereGeometry(foliageRadius, 10, 10);
     let sphereMaterial = new THREE.MeshStandardMaterial({
-        color: 'lawngreen'
+        color: getRandomShadeOfGreen(),
+        transparent: true,
+        opacity: randomInRange(0.7, 1)
     });
     
     const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
@@ -1406,16 +1518,16 @@ function CREATE_A_TREE(x, y, z, alternate) {
     // Create the tube geometry
     const tubeGeometry = new THREE.TubeGeometry(path, segments, trunkBaseRadius);
 
-    var colors = ['#964B00', '#654321', '#CD853F', '#F5F5F5'];
-    var color = colors[Math.floor(Math.random() * colors.length)]
-    const material = new THREE.MeshStandardMaterial({ 
-        color: color
+    const material = new THREE.MeshBasicMaterial({ 
+        map: barkTexture,
+        // color: 'red',
+        side: THREE.DoubleSide
     });
 
     // Create the mesh
     const tubeMesh = new THREE.Mesh(tubeGeometry, material);
-    tubeMesh.castShadow = true
-    tubeMesh.receiveShadow = true
+    // tubeMesh.castShadow = true
+    // tubeMesh.receiveShadow = true
     tubeMesh.position.y -= 2
 
     // Add the mesh to the scene

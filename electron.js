@@ -16,7 +16,7 @@ const connection = mysql.createConnection({
 });
 
 const dir = (filename) => path.resolve(filename);
-
+var ii = 0
 expressApp
   .use(express.json())
   .use(express.urlencoded({ extended: true }))
@@ -32,10 +32,25 @@ expressApp
   .get('/housing', (req, res) => {
     res.sendFile(path.join(__dirname, 'buildings.js'))
   })
+  .get('/random-image', (req, res) => {
+    var tag = req.query.tag;
+    connection.query(`
+        SELECT image from fun.images i
+        where i.tag = '${tag}'
+        order by rand() limit 1`, (err, results) => {
+          if (results && results.length) {
+            res.end(results[0].image)
+          }
+    });
+  })
+  .get('/tree1/:file', (req, res) => {
+    res.writeHead(200, { 'Content-Type' : 'image/jpeg'})
+    return res.end(path.join(__dirname, 'Tree1', req.params.file))
+  })
   .get('/moss', (req, res) => {
+    res.writeHead(200, { 'Content-Type' : 'image/jpeg'})
     const mossFilepath = path.join(__dirname, 'moss.jpg')
-    console.log('moss....', mossFilepath)
-    return res.sendFile(mossFilepath);
+    return res.end(fs.readFileSync(mossFilepath));
   })
   .get('/image-tags', (req, res) => {
     connection.query(`
