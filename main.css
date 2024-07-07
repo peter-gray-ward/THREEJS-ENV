@@ -11,6 +11,18 @@ html, body {
 
 body {
 	display: flex;
+	overflow: hidden;
+}
+
+#uw {
+	position: absolute;
+	width: 100vw;
+	height: 100vh;
+	background: royalblue;
+	opacity: 0.5;
+	left: 0;
+	top: 100vh;
+	z-index: 9999;
 }
 
 #view {

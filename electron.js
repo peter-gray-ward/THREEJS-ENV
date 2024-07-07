@@ -25,6 +25,18 @@ expressApp
     var fp = path.join(__dirname, 'node_modules/three/build/three.module.js')
     res.sendFile(fp)
   })
+  .get('/water', (req, res) => {
+    var fp = path.join(__dirname, 'node_modules/three/examples/jsm/objects/Water.js')
+    res.sendFile(fp)
+  })
+  .get('/waternormals', (req, res) => {
+    var fp = path.join(__dirname, 'waternormals.jpg')
+    res.sendFile(fp)
+  })
+  .get('/sky', (req, res) => {
+    var fp = path.join(__dirname, 'node_modules/three/examples/jsm/objects/Sky.js')
+    res.sendFile(fp)
+  })
   .get('/perlin-noise', (req, res) => {
     var fp = path.join(__dirname, 'node_modules/perlin-noise/index.js')
     res.sendFile(fp)

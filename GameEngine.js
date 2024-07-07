@@ -2,6 +2,9 @@ import * as THREE from '/three';
 import * as PERLIN from '/perlin-noise';
 import * as HOUSING from '/housing';
 import Delaunator from '/delaunator';
+import { Water } from '/water'
+import { Sky } from '/sky'
+
 
 function getX(point) {
     return point.x;
@@ -20,10 +23,10 @@ window.w = false;
 window.a = false;
 window.s = false;
 window.d = false;
-window.wS = .2;
-window.aS = .2;
-window.sS = .2;
-window.dS = .2;
+window.wS = .1;
+window.aS = .05;
+window.sS = .05
+window.dS = .05;
 window.tS = 0.1
 window.shift = false
 window.space = false;
@@ -48,7 +51,7 @@ window.stage = {
     sun: {}
 }
 const FOV = 1300
-const TERMINAL_VELOCITY = -.8;
+const TERMINAL_VELOCITY = -.5;
 var Grass = [
     '#33462d', //
     '#435c3a', //
@@ -318,47 +321,6 @@ p.style.overflow = 'auto';
 p.style.maxHeight = '100vh';
 p.style.padding = '0.15rem 1rem'
 
-function Sun() {
-	var pointLight = new THREE.DirectionalLight(0xfffefe, 5);
-
-	pointLight.castShadow = true;
-	var halfSize = 1000 * 2;
-	pointLight.shadow.camera.left = -halfSize;
-	pointLight.shadow.camera.right = halfSize;
-	pointLight.shadow.camera.top = halfSize;
-	pointLight.shadow.camera.bottom = -halfSize;
-
-    var orb = new THREE.Mesh(
-        new THREE.SphereGeometry(3, 100, 100),
-        new THREE.MeshBasicMaterial({ color: 0xfffefe })
-    );
-
-    stage.sun = pointLight
-    stage.orb = orb;
-	pointLight.position.set(T * 3, T * 3, 0)
-    pointLight.lookAt(origin);
-    scene.add(stage.orb)
-    scene.add(pointLight)
-
-    for (var i = 0; i < 1000; i++) {
-        var y = randomInRange(sceneRadius, sceneRadius * 4);
-        var x = randomInRange(-sceneRadius * 10, sceneRadius * 10)
-        var z = randomInRange(-sceneRadius * 10, sceneRadius * 10)
-
-
-        if (x < sceneRadius && x > -sceneRadius && z < sceneRadius && z > -sceneRadius) {
-          y = randomInRange(-100, -50)
-        }
-        var radius = new THREE.Vector3(x,y,z).distanceTo(origin.position) / (sceneRadius * 3) * randomInRange(.1, 1)
-        var star = new THREE.Mesh(new THREE.SphereGeometry(radius, 5, 5), new THREE.MeshBasicMaterial({color:0xffffff}));
-        star.position.set(x,y,z)
-
-        var dist = star.position.distanceTo(origin.position)
-        if (dist > sceneRadius * 2) scene.add(star);
-
-    }
-
-}
 
 function TriangleMesh(vertices, a, b, c) {
     const triangleGeometry = new THREE.BufferGeometry();
@@ -596,7 +558,7 @@ function MakeTrianglesFromTerrainSegments(segments, vertices, indices, dom, scen
                         }
 
                     } else if (slope < 107) {
-                        moveMeshAlongNormal(t, -0.03)
+                        moveMeshAlongNormal(t, -0.05)
 
                         t.material.color.set(new THREE.Color(Math.random(),Math.random(),Math.random()))
                         t.climbable = false
@@ -845,6 +807,7 @@ HAS COLLISION:   ${camera.hasCollision}  ${ camera.hasCollision ? `
 ` : ''}
 JUMPING: ${window.isJumping}
 SLIDING: ${window.sliding}
+
 SECTION TOUCHED: <table style="overflow: auto;wmax-width:100vw;">
 	<tr>
 		<th>climbable</th>
@@ -872,7 +835,7 @@ SECTION TOUCHED: <table style="overflow: auto;wmax-width:100vw;">
 `
 }
 
-
+var uw = document.getElementById('uw')
 
 window.Animate = function() {
     window.requestAnimationFrame(Animate);
@@ -1026,8 +989,9 @@ window.Animate = function() {
     }
 
     // Nature animations....
-    animateClouds();
-    AnimateSky();
+    // animateClouds();
+    window.sky.orbitSun(0.1)
+
 
     if (camera.position.y < 0) {
         if (oceanBackground == null) {
@@ -1077,205 +1041,154 @@ window.terrain = Terrain(T,
     { x: -T, y: 0, z: -T },
     100
 )
-Sun()
-Animate();
+// Sun()
 
 
+class CustomWater extends Water {
+    constructor(geometry, options, T) {
+        super(geometry, options);
+        this.T = T;
+        this.material.onBeforeCompile = (shader) => {
+            shader.uniforms.T = { value: T };
 
+            shader.vertexShader = `
+                uniform float T;
+                ${shader.vertexShader}
+            `.replace(
+                `#include <begin_vertex>`,
+                `#include <begin_vertex>
+                if (abs(position.x) < T && abs(position.z) < T) {
+                    transformed.y = 0.0;
+                }`
+            );
+        };
+    }
+}
 
 class Ocean {
-    constructor(radius = 550, amplitude = 0.09) {
+    constructor(radius = 550, amplitude = 0.09, T = 50) {
         this.radius = radius;
         this.amplitude = amplitude;
+        this.T = T;
         this.segments = 1000;
         this.oceanMesh = null;
-        this.heightMap = [];
-        this.initialYPositions = [];
-        this.currentWavePositions = [];
         this.clock = new THREE.Clock();
         this.init();
     }
 
     init() {
         this.MakeOcean();
-        this.storeInitialYPositions();
         this.WaveOcean();
-        // this.EbbOcean();
-    }
-
-    _MakeVerticesWithRandomHorizontalAdjustments(segments, v0, v1, v2, v3, negY = -0.05, posY = 0.09, options) {
-        let vertices = [];
-        let indices = [];
-        let uvs = [];
-        let map = {};
-        this.heightMap = Array.from(Array(segments + 1), () => new Array(segments + 1));
-
-
-        for (let i = 0; i <= segments; i++) {
-            for (let j = 0; j <= segments; j++) {
-                let x = (1 - i / segments) * ((1 - j / segments) * v0.x + (j / segments) * v3.x) + 
-                        (i / segments) * ((1 - j / segments) * v1.x + (j / segments) * v2.x);
-                let z = (1 - i / segments) * ((1 - j / segments) * v0.z + (j / segments) * v3.z) + 
-                        (i / segments) * ((1 - j / segments) * v1.z + (j / segments) * v2.z);
-                let y = (1 - i / segments) * ((1 - j / segments) * v0.y + (j / segments) * v3.y) + 
-                        (i / segments) * ((1 - j / segments) * v1.y + (j / segments) * v2.y);
-                y += randomInRange(negY, posY)
-                vertices.push(x, y, z);
-                uvs.push(i / segments, j / segments);
-                map[Math.round(x) + '_' + Math.round(z)] = y;
-                this.heightMap[i][j] = y;
-
-                
-            }
-        }
-
-        for (let i = 0; i < segments; i++) {
-            for (let j = 0; j < segments; j++) {
-                let a = i * (segments + 1) + j;
-                let b = i * (segments + 1) + (j + 1);
-                let c = (i + 1) * (segments + 1) + (j + 1);
-                let d = (i + 1) * (segments + 1) + j;
-                indices.push(a, b, d);
-                indices.push(b, c, d);
-            }
-        }
-
-        return { vertices, indices, uvs, map };
     }
 
     MakeOcean() {
-        var radius = this.radius;
-        var { vertices, indices, uvs, map } = this._MakeVerticesWithRandomHorizontalAdjustments(
-            this.segments,
-            new THREE.Vector3(-radius, 0, -radius),
-            new THREE.Vector3(-radius, 0, radius),
-            new THREE.Vector3(radius, 0, radius),
-            new THREE.Vector3(radius, 0, -radius),
-            0,
-            0,
-            {}
+        const waterGeometry = new THREE.PlaneGeometry(this.radius * 2, this.radius * 2, this.segments, this.segments);
+
+        const water = new CustomWater(
+            waterGeometry,
+            {
+                textureWidth: 512,
+                textureHeight: 512,
+                waterNormals: new THREE.TextureLoader().load('/waternormals', function (texture) {
+                    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+                }),
+                alpha: 1.0,
+                sunDirection: new THREE.Vector3(),
+                sunColor: 0xffffff,
+                waterColor: 'royalblue',
+                distortionScale: 3.7,
+                fog: scene.fog !== undefined
+            },
+            this.T
         );
 
-        var planeGeometry = new THREE.BufferGeometry();
-        planeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        planeGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-        planeGeometry.setIndex(indices);
-        planeGeometry.computeVertexNormals();
-        planeGeometry.computeBoundingBox();
-        planeGeometry.boundingBox.min.y -= 100;
-        // planeGeometry.boundingBox.max.y;
-
-        var material = new THREE.MeshStandardMaterial({ 
-            color: 'royalblue',
-            map: new THREE.TextureLoader().load("/image?id=572a9275-377c-4e52-be7c-27600a2d4eaf"),
-            side: THREE.BackSide,
-            opacity: 0.98,
-            bumpScale: 0,
-            transparent: true,
-            // wireframe: true
-        });
-
-        this.oceanMesh = new THREE.Mesh(planeGeometry, material);
-        this.oceanMesh.name = "touchable::ocean";
-        this.oceanMesh.castShadow = true;
-        this.oceanMesh.receiveShadow = true;
-
-        this.oceanMesh.surface = map;
-        this.oceanMesh.position.set(0,20,0);
-
-        window.ocean = this.oceanMesh;
+        water.rotation.x = -Math.PI / 2;
+        water.position.y = 20;
+        this.oceanMesh = water;
 
         scene.add(this.oceanMesh);
     }
 
-    storeInitialYPositions() {
-        const positions = this.oceanMesh.geometry.attributes.position.array;
-        for (let i = 0; i < positions.length; i += 3) {
-            this.initialYPositions.push(positions[i + 1]);
-        }
-    }
-
     WaveOcean() {
-      const positions = this.oceanMesh.geometry.attributes.position.array;
-      const time = this.clock.getElapsedTime();
-      const frequency = 1.5;
-      const amplitude = this.amplitude;
-      const segments = this.segments;
-      const segmentSize = (this.radius * 2) / segments;
-
-      for (let i = 0; i <= segments; i++) {
-          for (let j = 0; j <= segments; j++) {
-              const index = (i * (segments + 1) + j) * 3;
-              const x = positions[index];
-              const z = positions[index + 2];
+        // Adjust the time increment to slow down the water movement
+        this.oceanMesh.material.uniforms['time'].value += 1.0 / 600.0; // Slower time increment
 
 
-              
-              positions[index + 1] = this.initialYPositions[index / 3] + Math.sin(frequency * (x + time)) * amplitude * Math.sin(frequency * (z + time));
-
-              // Update the height map
-              this.heightMap[i][j] = positions[index + 1];
-          }
-      }
-
-      this.oceanMesh.geometry.attributes.position.needsUpdate = true;
-      requestAnimationFrame(this.WaveOcean.bind(this));
-    }
-
-    EbbOcean() {
-      const positions = this.oceanMesh.geometry.attributes.position.array;
-      const time = this.clock.getElapsedTime();
-      const waveFrequency = 2.0; // Frequency of the temporary wave
-      const waveAmplitude = 0.1; // Amplitude of the temporary wave
-
-      // Calculate temporary wave positions
-      for (let i = 0; i < this.initialYPositions.length; i++) {
-          const phaseShift = i * 0.1; // Adjust this value for phase shift
-          const wavePosition = Math.sin(waveFrequency * (time + phaseShift)) * waveAmplitude;
-          this.currentWavePositions[i] = wavePosition;
-      }
-
-      // Apply temporary wave to ocean mesh
-      for (let i = 0; i < positions.length; i += 3) {
-          positions[i + 1] = this.initialYPositions[i / 3] + this.currentWavePositions[i / 3];
-      }
-
-      this.oceanMesh.geometry.attributes.position.needsUpdate = true;
-      requestAnimationFrame(this.EbbOcean.bind(this));
-    }
-
-    getHeightAtPosition(x, z) {
-        const segmentSize = (this.radius * 2) / this.segments;
-        const gridX = Math.floor((x + this.radius) / segmentSize);
-        const gridZ = Math.floor((z + this.radius) / segmentSize);
-
-        // Ensure the position is within the height map bounds
-        if (gridX < 0 || gridX >= this.segments || gridZ < 0 || gridZ >= this.segments) {
-            return 0; // Return 0 if out of bounds, adjust as needed
-        }
-
-        // Bilinear interpolation to get the height at the exact position
-        const x1 = gridX * segmentSize - this.radius;
-        const x2 = (gridX + 1) * segmentSize - this.radius;
-        const z1 = gridZ * segmentSize - this.radius;
-        const z2 = (gridZ + 1) * segmentSize - this.radius;
-
-        const Q11 = this.heightMap[gridX][gridZ];
-        const Q12 = this.heightMap[gridX][gridZ + 1];
-        const Q21 = this.heightMap[gridX + 1][gridZ];
-        const Q22 = this.heightMap[gridX + 1][gridZ + 1];
-
-        const height = (Q11 * (x2 - x) * (z2 - z) +
-                        Q21 * (x - x1) * (z2 - z) +
-                        Q12 * (x2 - x) * (z - z1) +
-                        Q22 * (x - x1) * (z - z1)) / ((x2 - x1) * (z2 - z1));
-
-        return height;
+        this.oceanMesh.geometry.attributes.position.needsUpdate = true;
+        requestAnimationFrame(this.WaveOcean.bind(this));
     }
 }
 
 
+
+
 new Ocean()
+
+class SkyClass {
+    constructor() {
+        this.sky = new Sky();
+        this.sky.scale.setScalar(10000);
+        this.sun = new THREE.Vector3();
+        this.directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        this.directionalLight.castShadow = true;
+        this.directionalLight.shadow.mapSize.width = 2048;
+        this.directionalLight.shadow.mapSize.height = 2048;
+        scene.add(this.directionalLight);
+        this.init();
+    }
+
+    init() {
+        // Add sky to scene
+        scene.add(this.sky);
+
+        // Sky shader settings
+        this.effectController = {
+            turbidity: 10,
+            rayleigh: 1.0,
+            mieCoefficient: 0.001, // Reduced mie coefficient
+            mieDirectionalG: 0.7, // Reduced mie directional g
+            elevation: 2,
+            azimuth: 180,
+            exposure: 0.5 // Reduced exposure
+        };
+
+        this.updateSky();
+    }
+
+    updateSky() {
+        const uniforms = this.sky.material.uniforms;
+        uniforms['turbidity'].value = this.effectController.turbidity;
+        uniforms['rayleigh'].value = this.effectController.rayleigh;
+        uniforms['mieCoefficient'].value = this.effectController.mieCoefficient;
+        uniforms['mieDirectionalG'].value = this.effectController.mieDirectionalG;
+
+        const phi = THREE.MathUtils.degToRad(90 - this.effectController.elevation);
+        const theta = THREE.MathUtils.degToRad(this.effectController.azimuth);
+
+        this.sun.setFromSphericalCoords(1, phi, theta);
+        uniforms['sunPosition'].value.copy(this.sun);
+
+        renderer.toneMappingExposure = this.effectController.exposure;
+
+        // Update the directional light position to match the sun
+        this.directionalLight.position.copy(this.sun).multiplyScalar(1000); // Adjust the multiplier as needed
+        this.directionalLight.target.position.set(0, 0, 0);
+        this.directionalLight.updateMatrixWorld();
+    }
+
+    orbitSun(delta) {
+        this.effectController.elevation += delta;
+        if (this.effectController.elevation > T) {
+            this.effectController.elevation = 90;
+        } else if (this.effectController.elevation < 0) {
+            this.effectController.elevation = 0;
+        }
+        this.updateSky();
+    }
+}
+
+
+
 
 
 function createDome() {
@@ -1359,64 +1272,10 @@ function createSky() {
     scene.add(sky)
 }
 
-createDome()
+// createDome()
+window.sky = new SkyClass()
 // createSky()
 
-function AnimateSky() {
-  var T2 = T * 2;
-  var T3 = sceneRadius * 2.5
-  var x = T3 * Math.cos(stage.sunAngle);
-  var y = T3 * Math.sin(stage.sunAngle);
-
-  stage.sun.position.set(x, y, stage.sun.position.z);
-  stage.orb.position.set(x, y, stage.sun.position.z);
-
-  for (var i = 0; i < stage.Sky.length; i++) {
-      var distanceToSun = stage.Sky[i].position.distanceTo(stage.sun.position);
-
-      if (distanceToSun < sunMinDist) sunMinDist = distanceToSun
-      if (distanceToSun > sunMaxDist) sunMaxDist = distanceToSun
-
-
-      // Calculate intensity based on distance
-      var intensity = 1 - (distanceToSun / sunMaxDist);
-
-      // Ensure intensity stays within valid range (0 to 1)
-      intensity = Math.max(0, Math.min(1, intensity));
-
-      // Define the colors for the gradient (white for close, dark blue for far)
-      var colorNear = new THREE.Color('#4287f5');
-      var colorFar = new THREE.Color('#4287f5');
-
-      // Optionally, adjust opacity further to smooth the transition
-      
-
-      // Interpolate between the colors based on intensity
-      var color = new THREE.Color().lerpColors(colorFar, colorNear, intensity);
-
-      // Update the color of the plane's material
-      stage.Sky[i].material.color.copy(color);
-      stage.Sky[i].material.needsUpdate = true; // Ensure material update
-      // Optionally, adjust material opacity based on intensity for a smoother transition
-        
-      if (stage.sun.position.y > 0) {
-        intensity = 1
-    }
-
-
-        stage.Sky[i].material.opacity = Math.pow(intensity, 2)
-      
-      // if (distanceToSun > maxDistance) stage.Sky[i].material.opacity = Math.sqrt(opacity, 3);
-      stage.Sky[i].lookAt(camera.position.x, camera.position.y, camera.position.z);
-  }
-
-
-  stage.sunAngle += .003;
-  
-  if (stage.sunAngle > Math.PI * 2) {
-    stage.sunAngle = 0
-  }
-}
 
 
 
@@ -1488,8 +1347,8 @@ function getRandomShadeOfGreen() {
 }
 
 function CREATE_A_TREE(x, y, z, alternate) {
-    var trunkHeight = randomInRange(4, 6)
-    var trunkBaseRadius = randomInRange(.01, .2)
+    var trunkHeight = randomInRange(5, 11)
+    var trunkBaseRadius = randomInRange(.05, .2)
     var rr = alternate ? randomInRange(.01, .1) : randomInRange(.1, .5)
     var trunkCurve = []
     var trunkRadius = []
@@ -1519,7 +1378,7 @@ function CREATE_A_TREE(x, y, z, alternate) {
     }
 
     // Default foliage (spherical)
-    var foliageRadius = randomInRange(1, 1.5)
+    var foliageRadius = randomInRange(trunkHeight * .2, 1.5)
     const sphereGeometry = new THREE.SphereGeometry(foliageRadius, 10, 10);
     let sphereMaterial = new THREE.MeshStandardMaterial({
         color: getRandomShadeOfGreen(),
@@ -1577,3 +1436,4 @@ Watch()
 
 
 
+Animate();
