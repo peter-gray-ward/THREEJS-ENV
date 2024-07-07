@@ -10,11 +10,10 @@ function getX(point) {
 function getY(point) {
     return point.y;
 }
-window.Delaunator = Delaunator
 
 window.lightmap = []
 
-var T = 64
+var T = 70
 window.THREE = THREE;
 window.w = false;
 window.a = false;
@@ -324,13 +323,13 @@ function Sun() {
 	pointLight.shadow.camera.bottom = -halfSize;
 
     var orb = new THREE.Mesh(
-        new THREE.SphereGeometry(1, 100, 100),
+        new THREE.SphereGeometry(3, 100, 100),
         new THREE.MeshBasicMaterial({ color: 0xfffefe })
     );
 
     stage.sun = pointLight
     stage.orb = orb;
-	pointLight.position.set(T * 2, T * 2, 0)
+	pointLight.position.set(T * 3, T * 3, 0)
     pointLight.lookAt(origin);
     scene.add(stage.orb)
     scene.add(pointLight)
@@ -585,15 +584,15 @@ function MakeTrianglesFromTerrainSegments(segments, vertices, indices, dom, scen
 
                         result.ground.push(t.triangle)
 
-                        if (t.triangle.a.y > 20 && Math.random() < 0.5) {
-                            CREATE_A_TREE(t.triangle.a.x - (t.triangle.c.x - t.triangle.a.x) / 2, t.triangle.a.y, t.triangle.a.z, 1);
+                        if (t.triangle.a.y > 20) {
+                            CREATE_A_TREE(t.triangle.a.x, t.triangle.a.y, t.triangle.a.z, 1);
                         }
 
 
                     } else if (slope < 107) {
                         moveMeshAlongNormal(t, -0.03)
 
-
+                        t.material.color.set(new THREE.Color(Math.random(),Math.random(),Math.random()))
                         // scene.add(t);
                         dom.push(t)
 
@@ -603,6 +602,8 @@ function MakeTrianglesFromTerrainSegments(segments, vertices, indices, dom, scen
                         dom.push(t)
 
                         result.other.push(t.triangle)
+
+                    
                     }
 
                 });
@@ -734,16 +735,17 @@ function clusterResult(result) {
     const cliffClusters = findClusters(result.cliffs);
     cliffClusters.forEach(cluster => {
         const geometry = createBufferGeometryFromCluster(cluster);
-        const material = new THREE.MeshStandardMaterial({ 
+        const material = new THREE.MeshBasicMaterial({ 
             // map: rockTexture,
-            color: Math.random () < 0.5 ? 'gray' : 'darkgray',
-            side: THREE.DoubleSide 
+            color: new THREE.Color(Math.random(),Math.random(),Math.random()),
+            side: THREE.DoubleSide ,
+            wireframe: true
         });
             
         const mesh = new THREE.Mesh(geometry, material);
         mesh.receiveShadow = true;
         mesh.castShadow = true;
-        moveMeshAlongNormal(mesh, -0.03);
+        moveMeshAlongNormal(mesh, -0.01);
         scene.add(mesh);
     });
 }
@@ -1055,7 +1057,7 @@ Animate();
 
 
 class Ocean {
-    constructor(radius = 350, amplitude = 0.09) {
+    constructor(radius = 550, amplitude = 0.09) {
         this.radius = radius;
         this.amplitude = amplitude;
         this.segments = 1000;
@@ -1247,10 +1249,13 @@ class Ocean {
 
 
 new Ocean()
+
+
 function createDome() {
-  var gridSize = 100;
+  var gridSize = 20;
   var planeSize = 120; // Adjust this size to your preference
   var radius = sceneRadius * 3; // Adjust this radius for the dome's curvature
+  var maxdist = 0
 
   for (var i = 0; i < gridSize; i++) {
     for (var j = 0; j < gridSize; j++) {
@@ -1265,15 +1270,17 @@ function createDome() {
 
       var planeGeometry = new THREE.PlaneGeometry(planeSize, planeSize);
       var planeMaterial = new THREE.MeshBasicMaterial({
-        color: stage.sunAngle > Math.PI ? 0x495a75 : "white",
+        color: stage.sunAngle > Math.PI ? 0xf95a75 : "white",
         transparent: true,
-        opacity: phi > Math.PI ? 0 : 0.5
+        opacity: 1
       });
 
       var plane = new THREE.Mesh(planeGeometry, planeMaterial);
       plane.position.set(x, y - sceneRadius * .6, z);
       plane.lookAt(camera.position.x, camera.position.y, camera.position.z);
       // plane.rotation.z = randomInRange(0, Math.PI * 2)
+
+      if (z > maxdist) z = maxdist
 
       stage.Sky.push(plane);
       scene.add(plane);
@@ -1325,13 +1332,14 @@ function createSky() {
     scene.add(sky)
 }
 
-// createDome()
-createSky()
+createDome()
+// createSky()
 
 function AnimateSky() {
   var T2 = T * 2;
-  var x = T2 * Math.cos(stage.sunAngle);
-  var y = T2 * Math.sin(stage.sunAngle);
+  var T3 = sceneRadius * 2.5
+  var x = T3 * Math.cos(stage.sunAngle);
+  var y = T3 * Math.sin(stage.sunAngle);
 
   stage.sun.position.set(x, y, stage.sun.position.z);
   stage.orb.position.set(x, y, stage.sun.position.z);
@@ -1351,7 +1359,7 @@ function AnimateSky() {
 
       // Define the colors for the gradient (white for close, dark blue for far)
       var colorNear = new THREE.Color('#4287f5');
-      var colorFar = new THREE.Color('darkblue');
+      var colorFar = new THREE.Color('#4287f5');
 
       // Optionally, adjust opacity further to smooth the transition
       
@@ -1365,10 +1373,12 @@ function AnimateSky() {
       // Optionally, adjust material opacity based on intensity for a smoother transition
         
       if (stage.sun.position.y > 0) {
-        stage.Sky[i].material.opacity = 1
-      } else {
-        stage.Sky[i].material.opacity = Math.pow(intensity, 3)
-      }
+        intensity = 1
+    }
+
+
+        stage.Sky[i].material.opacity = Math.pow(intensity, 2)
+      
       // if (distanceToSun > maxDistance) stage.Sky[i].material.opacity = Math.sqrt(opacity, 3);
       stage.Sky[i].lookAt(camera.position.x, camera.position.y, camera.position.z);
   }
@@ -1404,7 +1414,7 @@ function createClouds() {
     const cloudGeometry = new THREE.BufferGeometry();
     cloudGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     const cloudMaterial = new THREE.PointsMaterial({ 
-      color: 0xffffff,//0x495a75, 
+      color: stage.sun.position.y < 0 ? 0x495a75 : 0xffffff,//, 
       size: randomInRange(20, 100), 
       transparent: true, 
       opacity: 0.6 

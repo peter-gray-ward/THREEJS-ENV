@@ -47,6 +47,9 @@ expressApp
     res.writeHead(200, { 'Content-Type' : 'image/jpeg'})
     return res.end(path.join(__dirname, 'Tree1', req.params.file))
   })
+  .get('/cannon', (req, res) => {
+    return res.sendFile(path.join(__dirname, 'node_modules', 'cannon-es', 'dist', 'cannon-es.js'))
+  })
   .get('/moss', (req, res) => {
     res.writeHead(200, { 'Content-Type' : 'image/jpeg'})
     const mossFilepath = path.join(__dirname, 'moss.jpg')
