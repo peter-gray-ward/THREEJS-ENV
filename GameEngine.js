@@ -23,11 +23,11 @@ window.w = false;
 window.a = false;
 window.s = false;
 window.d = false;
-window.wS = .1;
-window.aS = .05;
-window.sS = .05
-window.dS = .05;
-window.tS = 0.1
+window.wS = .1 * .8;
+window.aS = .05 * .8;
+window.sS = .05 * .8;
+window.dS = .05 * .8;
+window.tS = 0.1 * .8;
 window.shift = false
 window.space = false;
 window.ArrowUp = false;
@@ -51,7 +51,7 @@ window.stage = {
     sun: {}
 }
 const FOV = 1300
-const TERMINAL_VELOCITY = -.5;
+const TERMINAL_VELOCITY = -.5 * .8
 var Grass = [
     '#33462d', //
     '#435c3a', //
@@ -99,7 +99,7 @@ window.addEventListener('keydown', function(e) {
         window.d = true;
     } else if (key == ' ') {
         window.isJumping = true;
-        window.jumpVelocity = 0.52;
+        window.jumpVelocity = 0.52 * .8;
 
     } else if (key == 'ARROWUP') {
         window.ArrowUp = true;
@@ -874,7 +874,7 @@ window.Animate = function() {
     // Handle jump and gravity
     if (window.isJumping) {
         window.camera.position.y += window.jumpVelocity;
-        window.jumpVelocity -= 0.03; // Adjust the gravity effect on jump
+        window.jumpVelocity -= 0.03 * .8; // Adjust the gravity effect on jump
 
         // Check for collision with ground using raycasting
         const raycaster = new THREE.Raycaster(window.camera.position, new THREE.Vector3(0, -1, 0));
@@ -888,7 +888,7 @@ window.Animate = function() {
         }
     } else {
         // Gravity
-        window.camera.velocity.y += -0.01; // Gravity effect
+        window.camera.velocity.y += -0.01 * .8; // Gravity effect
 
         // Limit falling speed to terminal velocity
         if (window.camera.velocity.y < TERMINAL_VELOCITY) {
