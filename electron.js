@@ -47,6 +47,11 @@ expressApp
     res.writeHead(200, { 'Content-Type' : 'image/jpeg'})
     return res.end(path.join(__dirname, 'Tree1', req.params.file))
   })
+  .get('/rockwall', (req, res) => {
+    res.writeHead(200, { 'Content-Type' : 'image/jpeg'})
+    const fp = path.join(__dirname, 'rockwall.jpg')
+    return res.end(fs.readFileSync(fp));
+  })
   .get('/cannon', (req, res) => {
     return res.sendFile(path.join(__dirname, 'node_modules', 'cannon-es', 'dist', 'cannon-es.js'))
   })

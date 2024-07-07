@@ -14,6 +14,7 @@ function getY(point) {
 window.lightmap = []
 
 var T = 70
+window.sliding = false
 window.THREE = THREE;
 window.w = false;
 window.a = false;
@@ -24,6 +25,7 @@ window.aS = .2;
 window.sS = .2;
 window.dS = .2;
 window.tS = 0.1
+window.shift = false
 window.space = false;
 window.ArrowUp = false;
 window.ArrowRight = false;
@@ -104,6 +106,8 @@ window.addEventListener('keydown', function(e) {
         window.ArrowLeft = true;
     } else if (key == 'ARROWRIGHT') {
         window.ArrowRight = true;
+    } else if (key == 'SHIFT') {
+        window.shift = true;
     }
 
    
@@ -129,6 +133,8 @@ window.addEventListener('keyup', function(e) {
         window.ArrowLeft = false;
     } else if (key == 'ARROWRIGHT') {
         window.ArrowRight = false;
+    } else if (key == 'SHIFT') {
+        window.shift = false;
     }
 })
 const mossTexture = new THREE.TextureLoader().load("/moss")
@@ -388,7 +394,7 @@ function TriangleMesh(vertices, a, b, c) {
     triangleMesh.triangle.getNormal(normal);
     const slope = Math.acos(normal.dot(new THREE.Vector3(0, 1, 0))) * (180 / Math.PI);
     triangleMesh.slope = slope;
-
+    triangleMesh.normal = normal;
     return triangleMesh;
 }
 
@@ -581,6 +587,7 @@ function MakeTrianglesFromTerrainSegments(segments, vertices, indices, dom, scen
                         // t.material.color = 0xffffff
                         scene.add(t);
                         dom.push(t)
+                        t.climbable = true;
 
                         result.ground.push(t.triangle)
 
@@ -588,12 +595,11 @@ function MakeTrianglesFromTerrainSegments(segments, vertices, indices, dom, scen
                             CREATE_A_TREE(t.triangle.a.x, t.triangle.a.y, t.triangle.a.z, 1);
                         }
 
-
                     } else if (slope < 107) {
                         moveMeshAlongNormal(t, -0.03)
 
                         t.material.color.set(new THREE.Color(Math.random(),Math.random(),Math.random()))
-                        // scene.add(t);
+                        t.climbable = false
                         dom.push(t)
 
                         result.cliffs.push(t.triangle)
@@ -601,6 +607,8 @@ function MakeTrianglesFromTerrainSegments(segments, vertices, indices, dom, scen
                     } else {
                         dom.push(t)
 
+
+                        t.climbable = true
                         result.other.push(t.triangle)
 
                     
@@ -726,7 +734,7 @@ function createBufferGeometryFromCluster(cluster) {
 
 // Main function to process the result object and create geometries for clusters
 function clusterResult(result) {
-    var rockTexture = new THREE.TextureLoader().load("/random-image?tag=wall")
+    var rockTexture = new THREE.TextureLoader().load("/rockwall")
     // rockTexture.wrapS = THREE.RepeatWrapping;
     // rockTexture.wrapT = THREE.RepeatWrapping;
     // rockTexture.repeat.set(2, 2); // Adjust the repeat value to control the texture scaling
@@ -735,17 +743,18 @@ function clusterResult(result) {
     const cliffClusters = findClusters(result.cliffs);
     cliffClusters.forEach(cluster => {
         const geometry = createBufferGeometryFromCluster(cluster);
-        const material = new THREE.MeshBasicMaterial({ 
-            // map: rockTexture,
-            color: new THREE.Color(Math.random(),Math.random(),Math.random()),
-            side: THREE.DoubleSide ,
-            wireframe: true
+        const material = new THREE.MeshStandardMaterial({ 
+            map: rockTexture,
+            // color: 'turquoise',
+            side: THREE.DoubleSide,
+            wireframe: false,
+            bumpScale: 0.85
         });
             
         const mesh = new THREE.Mesh(geometry, material);
         mesh.receiveShadow = true;
         mesh.castShadow = true;
-        moveMeshAlongNormal(mesh, -0.01);
+        moveMeshAlongNormal(mesh, -0.05);
         scene.add(mesh);
     });
 }
@@ -835,15 +844,16 @@ HAS COLLISION:   ${camera.hasCollision}  ${ camera.hasCollision ? `
     ${camera.triangleTouched.c.x}, ${camera.triangleTouched.c.y}, ${camera.triangleTouched.c.z}
 ` : ''}
 JUMPING: ${window.isJumping}
+SLIDING: ${window.sliding}
 SECTION TOUCHED: <table style="overflow: auto;wmax-width:100vw;">
 	<tr>
-		<th>uuid</th>
+		<th>climbable</th>
         <th>touch type</th>
         <th>slope</th>
 	</tr>
     ${ camera.sectionTouched && camera.sectionTouched.mesh ? `
         <tr>
-            <td>${camera.sectionTouched.mesh.uuid}</td>
+            <td>${camera.sectionTouched.mesh.climbable}</td>
             <td>${(
                 camera.sectionTouched.underFoot ? 'under-foot' : (
                     camera.sectionTouched.overHead ? 'over-head' : '?'
@@ -947,11 +957,27 @@ window.Animate = function() {
         var section = GetMeshForTriangle(collisionDetected);
         camera.sectionTouched = section;
         camera.touches.add(section.mesh);
-        // scene.add(section.mesh);
+
+
 
         // Adjust position to stay on top of the triangle
         if (window.camera.position.y < section.mesh.position.y + 1) {
             window.camera.position.y = section.mesh.position.y + 1;
+        }
+
+        if (!section.mesh.climbable && !window.shift) {
+            var slopeDirection = new THREE.Vector3();
+            var triangleNormal = section.mesh.normal; // Ensure you have the triangle normal
+
+            // Calculate the slope direction based on the triangle normal
+            slopeDirection.copy(triangleNormal).normalize();
+            
+            // Adjust the scalar to control the downward movement
+            var slopeMovement = slopeDirection.multiplyScalar(-.2); 
+            
+            window.sliding = true;
+            window.camera.position.add(slopeMovement);
+            console.log('sliding');
         }
 
         if (combinedMovement.length() > 0) {
@@ -967,6 +993,7 @@ window.Animate = function() {
             } else {
                 window.camera.position.add(combinedMovement);
             }
+
         }
     } else {
         camera.hasCollision = false;
@@ -1497,7 +1524,7 @@ function CREATE_A_TREE(x, y, z, alternate) {
     let sphereMaterial = new THREE.MeshStandardMaterial({
         color: getRandomShadeOfGreen(),
         transparent: true,
-        opacity: randomInRange(0.7, 1)
+        opacity: randomInRange(0.87, 1)
     });
     
     const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
