@@ -32,8 +32,10 @@ expressApp
   .get('/housing', (req, res) => {
     res.sendFile(path.join(__dirname, 'buildings.js'))
   })
-  .get('/moss:which', (req, res) => {
-    return res.sendFile(path.join(__dirname, '/moss' + req.params.which + '.jpg'));
+  .get('/moss', (req, res) => {
+    const mossFilepath = path.join(__dirname, 'moss.jpg')
+    console.log('moss....', mossFilepath)
+    return res.sendFile(mossFilepath);
   })
   .get('/image-tags', (req, res) => {
     connection.query(`
@@ -55,6 +57,12 @@ expressApp
         res.jsonp(results.map(r => r.id))
       }
     })
+  })
+  .get('/delaunator', (req, res) => {
+    res.sendFile(path.join(__dirname, 'node_modules/delaunator/index.js'))
+  })
+  .get('/robust-predicates', (req, res) => {
+    res.sendFile(path.join(__dirname, 'node_modules/robust-predicates/index.js'))
   })
   .get('/gltf-loader', (req, res) => {
     return res.sendFile(path.join(__dirname, '/node_modules/three-gltf-loader'))

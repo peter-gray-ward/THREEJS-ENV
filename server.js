@@ -21,6 +21,9 @@ app
 
 	res.sendFile(fp)
 })
+.get('/delaunator', (req, res) => {
+  res.sendFile(path.join(__dirname, 'node_modules/delaunator/delaunator.js'))
+})
 .get('/image-tags', (req, res) => {
   connection.query(`
     select distinct tag as name, count(tag) as countOf from fun.images 

@@ -144,3 +144,16 @@ table {
     background-size: contain !important;
     background-repeat: no-repeat !important;
 }
+
+
+.ocean {
+	display: flex;
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 100vw;
+	height: 100vh;
+	background: 'royalblue';
+	opacity: 0.5;
+	z-index: 999999;
+}

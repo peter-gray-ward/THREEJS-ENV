@@ -1,9 +1,18 @@
 import * as THREE from '/three';
 import * as PERLIN from '/perlin-noise';
 import * as HOUSING from '/housing';
-import { TDSLoader } from '/tds-loader'
+import Delaunator from '/delaunator';
 
-console.log(TDSLoader)
+function getX(point) {
+    return point.x;
+}
+
+function getY(point) {
+    return point.y;
+}
+window.Delaunator = Delaunator
+
+window.lightmap = []
 
 var T = 64
 window.THREE = THREE;
@@ -11,10 +20,10 @@ window.w = false;
 window.a = false;
 window.s = false;
 window.d = false;
-window.wS = .07;
-window.aS = .07;
-window.sS = .01;
-window.dS = .07;
+window.wS = .1;
+window.aS = .1;
+window.sS = .05;
+window.dS = .1;
 window.tS = 0.075
 window.space = false;
 window.ArrowUp = false;
@@ -53,7 +62,7 @@ window.sunMinDist = Infinity
 window.activeMapIndex = -1;
 window.priorMapIndex = -1
 window.map = {}
-
+var oceanBackground = null;
 window.scene = new THREE.Scene();
 window.sceneRadius = 150
 window.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, FOV);
@@ -121,7 +130,7 @@ window.addEventListener('keyup', function(e) {
         window.ArrowRight = false;
     }
 })
-
+const mossTexture = new THREE.TextureLoader().load("/moss")
 
 function randomInRange(from, to, startDistance = 0) {
    const min = Math.min(from, to) + startDistance;
@@ -184,27 +193,27 @@ function checkCollision(cameraBoundingVolume, bvhNode) {
     );
 }
 
-
-function generatePointsInTriangle(v0, v1, v2, numPoints) {
+function generatePointsInTriangle(A, B, C, numPoints = 40) {
     const points = [];
-    
     for (let i = 0; i < numPoints; i++) {
-        for (let j = 0; j < numPoints; j++) {
-            const u = i / (numPoints - 1);
-            const v = j / (numPoints - 1);
-            
+        // Generate two random numbers
+        const r1 = Math.random();
+        const r2 = Math.random();
+        const sqrtR1 = Math.sqrt(r1);
 
-            if (u + v <= 1) {
-            	const vector = new THREE.Vector3()
-                    .addScaledVector(v0, 1 - u - v)
-                    .addScaledVector(v1, u)
-                    .addScaledVector(v2, v);
-           
-                points.push(vector);
-            }
-        }
+        // Calculate barycentric coordinates
+        const lambda1 = 1 - sqrtR1;
+        const lambda2 = sqrtR1 * (1 - r2);
+        const lambda3 = sqrtR1 * r2;
+
+        // Calculate the coordinates of the random point
+        const x = lambda1 * A.x + lambda2 * B.x + lambda3 * C.x;
+        const y = lambda1 * A.y + lambda2 * B.y + lambda3 * C.y;
+        const z = lambda1 * A.z + lambda2 * B.z + lambda3 * C.z;
+
+        // Create a new Vector3 and add it to the points array
+        points.push(new THREE.Vector3(x, y, z));
     }
-    
     return points;
 }
 
@@ -303,7 +312,7 @@ p.style.maxHeight = '100vh';
 p.style.padding = '0.15rem 1rem'
 
 function Sun() {
-	var pointLight = new THREE.DirectionalLight(0xfffefe, 1);
+	var pointLight = new THREE.DirectionalLight(0xfffefe, 5);
 
 	pointLight.castShadow = true;
 	var halfSize = 1000 * 2;
@@ -313,15 +322,15 @@ function Sun() {
 	pointLight.shadow.camera.bottom = -halfSize;
 
     var orb = new THREE.Mesh(
-        new THREE.SphereGeometry(18.5, 100, 100),
+        new THREE.SphereGeometry(1, 100, 100),
         new THREE.MeshBasicMaterial({ color: 0xfffefe })
     );
 
-	// scene.add(pointLight)
     stage.sun = pointLight
     stage.orb = orb;
-	pointLight.position.set(30, 10, 80)
+	pointLight.position.set(T * 2, T * 2, 0)
     pointLight.lookAt(origin);
+    scene.add(stage.orb)
     scene.add(pointLight)
 
     for (var i = 0; i < 1000; i++) {
@@ -354,32 +363,34 @@ function TriangleMesh(vertices, a, b, c) {
         vertices[c * 3], vertices[c * 3 + 1], vertices[c * 3 + 2]
     ];
 
-
     triangleGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertexPositions, 3));
     triangleGeometry.setIndex([0, 1, 2]);
     triangleGeometry.computeVertexNormals();
     triangleGeometry.computeBoundingBox();
 
-    const triangleMaterial = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(Math.random(), Math.random(), Math.random()), // Red color for the triangles
-        // map: new THREE.TextureLoader().load(`/moss${Math.floor(Math.random() * 3) + 1}.jpg`),
+    const triangleMaterial = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(Math.random(), Math.random(), Math.random()), // Random color for the triangles
         side: THREE.DoubleSide
     });
     const triangleMesh = new THREE.Mesh(triangleGeometry, triangleMaterial);
     triangleMesh.castShadow = true;
     triangleMesh.receiveShadow = true;
     triangleMesh.triangle = new THREE.Triangle(
-    	new THREE.Vector3(vertexPositions[0], vertexPositions[1], vertexPositions[2]),
-    	new THREE.Vector3(vertexPositions[3], vertexPositions[4], vertexPositions[5]),
-    	new THREE.Vector3(vertexPositions[6], vertexPositions[7], vertexPositions[8])
+        new THREE.Vector3(vertexPositions[0], vertexPositions[1], vertexPositions[2]),
+        new THREE.Vector3(vertexPositions[3], vertexPositions[4], vertexPositions[5]),
+        new THREE.Vector3(vertexPositions[6], vertexPositions[7], vertexPositions[8])
     );
 
-    var points = generatePointsInTriangle(triangleMesh.triangle.a, triangleMesh.triangle.b, triangleMesh.triangle.c, 21);
-    triangleMesh.points = points;
+    // Calculate normal and slope
+    const normal = new THREE.Vector3();
+    triangleMesh.triangle.getNormal(normal);
+    const slope = Math.acos(normal.dot(new THREE.Vector3(0, 1, 0))) * (180 / Math.PI);
+    triangleMesh.slope = slope;
 
-
-    return triangleMesh
+    return triangleMesh;
 }
+
+
 
 function heightAt(x, y, noiseWidth, noiseHeight, perlinNoise) {
     const noiseX = Math.floor(x * (noiseWidth - 1));
@@ -525,6 +536,116 @@ function isFlatSurface(x, y, width, height, perlinNoise) {
     return true;
 }
 
+function generateRandomPointsInTriangle(a, b, c, numPoints = 11) {
+    const points = [];
+    for (let i = 0; i < numPoints; i++) {
+        const r1 = Math.random();
+        const r2 = Math.random();
+        const sqrtR1 = Math.sqrt(r1);
+
+        const x = (1 - sqrtR1) * a.x + sqrtR1 * (1 - r2) * b.x + sqrtR1 * r2 * c.x;
+        const y = (1 - sqrtR1) * a.y + sqrtR1 * (1 - r2) * b.y + sqrtR1 * r2 * c.y;
+        const z = (1 - sqrtR1) * a.z + sqrtR1 * (1 - r2) * b.z + sqrtR1 * r2 * c.z;
+
+        points.push(new THREE.Vector3(x, y, z));
+    }
+    return points;
+}
+
+function applyHorizontalDisplacement(points, normal, displacementRange = 2) {
+    const up = new THREE.Vector3(0, 1, 0);
+    const axis = new THREE.Vector3().crossVectors(normal, up).normalize();
+    const displacement = (Math.random() - 0.5) * displacementRange;
+
+    points.forEach(point => {
+        point.add(axis.clone().multiplyScalar(displacement));
+    });
+}
+function moveMeshAlongNormal(mesh, offset) {
+    // Calculate the normal of the mesh's geometry
+    const geometry = mesh.geometry;
+    geometry.computeVertexNormals();
+
+    // Assuming the mesh is a single triangle
+    const normal = new THREE.Vector3();
+    const positions = geometry.attributes.position;
+    const vertexA = new THREE.Vector3(positions.getX(0), positions.getY(0), positions.getZ(0));
+    const vertexB = new THREE.Vector3(positions.getX(1), positions.getY(1), positions.getZ(1));
+    const vertexC = new THREE.Vector3(positions.getX(2), positions.getY(2), positions.getZ(2));
+
+    const triangle = new THREE.Triangle(vertexA, vertexB, vertexC);
+    triangle.getNormal(normal);
+
+    // Move the mesh along the normal
+    mesh.position.add(normal.multiplyScalar(offset));
+}
+
+var logcount = 0
+var lightcount = 0
+function MakeTrianglesFromTerrainSegments(segments, vertices, indices, dom, scene) {
+    for (let i = 0; i < segments; i++) {
+        for (let j = 0; j < segments; j++) {
+            let a = i + j * (segments + 1);
+            let b = (i + 1) + j * (segments + 1);
+            let c = (i + 1) + (j + 1) * (segments + 1);
+            let d = i + (j + 1) * (segments + 1);
+
+            if (a >= 0 
+                && b >= 0 
+                && c >= 0 
+                && d >= 0 
+                && a < vertices.length / 3 
+                && b < vertices.length / 3 
+                && c < vertices.length / 3 
+                && d < vertices.length / 3) {
+
+                indices.push(a, b, d);
+                indices.push(b, c, d);
+
+                const t1 = TriangleMesh(vertices, a, b, d);
+                const t2 = TriangleMesh(vertices, b, c, d);
+
+                
+
+                [t1, t2].forEach(function(t) {
+                    const normal = getTriangleNormal(t.triangle);
+                    const slope = t.slope;
+                    if (slope > 160) {
+                        //console.log('creating a flat ground')
+                        moveMeshAlongNormal(t, -0.05)
+                    
+
+                        scene.add(t);
+                        dom.push(t)
+
+                        if (t.triangle.a.y > 20) {
+                            CREATE_A_TREE(t.triangle.a.x, t.triangle.a.y, t.triangle.a.z, 1);
+                        }
+
+                    } else if (slope < 107) {
+                        moveMeshAlongNormal(t, -0.05)
+                        t.material.color.set('turquoise')
+
+                        scene.add(t);
+                        dom.push(t)
+
+
+
+                    } else {
+                        dom.push(t)
+                    }
+
+                });
+            } else {
+                console.warn(`Invalid indices detected: a=${a}, b=${b}, c=${c}, d=${d}`);
+            }
+        }
+    }
+}
+
+var dimFairyLight = new THREE.AmbientLight(new THREE.Color('turquoise'), 0.05);
+dimFairyLight.position.set(0,0,0)
+scene.add(dimFairyLight)
 
 function Terrain(T, v0, v1, v2, v3, segments, options = { slightBay: true }) {
     let vertices = [];
@@ -535,18 +656,7 @@ function Terrain(T, v0, v1, v2, v3, segments, options = { slightBay: true }) {
 
     const noiseWidth = T;
     const noiseHeight = T * 2;
-    let perlinNoise;
-
-    if (false && Math.random() < 0.5) {
-        perlinNoise = PERLIN.generatePerlinNoise(noiseWidth, noiseHeight, {
-            octaveCount: 8,
-            amplitude: 1150,
-            persistence: 0.8
-        });
-    } else {
-        perlinNoise = PERLIN.generatePerlinNoise(noiseWidth, noiseHeight);
-    }
-
+    let perlinNoise = PERLIN.generatePerlinNoise(noiseWidth, noiseHeight);
 
     for (let i = 0; i <= segments; i++) {
         for (let j = 0; j <= segments; j++) {
@@ -564,52 +674,14 @@ function Terrain(T, v0, v1, v2, v3, segments, options = { slightBay: true }) {
 
             v.y += height;
 
-
             vertices.push(v.x, v.y, v.z);
             uvs.push(x, y);
         }
     }
 
-    for (let i = 0; i < segments; i++) {
-        for (let j = 0; j < segments; j++) {
-            let a = i + j * (segments + 1);
-            let b = (i + 1) + j * (segments + 1);
-            let c = (i + 1) + (j + 1) * (segments + 1);
-            let d = i + (j + 1) * (segments + 1);
+    MakeTrianglesFromTerrainSegments(segments, vertices, indices, dom, scene)
 
-            if (a >= 0 && b >= 0 && c >= 0 && d >= 0 &&
-                a < vertices.length / 3 && b < vertices.length / 3 && c < vertices.length / 3 && d < vertices.length / 3) {
-                indices.push(a, b, d);
-                indices.push(b, c, d);
-
-                const t1 = TriangleMesh(vertices, a, b, d)
-                const t2 = TriangleMesh(vertices, b, c, d)
-
-                dom.push(t1, t2);
-
-                [t1, t2].forEach(function(t) {
-                    const normal = getTriangleNormal(t.triangle);
-                    const slope = Math.acos(normal.dot(new THREE.Vector3(0, 1, 0))) * (180 / Math.PI);
-
-                    if (slope > 160) {
-                        t.position.y += 0.01;
-                        scene.add(t);
-
-                        if (t.triangle.a.y > 20) {
-                            // var bld = HOUSING.building(t);
-                            // scene.add(bld)
-                            CREATE_A_TREE(t.triangle.a.x, t.triangle.a.y, t.triangle.a.z)
-                        }
-
-                    }
-                })
-            } else {
-                console.warn(`Invalid indices detected: a=${a}, b=${b}, c=${c}, d=${d}`);
-            }
-        }
-    }
-
-    window.BVH = buildBVH(dom) 
+    window.BVH = buildBVH(dom);
 
     const terrainTexture = generateCanvasTexture(noiseWidth, noiseHeight, perlinNoise, noiseWidth, noiseHeight, v0, v1, v2, v3);
     terrainTexture.wrapS = THREE.RepeatWrapping;
@@ -624,9 +696,10 @@ function Terrain(T, v0, v1, v2, v3, segments, options = { slightBay: true }) {
 
     var material = new THREE.MeshStandardMaterial({
         map: terrainTexture,
-        side: THREE.DoubleSide
-        // wireframe: true
+        side: THREE.DoubleSide,
+        wireframe: false
     });
+
     var mesh = new THREE.Mesh(planeGeometry, material);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -638,11 +711,14 @@ function Terrain(T, v0, v1, v2, v3, segments, options = { slightBay: true }) {
 }
 
 
-
 camera.position.y = 50
 
 function Watch() {
 	requestAnimationFrame(Watch)
+    var cbb = new THREE.Box3().setFromCenterAndSize(
+                camera.position,
+                new THREE.Vector3(1, 1, 1) // Adjust the size as needed
+            );
 	p.innerHTML = `
 CAMERA:   ${camera.position.x}, ${camera.position.y}, ${camera.position.z}
 JUMP VELOCITY:  ${window.jumpVelocity}
@@ -651,6 +727,8 @@ HAS COLLISION:   ${camera.hasCollision}  ${ camera.hasCollision ? `
     ${camera.triangleTouched.b.x}, ${camera.triangleTouched.b.y}, ${camera.triangleTouched.b.z}
     ${camera.triangleTouched.c.x}, ${camera.triangleTouched.c.y}, ${camera.triangleTouched.c.z}
 ` : ''}
+SUN ANGLE: ${stage.sunAngle}
+SUN POSITION: ${stage.sun.position.x}, ${stage.sun.position.y}, ${stage.sun.position.z}
 SECTION TOUCHED: <table style="overflow: auto;wmax-width:100vw;">
 	<tr>
 		<th>uuid</th>
@@ -713,79 +791,6 @@ window.Animate = function() {
 
         combinedMovement.add(forwardMovement).add(rightMovement);
     }
-
-    // // Handle jump and gravity
-    // if (window.isJumping) {
-    //     window.camera.position.y += window.jumpVelocity;
-    //     window.jumpVelocity -= 0.01; // Adjust the gravity effect on jump
-
-    //     if (window.jumpVelocity < -0.05) {
-    //         window.isJumping = false
-
-    //     } else {
-    //          // Check for collision with ground
-    //         const cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
-    //             camera.position,
-    //             new THREE.Vector3(.4, 1, .1) // Adjust the size as needed
-    //         );
-    //         const collisionDetected = checkCollision(cameraBoundingBox, window.BVH);
-    //         if (collisionDetected) {
-    //             camera.hasCollision = true;
-    //             camera.triangleTouched = collisionDetected;
-    //             var section = GetMeshForTriangle(collisionDetected);
-    //             camera.sectionTouched = section;
-    //             camera.touches.add(section.mesh);
-    //             scene.add(section.mesh);
-
-    //             // Stop the jump when hitting the ground
-    //             if (window.jumpVelocity <= 0) {
-    //                 window.isJumping = false;
-    //                 window.jumpVelocity = 0;
-    //                 window.camera.position.y = section.mesh.position.y + 1; // Adjust for the height of the triangle surface
-    //             }
-    //         }
-    //     }
-    // } else if (!camera.hasCollision) {
-    //     window.camera.position.y += -0.09; // Gravity
-    // }
-
-    // // Handle collision detection for horizontal movements
-    // const cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
-    //     camera.position,
-    //     new THREE.Vector3(1, 1, 1) // Adjust the size as needed
-    // );
-    // const collisionDetected = checkCollision(cameraBoundingBox, window.BVH);
-    // if (collisionDetected) {
-    //     camera.hasCollision = true;
-    //     camera.triangleTouched = collisionDetected;
-    //     var section = GetMeshForTriangle(collisionDetected);
-    //     camera.sectionTouched = section;
-    //     camera.touches.add(section.mesh);
-    //     scene.add(section.mesh);
-
-    //     // Adjust position to stay on top of the triangle
-    //     if (window.camera.position.y < section.mesh.position.y + 1) {
-    //         window.camera.position.y = section.mesh.position.y + 1
-    //     }
-
-    //     if (combinedMovement.length() > 0) {
-    //         var triangleNormal = new THREE.Vector3();
-    //         camera.triangleTouched.getNormal(triangleNormal);
-    //         combinedMovement.projectOnPlane(triangleNormal);
-
-    //         var newPosition = new THREE.Vector3().copy(window.camera.position).add(combinedMovement);
-    //         var isInsideTriangle = isPointInTriangle(newPosition, camera.triangleTouched);
-
-    //         if (isInsideTriangle) {
-    //             window.camera.position.copy(newPosition);
-    //         } else {
-    //             window.camera.position.add(combinedMovement);
-    //         }
-    //     }
-    // } else {
-    //     camera.hasCollision = false;
-    //     window.camera.position.add(combinedMovement);
-    // }
     // Handle jump and gravity
     if (window.isJumping) {
         window.camera.position.y += window.jumpVelocity;
@@ -890,6 +895,19 @@ window.Animate = function() {
     animateClouds()
     AnimateSky()
 
+    if (camera.position.y < 0) {
+        if (oceanBackground == null) {
+            oceanBackground = document.createElement('div');
+            oceanBackground.classList.add('ocean');
+            document.body.appendChild(oceanBackground);
+        }
+    } else {
+        if (oceanBackground !== null) {
+            oceanBackground.remove();
+            oceanBackground = null
+        }
+    }
+
 
     window.renderer.render(window.scene, window.camera);
 }
@@ -929,7 +947,7 @@ window.terrain = Terrain(T,
 )
 Sun()
 Animate();
-Watch()
+
 
 
 
@@ -948,8 +966,8 @@ class Ocean {
 
     init() {
         this.MakeOcean();
-        // this.storeInitialYPositions();
-        // this.WaveOcean();
+        this.storeInitialYPositions();
+        this.WaveOcean();
         // this.EbbOcean();
     }
 
@@ -1032,6 +1050,9 @@ class Ocean {
 
         this.oceanMesh.surface = map;
         this.oceanMesh.position.set(0,20,0);
+
+        window.ocean = this.oceanMesh;
+
         scene.add(this.oceanMesh);
     }
 
@@ -1201,15 +1222,14 @@ function createSky() {
     scene.add(sky)
 }
 
-// createDome()
+createDome()
 // createSky()
 
 function AnimateSky() {
-  var day = sceneRadius * .6
-     // Update sun position based on current angle
-  var x = sceneRadius * Math.cos(stage.sunAngle);
-  var y = sceneRadius * Math.sin(stage.sunAngle);
-  y -= sceneRadius * .6
+  var T2 = T * 2;
+  var x = T2 * Math.cos(stage.sunAngle);
+  var y = T2 * Math.sin(stage.sunAngle);
+
   stage.sun.position.set(x, y, stage.sun.position.z);
   stage.orb.position.set(x, y, stage.sun.position.z);
 
@@ -1243,24 +1263,18 @@ function AnimateSky() {
         
       if (stage.sun.position.y > 0) {
         stage.Sky[i].material.opacity = 1
-      } else if (distanceToSun > day) {
-        stage.Sky[i].material.opacity = intensity * .13;
+      } else {
+        stage.Sky[i].material.opacity = Math.pow(intensity, 3)
       }
       // if (distanceToSun > maxDistance) stage.Sky[i].material.opacity = Math.sqrt(opacity, 3);
       // stage.Sky[i].lookAt(camera.position.x, camera.position.y, camera.position.z);
   }
 
-   // Rotate the sky sphere to follow the sun
-  if (stage.skySphere) {
-    stage.skySphere.rotation.y += 0.003;
-  }
-
-
 
   stage.sunAngle += .003;
   
   if (stage.sunAngle > Math.PI * 2) {
-    stage.sunAngle = 0;
+    stage.sunAngle = 0
   }
 }
 
@@ -1327,10 +1341,10 @@ function animateClouds() {
 
 
 
-function CREATE_A_TREE(x, y, z) {
+function CREATE_A_TREE(x, y, z, alternate) {
     var trunkHeight = randomInRange(4, 6)
     var trunkBaseRadius = randomInRange(.01, .2)
-    var rr = randomInRange(.01, .1)
+    var rr = alternate ? randomInRange(.01, .1) : randomInRange(.1, .5)
     var trunkCurve = []
     var trunkRadius = []
 
@@ -1356,27 +1370,21 @@ function CREATE_A_TREE(x, y, z) {
         )
     }
 
-     // Create foliage
+    // Default foliage (spherical)
     var foliageRadius = randomInRange(1, 1.5)
 
-
-    segments = 10
     const sphereGeometry = new THREE.SphereGeometry(foliageRadius, 10, 10);
     let sphereMaterial = new THREE.MeshStandardMaterial({
         color: 'lawngreen'
     });
     
     const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-    sphere.lights = true;
     sphere.castShadow = true
     sphere.receiveShadow = true
     sphere.position.set(xS, yS - foliageRadius, zS); // Set foliage position
     scene.add(sphere);
 
-    var {
-        array,
-        itemSize
-    } = sphereGeometry.attributes.position
+    var { array, itemSize } = sphereGeometry.attributes.position
     for (let i = 0; i < 21; i++) {
         for (var j = 0; j < 21; j++) {
             var vertexIndex = (i * (21 + 1) + j) * itemSize
@@ -1384,43 +1392,39 @@ function CREATE_A_TREE(x, y, z) {
             var z = array[vertexIndex + 1]
             var y = array[vertexIndex + 2]
 
-            
-            array[vertexIndex] = randomInRange(x - (foliageRadius * 1.1),     x + foliageRadius * 1.1)
+            array[vertexIndex] = randomInRange(x - (foliageRadius * 1.1), x + foliageRadius * 1.1)
             array[vertexIndex + 1] = randomInRange(y - (foliageRadius * 1.1), y + foliageRadius * 1.1)
-            array[vertexIndex + 2] = randomInRange(y - (foliageRadius * 1.1), z + foliageRadius * 1.1)
+            array[vertexIndex + 2] = randomInRange(z - (foliageRadius * 1.1), z + foliageRadius * 1.1)
         }
     }
 
     const path = new THREE.CatmullRomCurve3(trunkCurve);
 
     var segments = Math.floor(randomInRange(5, 11))
-
-
     var radialSegments = 15
 
-
-     // Create the tube geometry
+    // Create the tube geometry
     const tubeGeometry = new THREE.TubeGeometry(path, segments, trunkBaseRadius);
 
- 
-
     var colors = ['#964B00', '#654321', '#CD853F', '#F5F5F5'];
-
-    var foliageColors = Grass.concat(['#00FF00', '#00EE00', '#00DD00', '#00CC00', '#00BB00'])//[0xf0FF00, 0x00FF0f, 0x0fFF00, 0x00FFf0, 0xf0FF0f]
-    var foliageColor = foliageColors[Math.floor(Math.random() * foliageColors.length)]
     var color = colors[Math.floor(Math.random() * colors.length)]
     const material = new THREE.MeshStandardMaterial({ 
-        color: "#403327"
+        color: color
     });
 
     // Create the mesh
     const tubeMesh = new THREE.Mesh(tubeGeometry, material);
     tubeMesh.castShadow = true
-    tubeMesh.lights = true
     tubeMesh.receiveShadow = true
     tubeMesh.position.y -= 2
-
 
     // Add the mesh to the scene
     scene.add(tubeMesh);  
 }
+
+
+
+Watch()
+
+
+
