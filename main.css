@@ -9,6 +9,16 @@ html, body {
 	margin: 0;
 }
 
+#mouse-position {
+	position: absolute;
+	color: 'white';
+	text-shadow: 0 0 3px 0;
+	font-size: 3rem;
+	left: 20px;
+	top: 20px;
+	font-family: system-ui;
+}
+
 body {
 	display: flex;
 	overflow: hidden;

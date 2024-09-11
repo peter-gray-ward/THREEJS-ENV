@@ -7,14 +7,6 @@ const path = require('path');
 
 const expressApp = express();
 
-const connection = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',
-  password: 'enter123',
-  database: 'fun',
-  port: 3306 // Default MySQL port
-});
-
 const dir = (filename) => path.resolve(filename);
 var ii = 0
 expressApp
@@ -41,27 +33,29 @@ expressApp
     var fp = path.join(__dirname, 'node_modules/perlin-noise/index.js')
     res.sendFile(fp)
   })
+  .get('/noise', (req, res) => {
+    var fp = path.join(__dirname, 'node_modules/simplex-noise/dist/esm/simplex-noise.js')
+    res.sendFile(fp)
+  })
   .get('/housing', (req, res) => {
     res.sendFile(path.join(__dirname, 'buildings.js'))
   })
-  .get('/random-image', (req, res) => {
-    var tag = req.query.tag;
-    connection.query(`
-        SELECT image from fun.images i
-        where i.tag = '${tag}'
-        order by rand() limit 1`, (err, results) => {
-          if (results && results.length) {
-            res.end(results[0].image)
-          }
-    });
-  })
   .get('/tree1/:file', (req, res) => {
-    res.writeHead(200, { 'Content-Type' : 'image/jpeg'})
+    res.writeHead(200, { 'Content-Type' : 'image/png'})
     return res.end(path.join(__dirname, 'Tree1', req.params.file))
+  })
+  .get('/bark', (req, res) => {
+    res.writeHead(200, { 'Content-Type' : 'image/jpeg'})
+    return res.end(path.join(__dirname, 'Tree1', 'bark.jpg'))
   })
   .get('/rockwall', (req, res) => {
     res.writeHead(200, { 'Content-Type' : 'image/jpeg'})
     const fp = path.join(__dirname, 'rockwall.jpg')
+    return res.end(fs.readFileSync(fp));
+  })
+  .get('/oak-leaf', (req, res) => {
+    res.writeHead(200, { 'Content-Type' : 'image/png'})
+    const fp = path.join(__dirname, 'Tree1', 'oak-leaf.png')
     return res.end(fs.readFileSync(fp));
   })
   .get('/cannon', (req, res) => {
@@ -71,27 +65,6 @@ expressApp
     res.writeHead(200, { 'Content-Type' : 'image/jpeg'})
     const mossFilepath = path.join(__dirname, 'moss.jpg')
     return res.end(fs.readFileSync(mossFilepath));
-  })
-  .get('/image-tags', (req, res) => {
-    connection.query(`
-      select distinct tag as name, count(tag) as countOf from fun.images 
-      group by tag
-      order by tag asc`, (err, results) => {
-      if (results && results.length) {
-        res.jsonp(results)
-      }
-    })
-  })
-  .get('/images', (req, res) => {
-    var tag = req.query.tag;
-    connection.query(`
-      select id
-      from fun.images
-      where tag is not null and tag = '${tag}'`, (err, results) => {
-      if (results && results.length) {
-        res.jsonp(results.map(r => r.id))
-      }
-    })
   })
   .get('/delaunator', (req, res) => {
     res.sendFile(path.join(__dirname, 'node_modules/delaunator/index.js'))
@@ -114,15 +87,7 @@ expressApp
   .get('/tree1', (req, res) => {
     return res.sendFile(path.join(__dirname, '/Tree1/Tree1.3ds'))
   })
-  .get('/image', (req, res) => {
-    var id = req.query.id;
-    connection.query(`
-      select image
-      from fun.images
-      where id = '${id}'`, (err, results) => {
-        res.end(results[0].image)
-      })
-  })
+ 
   .get('/:filename', (req, res) => res.sendFile(dir(req.params.filename)))
   .post('/save', (req, res) => {
     var body = '';
@@ -139,8 +104,8 @@ expressApp
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: 9999,
+    height: 9999,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false

@@ -536,9 +536,8 @@ function GenerateRandomAntoniGaudiEdifice(centroid, height, baseRadius, levels) 
     geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
     geometry.computeVertexNormals();
 
-    const material = new THREE.MeshStandardMaterial({ color: 0xFF4500, 
-      transparent: true,
-      opacity: 0.5,
+    const material = new THREE.MeshStandardMaterial({ 
+      map: new THREE.TextureLoader().load("/image?id=ad4a4822-8ed0-49f0-a374-e7f32a74e461"),
       side: THREE.DoubleSide 
     });
     const mesh = new THREE.Mesh(geometry, material);
