@@ -5,6 +5,8 @@ const mysql = require('mysql');
 const fs = require('fs');
 const path = require('path');
 
+
+
 const expressApp = express();
 
 const dir = (filename) => path.resolve(filename);
@@ -40,9 +42,12 @@ expressApp
   .get('/housing', (req, res) => {
     res.sendFile(path.join(__dirname, 'buildings.js'))
   })
-  .get('/tree1/:file', (req, res) => {
-    res.writeHead(200, { 'Content-Type' : 'image/png'})
-    return res.end(path.join(__dirname, 'Tree1', req.params.file))
+
+  .get('/:filename', (req, res) => res.sendFile(dir(req.params.filename)))
+  .get('/images/:file', (req, res) => {
+    res.writeHead(200, { 'Content-Type' : 'image/jpeg'})
+    const fp = path.join(__dirname, 'images', req.params.file)
+    return res.end(fs.readFileSync(fp));
   })
   .get('/bark', (req, res) => {
     res.writeHead(200, { 'Content-Type' : 'image/jpeg'})
@@ -88,7 +93,6 @@ expressApp
     return res.sendFile(path.join(__dirname, '/Tree1/Tree1.3ds'))
   })
  
-  .get('/:filename', (req, res) => res.sendFile(dir(req.params.filename)))
   .post('/save', (req, res) => {
     var body = '';
     req.on('data', chunk => body += chunk);

@@ -101,10 +101,10 @@ window.w = false;
 window.a = false;
 window.s = false;
 window.d = false;
-window.wS = .2
-window.aS = .2
-window.sS = .2
-window.dS = .2
+window.wS = .1
+window.aS = .1
+window.sS = .1
+window.dS = .1
 window.tS = .2
 window.shift = false
 window.space = false;
@@ -128,7 +128,7 @@ window.stage = {
     sunAngle: 0,
     sun: {}
 }
-const FOV = 1300
+const FOV = 1600
 const TERMINAL_VELOCITY = -5.1 // lol
 var Grass = [
     '#33462d', //
@@ -580,7 +580,7 @@ function TriangleMesh(vertices, a, b, c) {
     triangleGeometry.computeVertexNormals();
     triangleGeometry.computeBoundingBox();
 
-    const color = new THREE.Color(Math.random(), Math.random(), Math.random())
+    const color = Math.random() < 0.5 ? 'whitesmoke' : '#EBEDEF'//new THREE.Color(Math.random(), Math.random(), Math.random())
 
     const triangleMaterial = new THREE.MeshStandardMaterial({
         color, // Random color for the triangles
@@ -668,28 +668,6 @@ function generateCanvasTexture(width, height, perlinNoise, noiseWidth, noiseHeig
     return new THREE.CanvasTexture(canvas);
 }
 
-function CREATE_A_ROCK(x, y, z) {
-    const rockGeometry = new THREE.BoxGeometry(1, 1, 1); // Simple box for demonstration
-    const rockMaterial = new THREE.MeshStandardMaterial({ color: 0x808080 }); // Gray color
-    const rock = new THREE.Mesh(rockGeometry, rockMaterial);
-
-    rock.position.set(x, y, z);
-
-    // Add some randomness to the size and rotation for variety
-    rock.scale.set(
-        Math.random() * 2 + 0.5, // Random scale between 0.5 and 2.5
-        Math.random() * 2 + 0.5,
-        Math.random() * 2 + 0.5
-    );
-
-    rock.rotation.set(
-        Math.random() * Math.PI,
-        Math.random() * Math.PI,
-        Math.random() * Math.PI
-    );
-
-    scene.add(rock);
-}
 
 function isFlatSurface(x, y, width, height, perlinNoise) {
     const threshold = 0.1; // Adjust this threshold for "flatness"
@@ -972,39 +950,50 @@ function createBufferGeometryFromCluster(cluster) {
 
 
 
-
 function clusterResult(result) {
     const cliffClusters = findClusters(result.cliffs);
     cliffClusters.forEach(cluster => {
         const geometry = createBufferGeometryFromCluster(cluster);
-        const material = new THREE.MeshStandardMaterial({ 
+        const material = new THREE.MeshBasicMaterial({ 
             // map: rockTexture,
-            color: 'turquoise',
+            color: 'white',
             side: THREE.DoubleSide,
-            wireframe: false,
-            bumpScale: 0.85
+            wireframe: false
         });
             
         const mesh = new THREE.Mesh(geometry, material);
         mesh.receiveShadow = true;
         mesh.castShadow = true;
-        moveMeshAlongNormal(mesh, -0.05);
+        // moveMeshAlongNormal(mesh, -0.05);
         scene.add(mesh);
     });
+
+    const groundClusters = findClusters(result.ground);
+    groundClusters.forEach(cluster => {
+        const geometry = createBufferGeometryFromCluster(cluster);
+        const material = new THREE.MeshStandardMaterial({
+            color: 'lawngreen',
+            side: THREE.BackSide
+        })
+    })
 }
 
-var dimFairyLight = new THREE.AmbientLight(new THREE.Color('turquoise'), 0.05);
-dimFairyLight.position.set(0,0,0)
-scene.add(dimFairyLight)
-
-
+// var dimFairyLight = new THREE.AmbientLight(new THREE.Color('white'), 0.05);
+// dimFairyLight.position.set(0,0,0)
+// scene.add(dimFairyLight)
 
 
 
 
 
 // [Object("Sun")]
-window.sun = new THREE.DirectionalLight(0xffffff, 2);
+window.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, .9); // Sky and ground color
+hemisphereLight.position.set(0, 150, 0);
+scene.add(hemisphereLight);
+
+
+// [Object("Sun")]
+window.sun = new THREE.DirectionalLight(0xffffff, 5);
 sun.position.set(0, 150, 0);
 scene.add(sun)
 sun.lookAt(0, 0, 0)
@@ -1016,7 +1005,7 @@ sun.shadow.mapSize.width = 1024;
 sun.shadow.mapSize.height = 1024;
 
 // Configure the shadow camera for the directional light (this affects shadow casting area)
-sun.shadow.camera.near = 0.5;
+sun.shadow.camera.near = 0.05;
 sun.shadow.camera.far = 500;
 sun.shadow.camera.left = -100;
 sun.shadow.camera.right = 100;
@@ -1436,7 +1425,7 @@ function Collide(combinedMovement) {
             camera.hasCollision = true;
             camera.triangleTouched = mesh.triangle; 
 
-            mesh.material.color.set(Math.random(), Math.random(), 1);
+            // mesh.material.color.set(Math.random(), Math.random(), 1);
 
             if (camera.position.y < mesh.position.y + 1) {
                 camera.position.y = mesh.position.y + 1;
@@ -1528,6 +1517,8 @@ function isPointInTriangle(point, triangle) {
 
 
 // terrain
+var snapdragon = new THREE.TextureLoader().load("/images/snap-dragon.png")
+var nasturtiums = new THREE.TextureLoader().load("/images/nasturtiums.jpg")
 
 function MakeTerrainTileChildren(segments, vertices, indices, dom, scene) {
     var result = {
@@ -1562,7 +1553,7 @@ function MakeTerrainTileChildren(segments, vertices, indices, dom, scene) {
                     const slope = t.slope;
 
                     if (slope > 150) {
-                        moveMeshAlongNormal(t, -0.03)
+                        // moveMeshAlongNormal(t, -0.03)
                 
                         scene.add(t);
 
@@ -1572,15 +1563,37 @@ function MakeTerrainTileChildren(segments, vertices, indices, dom, scene) {
 
                         result.ground.push(t.triangle)
 
-                        if (t.triangle.a.y > 20 && Math.random() < 0.3) {
-                            let tree = CREATE_A_TREE(t.triangle.a.x, t.triangle.a.y, t.triangle.a.z, 1);
-                            window.TREES.push(tree);
-                        }
+                        // if (t.triangle.a.y > 20 && Math.random() < 0.03) {
+                        //     let tree = CREATE_A_TREE(t.triangle.a.x, t.triangle.a.y, t.triangle.a.z, 1);
+                        //     window.TREES.push(tree);
+                        // }
 
+
+                        // for (var i = 0; i < 3; i++) {
+                        //     var g = new THREE.PlaneGeometry(randomInRange(0.2, 1.4), randomInRange(1, 3));
+                        //     var m = new THREE.MeshStandardMaterial({
+                        //         map: Math.random() < 0.5 ? snapdragon : nasturtiums,
+                        //         side: THREE.DoubleSide,
+                        //         transparent: true,
+                        //         opacity: 1
+                        //     });
+                        //     var mesh = new THREE.Mesh(g, m);
+                        //     var _ = Math.random() < 0.2 ? a : (Math.random() < 0.4 ? b : c)
+                        //     mesh.position.set(
+                        //         vertices[_ * 3], vertices[_ * 3 + 1], vertices[_ * 3 + 2]
+                        //     );
+                        //     // mesh.rotation.z = -Math.PI;
+                        //     mesh.rotation.y = Math.random() * Math.PI * 2;
+                        //     mesh.position.x += randomInRange(-.2, .2);
+                        //     mesh.position.z += randomInRange(-.2, .2);
+                        //     mesh.castShadow = true;
+                        //     mesh.receiveShadow = true;
+                        //     scene.add(mesh);
+                        // }
 
                     // [Object("SlidingSlope")]
                     } else if (slope < 107) {
-                        moveMeshAlongNormal(t, -0.05);
+                        // moveMeshAlongNormal(t, -0.05);
 
                         t.climbable = false;
 
@@ -1614,7 +1627,6 @@ function MakeTerrainTileChildren(segments, vertices, indices, dom, scene) {
         dom
     }
 }
-
 
 function Terrain(T, v0, v1, v2, v3, segments, options) {
     var gridSize = T * 2;
@@ -1652,6 +1664,7 @@ function Terrain(T, v0, v1, v2, v3, segments, options) {
             
             vertices.push(v.x, v.y, v.z);
             uvs.push(x, y);
+
         }
     }
 
@@ -1671,10 +1684,12 @@ function Terrain(T, v0, v1, v2, v3, segments, options) {
     planeGeometry.computeVertexNormals();
     planeGeometry.computeBoundingBox();
 
-    var material = new THREE.MeshStandardMaterial({
-        color: new THREE.Color('lawngreen'),
+    var material = new THREE.MeshBasicMaterial({
+        color: 'transparent',
         side: THREE.DoubleSide,
-        wireframe: true
+        wireframe: false,
+        opacity: 0,
+        transparent: true
     });
 
     var mesh = new THREE.Mesh(planeGeometry, material);
