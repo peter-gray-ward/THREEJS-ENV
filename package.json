@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "watch" : "nodemon --watch . --ignore '*.json' --ignore '*.csv' --exec \"electron --disable-gpu electron.js\""
+    "watch": "nodemon --watch . --ignore '*.json' --ignore '*.csv' --exec \"electron --disable-gpu electron.js\""
   },
   "author": "",
   "license": "ISC",
