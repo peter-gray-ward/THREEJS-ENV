@@ -2,6 +2,15 @@ import * as THREE from '/node_modules/three/build/three.module.min.js';
 
 
 window.scene = new THREE.Scene();
+window.scene.add(window.camera);
+window.renderer = new THREE.WebGLRenderer();
+window.renderer.setSize(window.innerWidth, window.innerHeight);
+window.renderer.shadowMap.enabled = true;
+window.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+window.renderer.domElement.id = "view";
+document.body.appendChild(window.renderer.domElement);
+
+const TERMINAL_VELOCITY = -1.1 // lol
 
 function TriangleMesh(vertices, a, b, c) {
     const triangleGeometry = new THREE.BufferGeometry();
@@ -146,13 +155,175 @@ class BoundingVolumeHierarchy {
 
         return bvhNode;
     }
+
+    getAll(node = this.BVH, triangles = []) {
+        // If the node is null, return the current list of triangles
+        if (!node) {
+            return triangles;
+        }
+
+        // If the node has triangles, add them to the array
+        if (node.triangles && node.triangles.length > 0) {
+            triangles.push(...node.triangles); // Use spread operator to add all triangles
+        }
+
+        // Recursively call on the left and right children
+        if (node.left) {
+            this.getAllTriangles(node.left, triangles);
+        }
+        if (node.right) {
+            this.getAllTriangles(node.right, triangles);
+        }
+
+        // Return the accumulated list of triangles
+        return triangles;
+    }
+
+    // Method to apply a function to all triangles in the BVH
+    applyByFilter(node = this.BVH, filter) {
+        // If the node is null, return
+        if (!node) {
+            return;
+        }
+
+        // If the node has triangles, apply the filter function to each triangle
+        if (node.triangles && node.triangles.length > 0) {
+            node.triangles.forEach(triangle => filter(triangle));
+        }
+
+        // Recursively call on the left and right children
+        if (node.left) {
+            this.applyByFilter(node.left, filter);
+        }
+        if (node.right) {
+            this.applyByFilter(node.right, filter);
+        }
+    }
+
+
+}
+
+class Sky {
+
+    constructor(user) {
+        this.user = user;
+        this.sceneRadius = 150;
+
+        this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, .9); // Sky and ground color
+        this.hemisphereLight.position.set(0, 150, 0);
+        scene.add(this.hemisphereLight);
+
+
+        this.sun = new THREE.DirectionalLight(0xffffff, 5);
+        this.sun.position.set(0, 150, 0);
+        scene.add(this.sun)
+        this.sun.lookAt(0, 0, 0)
+
+        this.sun.castShadow = true; // Enable shadow casting for the light
+
+        // Optionally configure shadow map size for better shadow quality
+        this.sun.shadow.mapSize.width = 1024;
+        this.sun.shadow.mapSize.height = 1024;
+
+        // Configure the shadow camera for the directional light (this affects shadow casting area)
+        this.sun.shadow.camera.near = 0.05;
+        this.sun.shadow.camera.far = 500;
+        this.sun.shadow.camera.left = -100;
+        this.sun.shadow.camera.right = 100;
+        this.sun.shadow.camera.top = 100;
+        this.sun.shadow.camera.bottom = -100;
+        this.sky = [];
+        this.sphere = new THREE.Mesh(new THREE.SphereGeometry(2, 30, 30), new THREE.MeshBasicMaterial({ color: 'white' }));
+        this.sphere.position.copy(this.sun);
+        scene.add(this.sphere)
+
+        this.createDome();
+
+    }
+
+    createDome() {
+        var gridSize = 75;
+        var planeSize = 27; // Adjust this size to your preference
+        var radius = this.sceneRadius * 3; // Adjust this radius for the dome's curvature
+        var maxdist = 0
+
+        for (var i = 0; i < gridSize; i++) {
+            for (var j = 0; j < gridSize; j++) {
+                // Calculate spherical coordinates
+                var theta = (i / gridSize) * Math.PI; // Azimuthal angle
+                var phi = (j / gridSize) * Math.PI;   // Polar angle
+
+                // Convert spherical coordinates to Cartesian coordinates
+                var x = radius * Math.sin(phi) * Math.cos(theta);
+                var z = radius * Math.cos(phi);
+                var y = radius * Math.sin(phi) * Math.sin(theta);
+
+                var planeGeometry = new THREE.PlaneGeometry(planeSize, planeSize);
+                var planeMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xf95a75,
+                    transparent: true,
+                    opacity: 1
+                });
+
+                var plane = new THREE.Mesh(planeGeometry, planeMaterial);
+                plane.position.set(x, y - this.sceneRadius * .6, z);
+                // plane.lookAt(window.user.camera.position.x, user.camera.position.y, user.camera.position.z);
+                // this.plane.rotation.z = randomInRange(0, Math.PI * 2)
+
+                this.sky.push(plane);
+
+                if (z > maxdist) z = maxdist;
+
+                scene.add(plane);
+            }
+        }
+    }
+
+    update() {
+        for (var i = 0; i < this.sky.length; i++) {
+            var distanceToSun = this.sky[i].position.distanceTo(this.sun.position);
+
+            if (distanceToSun < sunMinDist) sunMinDist = distanceToSun
+            if (distanceToSun > sunMaxDist) sunMaxDist = distanceToSun
+
+
+            // Calculate intensity based on distance
+            var intensity = 1 - (distanceToSun / sunMaxDist);
+
+            // Ensure intensity stays within valid range (0 to 1)
+            intensity = Math.max(0, Math.min(1, intensity));
+
+            // Define the colors for the gradient (white for close, dark blue for far)
+            var colorNear = new THREE.Color('#4287f5');
+            var colorFar = new THREE.Color('darkblue');
+
+            // Optionally, adjust opacity further to smooth the transition
+
+
+            // Interpolate between the colors based on intensity
+            var color = new THREE.Color().lerpColors(colorFar, colorNear, intensity);
+
+            // Update the color of the plane's material
+            this.sky[i].material.color.copy(color);
+            this.sky[i].material.needsUpdate = true; // Ensure material update
+            this.sky[i].lookAt(this.user.camera.position.x, this.user.camera.position.y, this.user.camera.position.z)
+            // Optionally, adjust material opacity based on intensity for a smoother transition
+
+            if (this.sun.position.y > 0) {
+                this.sky[i].material.opacity = 1
+            } else if (distanceToSun > day) {
+                this.sky[i].material.opacity = intensity * .13;
+            }
+            // if (distanceToSun > maxDistance) controller.Sky[i].material.opacity = Math.sqrt(opacity, 3);
+        }
+    }
 }
 
 class Terrain {
     constructor(center = { x: 0, y: 0, z: 0 }, quadrant = 100, options = { noiseWidth: 200, noiseHeight: 100 }) {
         this.center = center;
         this.quadrant = quadrant;
-        this.sop = Math.floor(quadrant / 3);
+        this.sop = Math.floor(quadrant / 5);
         this.width = quadrant * 2;
         this.height = quadrant * 2;
         this.v0 = { x: center.x - quadrant, y: center.y, z: center.z + quadrant };
@@ -237,6 +408,21 @@ class Terrain {
 
     interpolate(x0, x1, alpha) {
         return x0 * (1 - alpha) + alpha * x1;
+    }
+
+    getRandomPosition() {
+        const positions = this.mesh.geometry.attributes.position.array;
+        const vertexCount = Math.floor(positions.length / 3); // Total number of vertices
+        const randomVertexIndex = Math.floor(Math.random() * vertexCount); // Random vertex index
+
+        // Calculate the correct array index for the x, y, z coordinates of the random vertex
+        const index = randomVertexIndex * 3;
+
+        return {
+            x: positions[index],        // x-coordinate
+            y: positions[index + 1],    // y-coordinate
+            z: positions[index + 2]     // z-coordinate
+        };
     }
 
 
@@ -493,7 +679,7 @@ class Terrain {
             color: 'blue',
             side: THREE.DoubleSide,
             wireframe: false,
-            opacity: .5,
+            opacity: 0.3,
             transparent: true
         });
 
@@ -588,8 +774,6 @@ class Terrain {
     }
 
 
-
-
 }
 
 class Tree {
@@ -618,60 +802,191 @@ class SceneController {
     }
 }
 
-class CharacterController {
-    constructor(camera, terrain) {
-        this.camera = camera;
+class UserController {
+    constructor(terrain, bvh) {
         this.terrain = terrain;
+        this.bvh = bvh;
+        this.isJumping = false;
+        this.w = false;
+        this.a = false;
+        this.s = false;
+        this.d = false;
+        this.wS = .1
+        this.aS = .1
+        this.sS = .1
+        this.dS = .1
+        this.tS = .2
+        this.shift = false
+        this.space = false;
+        this.ArrowUp = false;
+        this.ArrowRight = false;
+        this.ArrowDown = false;
+        this.ArrowLeft = false;
         this.isJumping = false;
         this.jumpVelocity = 0;
         this.velocity = new THREE.Vector3(); // General velocity
+        this.intersectsTerrain = [];
+        this.init();
+    }
+
+    init() {
+        let position = this.terrain.getRandomPosition();
+        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1600);
+        this.camera.touches = new Set()
+        this.camera.foot = null;
+        this.camera.position.set(position.x, position.y + 1.1, position.z);
+        this.camera.velocity = new THREE.Vector3(0, 0, 0);
+        this.cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
+            this.camera.position,
+            new THREE.Vector3(1, 1, 1) // Adjust size if needed
+        );
     }
 
     handleMovement() {
-        // Implement movement logic here using this.camera and this.velocity
+        // Handle gravity and jumping
+        if (this.isJumping) {
+            this.handleJumping();
+        } else {
+            this.applyGravity();
+        }
+
+        // Movement (while not jumping, or with reduced movement during jumping)
+        var combinedMovement = new THREE.Vector3();
+        if (this.w || this.a || this.s || this.d) {
+            var direction = new THREE.Vector3();
+            var right = new THREE.Vector3();
+            var forwardMovement = new THREE.Vector3();
+            var rightMovement = new THREE.Vector3();
+
+            if (this.w) {
+                this.camera.getWorldDirection(direction);
+                forwardMovement.add(direction.multiplyScalar(this.isJumping ? this.wS * 0.5 : this.wS));
+            }
+            if (this.a) {
+                this.camera.getWorldDirection(direction);
+                right.crossVectors(this.camera.up, direction).normalize();
+                rightMovement.add(right.multiplyScalar(this.isJumping ? this.aS * 0.5 : this.aS));
+            }
+            if (this.s) {
+                this.camera.getWorldDirection(direction);
+                forwardMovement.add(direction.multiplyScalar(this.isJumping ? -this.sS * 0.5 : -this.sS));
+            }
+            if (this.d) {
+                this.camera.getWorldDirection(direction);
+                right.crossVectors(this.camera.up, direction).normalize();
+                rightMovement.add(right.multiplyScalar(this.isJumping ? -this.dS * 0.5 : -this.dS));
+            }
+
+            combinedMovement.add(forwardMovement).add(rightMovement);
+        }
+
+
+        // Handle rotation
+        if (this.ArrowUp || this.ArrowDown) {
+            if (this.ArrowUp) {
+                this.camera.rotateX(this.tS);
+            }
+            if (this.ArrowDown) {
+                this.camera.rotateX(-this.tS);
+            }
+        }
+
+        if (this.ArrowLeft || this.ArrowRight) {
+            let quaternionY = new THREE.Quaternion();
+            let quaternionX = new THREE.Quaternion();
+
+            if (this.ArrowLeft) {
+                quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.tS);
+            }
+
+            if (this.ArrowRight) {
+                quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -this.tS);
+            }
+
+            this.camera.quaternion.multiplyQuaternions(quaternionY, this.camera.quaternion);
+        }
+
+
+        this.camera.position.add(combinedMovement);
+
+        this.updateBoundingBox();
     }
 
     handleJumping() {
-        // Implement jumping logic here
+        // Adjust the camera's position using jump velocity
+        this.camera.position.y += this.jumpVelocity;
+
+        // Apply gravity to reduce the jump velocity
+        this.jumpVelocity -= 0.03 * 0.8; // Adjust gravity effect
+
+        // Raycast to detect if we're hitting the ground
+        const raycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
+        this.intersectsTerrain = raycaster.intersectObject(this.terrain.mesh, true);
+
+        if (this.intersectsTerrain.length > 0 && this.intersectsTerrain[0].distance < 1) { // Adjust distance as needed
+            const intersection = this.intersectsTerrain[0];
+            this.isJumping = false;
+            this.jumpVelocity = 0; // Reset jump velocity
+            this.camera.position.y = intersection.point.y + 1; // Adjust for the height of the triangle surface
+        }
     }
 
     applyGravity() {
-        // Implement gravity logic here
+        // Apply gravity only if not jumping
+        if (!this.isJumping) {
+            this.camera.velocity.y += -0.02; // Gravity effect
+
+            // Limit falling speed to terminal velocity
+            if (this.camera.velocity.y < TERMINAL_VELOCITY) {
+                this.camera.velocity.y = TERMINAL_VELOCITY;
+            }
+
+            this.camera.position.y += this.camera.velocity.y;
+
+            // Check for ground collision using raycasting
+            const raycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
+            this.intersectsTerrain = raycaster.intersectObject(this.terrain.mesh, true);
+
+            if (this.intersectsTerrain.length > 0 && this.intersectsTerrain[0].distance < 1) { // Adjust distance as needed
+                const intersection = this.intersectsTerrain[0];
+                this.camera.position.y = intersection.point.y + 1; // Adjust for the height of the triangle surface
+                this.camera.velocity.y = 0; // Reset vertical velocity upon collision
+            }
+        }
     }
 
-    detectCollision() {
-        // Implement collision detection logic here
+
+
+    // Ensure the wireframe stays in sync with the bounding box
+    updateBoundingBox() {
+        // Set the bounding box based on the this.camera's current position
+        this.cameraBoundingBox.setFromCenterAndSize(
+            this.camera.position,
+            new THREE.Vector3(1, 1, 1) // Adjust size if needed
+        );
+        
+        // Update the wireframe box position and size to match the bounding box
+        const center = this.cameraBoundingBox.getCenter(new THREE.Vector3());
+        const size = this.cameraBoundingBox.getSize(new THREE.Vector3());
+
+        wireframeBox.position.copy(center);
+        wireframeBox.rotation.copy(this.camera.rotation);
+        wireframeBox.scale.set(size.x, size.y, size.z);
     }
 }
 
 
-
 window.terrain = new Terrain().generate();
 window.boundingVolumeHierarchy = new BoundingVolumeHierarchy();
+window.user = new UserController(terrain, boundingVolumeHierarchy);
+window.sky = new Sky(window.user);
 
-boundingVolumeHierarchy.init(terrain.triangles);
+boundingVolumeHierarchy.init(window.terrain.triangles);
 
 window.sliding = false
 window.THREE = THREE;
-window.w = false;
-window.a = false;
-window.s = false;
-window.d = false;
-window.wS = .1
-window.aS = .1
-window.sS = .1
-window.dS = .1
-window.tS = .2
-window.shift = false
-window.space = false;
-window.ArrowUp = false;
-window.ArrowRight = false;
-window.ArrowDown = false;
-window.ArrowLeft = false;
-window.isJumping = false;
-window.BVH = {}
+
 const FOV = 1600
-const TERMINAL_VELOCITY = -5.1 // lol
 var Grass = [
     '#33462d', //
     '#435c3a', //
@@ -683,32 +998,14 @@ var Grass = [
 ];
 window.sunMaxDist = -Infinity;
 window.sunMinDist = Infinity
-window.activeMapIndex = -1;
-window.priorMapIndex = -1
 window.map = {}
 var oceanBackground = null;
 window.sceneRadius = 150
-window.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, FOV);
-window.camera.touches = new Set()
-window.camera.foot = null;
-window.camera.velocity = new THREE.Vector3(0, 0, 0);
-var jumpVelocity = .3;
-window.camera.sectionTouched = null;
-window.camera.triangleTouched = null;
-window.scene.add(window.camera);
-window.renderer = new THREE.WebGLRenderer();
-window.renderer.setSize(window.innerWidth, window.innerHeight);
-window.renderer.shadowMap.enabled = true;
-window.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-window.renderer.domElement.id = "view";
-document.body.appendChild(window.renderer.domElement);
+
 var origin = new THREE.Mesh(new THREE.SphereGeometry(0.08, 20, 20), new THREE.MeshStandardMaterial({ color: 'turquoise' }));
 origin.position.set(0, 0, 0);
 // Global bounding box for the camera
-const cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
-    camera.position,
-    new THREE.Vector3(1, 1, 1) // Adjust size if needed
-);
+
 
 // Function to partition the trees into a 3D grid
 function partitionTrees3D(trees, gridSizeX, gridSizeY, gridSizeZ, terrainSizeX, terrainSizeY, terrainSizeZ) {
@@ -741,8 +1038,6 @@ function partitionTrees3D(trees, gridSizeX, gridSizeY, gridSizeZ, terrainSizeX, 
         }
     });
 
-    console.log(window.TREES.length, treesFound) // 496 297100
-
     return partitionedTrees;
 }
 
@@ -767,52 +1062,51 @@ function getTreesInSector3D(userPosition, partitionedTrees, gridSizeX, gridSizeY
 window.addEventListener('keydown', function(e) {
     const key = e.key.toUpperCase();
     if (key == 'W') {
-        window.w = true;
+        user.w = true;
     } else if (key == 'A') {
-        window.a = true;
+        user.a = true;
     } else if (key == 'S') {
-        window.s = true;
+        user.s = true;
     } else if (key == 'D') {
-        window.d = true;
+        user.d = true;
     } else if (key == ' ') {
-        window.isJumping = true;
-        window.jumpVelocity = jumpVelocity
-
+        user.isJumping = true;
+        user.jumpVelocity = 0.2;
     } else if (key == 'ARROWUP') {
-        window.ArrowUp = true;
+        user.ArrowUp = true;
     } else if (key == 'ARROWDOWN') {
-        window.ArrowDown = true;
+        user.ArrowDown = true;
     } else if (key == 'ARROWLEFT') {
-        window.ArrowLeft = true;
+        user.ArrowLeft = true;
     } else if (key == 'ARROWRIGHT') {
-        window.ArrowRight = true;
+        user.ArrowRight = true;
     } else if (key == 'SHIFT') {
-        window.shift = true;
+        user.shift = true;
     }
 })
 
 window.addEventListener('keyup', function(e) {
     const key = e.key.toUpperCase();
     if (key == 'W') {
-        window.w = false;
+        user.w = false;
     } else if (key == 'A') {
-        window.a = false;
+        user.a = false;
     } else if (key == 'S') {
-        window.s = false;
+        user.s = false;
     } else if (key == 'D') {
-        window.d = false;
+        user.d = false;
     } else if (key == ' ') {
-        window.space = false;
+        user.space = false;
     } else if (key == 'ARROWUP') {
-        window.ArrowUp = false;
+        user.ArrowUp = false;
     } else if (key == 'ARROWDOWN') {
-        window.ArrowDown = false;
+        user.ArrowDown = false;
     } else if (key == 'ARROWLEFT') {
-        window.ArrowLeft = false;
+        user.ArrowLeft = false;
     } else if (key == 'ARROWRIGHT') {
-        window.ArrowRight = false;
+        user.ArrowRight = false;
     } else if (key == 'SHIFT') {
-        window.shift = false;
+        user.shift = false;
     }
 })
 
@@ -824,68 +1118,33 @@ function randomInRange(from, to, startDistance = 0) {
 }
 
 
-
-
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
-window.addEventListener('mousedown', function(event) {
-    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+// window.addEventListener('mousedown', function(event) {
+//     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+//     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-    raycaster.setFromCamera(mouse, camera);
+//     raycaster.setFromCamera(mouse, window.user.camera);
 
-    const intersects = raycaster.intersectObjects(scene.children, true);
+//     const intersects = raycaster.intersectObjects(scene.children, true);
 
-    if (intersects.length > 0) {
-        const intersectedObject = intersects[0].object;
+//     if (intersects.length > 0) {
+//         const intersectedObject = intersects[0].object;
 
-        intersectedObject.material.opacity = intersectedObject.material.opacity ? 0 : 1;
+//         intersectedObject.material.opacity = intersectedObject.material.opacity ? 0 : 1;
 
-        if (intersectedObject.material.opacity && intersectedObject.material.addToBVH) {
-            window.BVH = addObjectToBVH(intersectedObject, window.BVH);
-            intersectedObject.material.addToBVH = false;
-        } else {
-            window.BVH = removeObjectFromBVH(intersectedObject, window.BVH);
-            intersectedObject.material.addToBVH = true;
-        }
-    } else {
-        // document.getElementById("collision-result").innerHTML = "No collision";
-    }
-});
-
-
-function checkCollision(cameraBoundingVolume, bvhNode, triangles = []) {
-    if (!bvhNode) {
-        bvhNode = window.boundingVolumeHierarchy.BVH; // Assuming this is where the global BVH is stored
-    }
-
-    // If the bounding volume doesn't intersect the current node's bounding box, return the current triangles array
-    if (!cameraBoundingVolume.intersectsBox(bvhNode.boundingBox)) {
-        return triangles;
-    }
-
-    // If this node contains triangles, check each one
-    if (bvhNode.triangles && bvhNode.triangles.length > 0) {
-        for (const mesh of bvhNode.triangles) {
-            if (cameraBoundingVolume.intersectsTriangle(mesh.triangle)) {
-                // If an intersection occurs, push the triangle to the array
-                triangles.push(mesh);
-            }
-        }
-    }
-
-    // Continue checking the left and right children nodes if they exist
-    if (bvhNode.left) {
-        checkCollision(cameraBoundingVolume, bvhNode.left, triangles);
-    }
-    if (bvhNode.right) {
-        checkCollision(cameraBoundingVolume, bvhNode.right, triangles);
-    }
-
-    // Return the array of all intersected triangles
-    return triangles;
-}
+//         if (intersectedObject.material.opacity && intersectedObject.material.addToBVH) {
+//             window.BVH = addObjectToBVH(intersectedObject, window.BVH);
+//             intersectedObject.material.addToBVH = false;
+//         } else {
+//             window.BVH = removeObjectFromBVH(intersectedObject, window.BVH);
+//             intersectedObject.material.addToBVH = true;
+//         }
+//     } else {
+//         // document.getElementById("collision-result").innerHTML = "No collision";
+//     }
+// });
 
 
 function generatePointsInTriangle(A, B, C, numPoints = 40) {
@@ -1011,196 +1270,17 @@ p.style.padding = '0.15rem 1rem'
 // scene.add(dimFairyLight)
 
 
-
-
-
-// [Object("Sun")]
-window.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, .9); // Sky and ground color
-hemisphereLight.position.set(0, 150, 0);
-scene.add(hemisphereLight);
-
-
-// [Object("Sun")]
-window.sun = new THREE.DirectionalLight(0xffffff, 5);
-sun.position.set(0, 150, 0);
-scene.add(sun)
-sun.lookAt(0, 0, 0)
-
-sun.castShadow = true; // Enable shadow casting for the light
-
-// Optionally configure shadow map size for better shadow quality
-sun.shadow.mapSize.width = 1024;
-sun.shadow.mapSize.height = 1024;
-
-// Configure the shadow camera for the directional light (this affects shadow casting area)
-sun.shadow.camera.near = 0.05;
-sun.shadow.camera.far = 500;
-sun.shadow.camera.left = -100;
-sun.shadow.camera.right = 100;
-sun.shadow.camera.top = 100;
-sun.shadow.camera.bottom = -100;
-
-
-var sphere = new THREE.Mesh(new THREE.SphereGeometry(2, 30, 30), new THREE.MeshBasicMaterial({ color: 'white' }));
-sphere.position.copy(sun);
-scene.add(sphere)
-
-function Sun() {}
-window.TreesTouchingUser = 0
-
-camera.position.y = 50
-
-function Watch() {
-	requestAnimationFrame(Watch)
-    var cbb = new THREE.Box3().setFromCenterAndSize(
-                camera.position,
-                new THREE.Vector3(1, 1, 1) // Adjust the size as needed
-            );
-	p.innerHTML = `
-CAMERA:   ${camera.position.x}, ${camera.position.y}, ${camera.position.z}
-JUMP VELOCITY:  ${window.jumpVelocity}
-Velocity: ${window.camera.velocity.y}
-TreesTouchingUser: ${TreesTouchingUser.length}
-HAS COLLISION:   ${camera.hasCollision}  ${ camera.hasCollision ? `
-    ${camera.triangleTouched.a.x}, ${camera.triangleTouched.a.y}, ${camera.triangleTouched.a.z}
-    ${camera.triangleTouched.b.x}, ${camera.triangleTouched.b.y}, ${camera.triangleTouched.b.z}
-    ${camera.triangleTouched.c.x}, ${camera.triangleTouched.c.y}, ${camera.triangleTouched.c.z}
-` : ''}
-JUMPING: ${window.isJumping}
-SLIDING: ${window.sliding}
-
-SECTION TOUCHED: <table style="overflow: auto;wmax-width:100vw;">
-	<tr>
-		<th>climbable</th>
-        <th>touch type</th>
-        <th>slope</th>
-	</tr>
-    ${ camera.sectionTouched && camera.sectionTouched.mesh ? `
-        <tr>
-            <td>${camera.sectionTouched.mesh.climbable}</td>
-            <td>${(
-                camera.sectionTouched.underFoot ? 'under-foot' : (
-                    camera.sectionTouched.overHead ? 'over-head' : '?'
-                )
-            )}</td>
-            <td>
-                ${(
-                    camera.sectionTouched.underFoot ? camera.sectionTouched.underFoot.slope : (
-                        camera.sectionTouched.overHead ? camera.sectionTouched.overHead.slope : '?'
-                    )
-                )}
-            </td>
-        </tr>` : ''
-    }
-</table>
-`
-}
-
-
 // [Timeline("Start")]
 window.Animate = function() {
     window.requestAnimationFrame(Animate);
 
-    var combinedMovement = new THREE.Vector3();
+    window.sky.update();
 
-    // Movement (while not jumping, or with reduced movement during jumping)
-    if (window.w || window.a || window.s || window.d) {
-        var direction = new THREE.Vector3();
-        var right = new THREE.Vector3();
-        var forwardMovement = new THREE.Vector3();
-        var rightMovement = new THREE.Vector3();
+    window.user.handleMovement();
 
-        if (window.w) {
-            window.camera.getWorldDirection(direction);
-            // Reduce movement speed if jumping, or apply normal movement speed on the ground
-            forwardMovement.add(direction.multiplyScalar(window.isJumping ? window.wS * 0.5 : window.wS));
-        }
-        if (window.a) {
-            window.camera.getWorldDirection(direction);
-            right.crossVectors(window.camera.up, direction).normalize();
-            rightMovement.add(right.multiplyScalar(window.isJumping ? window.aS * 0.5 : window.aS));
-        }
-        if (window.s) {
-            window.camera.getWorldDirection(direction);
-            forwardMovement.add(direction.multiplyScalar(window.isJumping ? -window.sS * 0.5 : -window.sS));
-        }
-        if (window.d) {
-            window.camera.getWorldDirection(direction);
-            right.crossVectors(window.camera.up, direction).normalize();
-            rightMovement.add(right.multiplyScalar(window.isJumping ? -window.dS * 0.5 : -window.dS));
-        }
+    window.terrain.updateTerrain(window.user.camera.position);
 
-        combinedMovement.add(forwardMovement).add(rightMovement);
-    }
-
-    // Jump & Gravity
-    if (window.isJumping) {
-        window.camera.position.y += window.jumpVelocity;
-        window.jumpVelocity -= 0.03 * 0.8; // Adjust the gravity effect on jump
-
-        // Check for collision with ground using raycasting
-        const raycaster = new THREE.Raycaster(window.camera.position, new THREE.Vector3(0, -1, 0));
-        const intersects = raycaster.intersectObject(window.terrain.mesh, true);
-
-        if (intersects.length > 0 && intersects[0].distance < 1) { // Adjust distance as needed
-            const intersection = intersects[0];
-            window.isJumping = false;
-            window.jumpVelocity = 0;
-            window.camera.position.y = intersection.point.y + 1; // Adjust for the height of the triangle surface
-        }
-    } else {
-        // Gravity
-        window.camera.velocity.y += -0.02; // Gravity effect
-
-        // Limit falling speed to terminal velocity
-        if (window.camera.velocity.y < TERMINAL_VELOCITY) {
-            window.camera.velocity.y = TERMINAL_VELOCITY;
-        }
-
-        window.camera.position.y += window.camera.velocity.y;
-
-        // Check for ground collision using raycasting
-        const raycaster = new THREE.Raycaster(window.camera.position, new THREE.Vector3(0, -1, 0));
-        const intersects = raycaster.intersectObject(window.terrain.mesh, true);
-
-        if (intersects.length > 0 && intersects[0].distance < 1) { // Adjust distance as needed
-            const intersection = intersects[0];
-            window.camera.position.y = intersection.point.y + 1; // Adjust for the height of the triangle surface
-            window.camera.velocity.y = 0; // Reset vertical velocity upon collision
-        }
-    }
-
-    Collide(combinedMovement);
-
-
-    // Handle rotation
-    if (window.ArrowUp || window.ArrowDown) {
-        if (window.ArrowUp) {
-            camera.rotateX(window.tS);
-        }
-        if (window.ArrowDown) {
-            camera.rotateX(-window.tS);
-        }
-    }
-
-    if (window.ArrowLeft || window.ArrowRight) {
-        let quaternionY = new THREE.Quaternion();
-        let quaternionX = new THREE.Quaternion();
-
-        if (window.ArrowLeft) {
-            quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), window.tS);
-        }
-
-        if (window.ArrowRight) {
-            quaternionY.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -window.tS);
-        }
-
-        camera.quaternion.multiplyQuaternions(quaternionY, window.camera.quaternion);
-    }
-
-    window.terrain.updateTerrain(window.camera.position);
-
-    window.renderer.render(window.scene, window.camera);
+    window.renderer.render(window.scene, window.user.camera);
 };
 
 
@@ -1214,23 +1294,6 @@ const wireframeBox = new THREE.Mesh(boxGeometry, wireframeMaterial);
 
 // Add the wireframe to the scene
 scene.add(wireframeBox);
-
-// Ensure the wireframe stays in sync with the bounding box
-function updateBoundingBox() {
-    // Set the bounding box based on the camera's current position
-    cameraBoundingBox.setFromCenterAndSize(
-        camera.position,
-        new THREE.Vector3(1, 1, 1) // Adjust size if needed
-    );
-    
-    // Update the wireframe box position and size to match the bounding box
-    const center = cameraBoundingBox.getCenter(new THREE.Vector3());
-    const size = cameraBoundingBox.getSize(new THREE.Vector3());
-
-    wireframeBox.position.copy(center);
-    wireframeBox.rotation.copy(camera.rotation);
-    wireframeBox.scale.set(size.x, size.y, size.z);
-}
 
 
 function checkTreeCollision(cameraBoundingBox) {
@@ -1304,101 +1367,6 @@ function getSectorsToCheck(userPosition) {
 }
 
 
-
-function Collide(combinedMovement) {
-    
-    updateBoundingBox()
-
-    // Handle Terrain
-    const TerrainMeshesTouchingUser = checkCollision(cameraBoundingBox);
-
-
-    // If there are intersecting triangles
-    if (TerrainMeshesTouchingUser.length) {
-        // Iterate over all intersecting triangles
-        for (let i = 0; i < TerrainMeshesTouchingUser.length; i++) {
-            const mesh = TerrainMeshesTouchingUser[i];
-
-            const triangleColor = mesh.material.color;
-
-            // Get the note based on the triangle's color
-            // const note = getNoteFromColor(triangleColor, keyNotes);
-
-            // Play the note (pseudo-code for playing sound)
-            // playNoteSound(note);
-
-            
-            camera.hasCollision = true;
-            camera.triangleTouched = mesh.triangle; 
-
-            // mesh.material.color.set(Math.random(), Math.random(), 1);
-
-            if (camera.position.y < mesh.position.y + 1) {
-                camera.position.y = mesh.position.y + 1;
-            }
-
-            if (!mesh.climbable && !window.shift) {
-                const slopeDirection = new THREE.Vector3();
-                const meshNormal = mesh.normal;
-
-                slopeDirection.copy(meshNormal).normalize();
-                const slopeMovement = slopeDirection.multiplyScalar(-0.2);
-
-                window.sliding = true;
-                camera.position.add(slopeMovement);
-            }
-
-            if (combinedMovement.length() > 0) {
-                combinedMovement.projectOnPlane(mesh.normal); 
-
-                const newPosition = new THREE.Vector3().copy(camera.position).add(combinedMovement);
-                const isInsideTriangle = isPointInTriangle(newPosition, mesh.triangle);  
-
-                if (isInsideTriangle) {
-                    camera.position.copy(newPosition);
-                } else {
-                    camera.position.add(combinedMovement); 
-                }
-            }
-        }
-    } else {
-        // If no triangles are intersecting, reset the collision state
-        camera.hasCollision = false;
-        camera.triangleTouched = null;
-
-        // Apply the normal movement without any restrictions
-        camera.position.add(combinedMovement);
-    }
-
-    // CollideWithTrees(combinedMovement);
-
-    camera.position.add(combinedMovement);
-
-    // Reset the state for all triangles in the BVH (untouched state)
-    function resetAllTriangles(bvhNode) {
-        if (!bvhNode) return;
-
-        // If the node contains triangles, reset their color
-        if (bvhNode.triangles && bvhNode.triangles.length > 0) {
-            for (const triangle of bvhNode.triangles) {
-                // Reset the triangle's material color if it has a stored original color
-                if (triangle.bin) {
-                    triangle.material.color.copy(triangle.bin);
-                    triangle.bin = undefined;  // Clear the stored color
-                }
-            }
-        }
-
-        // Traverse the left and right nodes recursively
-        if (bvhNode.left) resetAllTriangles(bvhNode.left);
-        if (bvhNode.right) resetAllTriangles(bvhNode.right);
-    }
-
-    // Call the reset function after processing collisions
-    resetAllTriangles(window.BVH);
-
-}
-
 // Helper function to check if a point is inside a triangle
 function isPointInTriangle(point, triangle) {
     var v0 = new THREE.Vector3().subVectors(triangle.c, triangle.a);
@@ -1418,8 +1386,6 @@ function isPointInTriangle(point, triangle) {
     return (u >= 0) && (v >= 0) && (u + v < 1);
 }
 
-// ocean
-
 
 
 // terrain
@@ -1428,44 +1394,7 @@ var nasturtiums = new THREE.TextureLoader().load("/images/nasturtiums.jpg")
 
 
 
-function createDome() {
-  var gridSize = 75;
-  var planeSize = 27; // Adjust this size to your preference
-  var radius = sceneRadius * 3; // Adjust this radius for the dome's curvature
-  var maxdist = 0
 
-  for (var i = 0; i < gridSize; i++) {
-    for (var j = 0; j < gridSize; j++) {
-      // Calculate spherical coordinates
-      var theta = (i / gridSize) * Math.PI; // Azimuthal angle
-      var phi = (j / gridSize) * Math.PI;   // Polar angle
-
-      // Convert spherical coordinates to Cartesian coordinates
-      var x = radius * Math.sin(phi) * Math.cos(theta);
-      var z = radius * Math.cos(phi);
-      var y = radius * Math.sin(phi) * Math.sin(theta);
-
-      var planeGeometry = new THREE.PlaneGeometry(planeSize, planeSize);
-      var planeMaterial = new THREE.MeshBasicMaterial({
-        color: stage.sunAngle > Math.PI ? 0xf95a75 : "white",
-        transparent: true,
-        opacity: 1
-      });
-
-      var plane = new THREE.Mesh(planeGeometry, planeMaterial);
-      plane.position.set(x, y - sceneRadius * .6, z);
-      plane.lookAt(camera.position.x, camera.position.y, camera.position.z);
-      // plane.rotation.z = randomInRange(0, Math.PI * 2)
-
-      if (z > maxdist) z = maxdist
-
-      stage.Sky.push(plane);
-      scene.add(plane);
-    }
-  }
-}
-
-// createDome()
 
 
 var al = new THREE.AmbientLight(0xffffce, 0.05);
@@ -1568,10 +1497,6 @@ function CREATE_A_TREE(x, y, z, alternate) {
 
     return new Tree(tubeMesh, sphere);
 }
-
-
-
-// Watch()
 
 
 
