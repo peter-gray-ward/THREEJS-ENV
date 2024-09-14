@@ -323,7 +323,7 @@ class Terrain {
     constructor(center = { x: 0, y: 0, z: 0 }, quadrant = 100, options = { noiseWidth: 200, noiseHeight: 100 }) {
         this.center = center;
         this.quadrant = quadrant;
-        this.sop = Math.floor(quadrant / 5);
+        this.sop = Math.floor(quadrant / 3);
         this.width = quadrant * 2;
         this.height = quadrant * 2;
         this.v0 = { x: center.x - quadrant, y: center.y, z: center.z + quadrant };
@@ -338,6 +338,7 @@ class Terrain {
         this.triangles = [];
         this.cliffMeshes = [];
         this.groundMeshes = [];
+        this.trees = [];
         this.altitudeVariance = 10;
     }
 
@@ -582,6 +583,7 @@ class Terrain {
         }
 
         for (let i = 0; i < this.segments; i++) {
+
             for (let j = 0; j < this.segments; j++) {
                 let a = i + j * (this.segments + 1);
                 let b = (i + 1) + j * (this.segments + 1);
@@ -612,35 +614,12 @@ class Terrain {
                             // scene.add(t);
                             this.triangles.push(t);
                             t.climbable = true;
-                            this.grounds.push(t.triangle)
+                            this.grounds.push(t.triangle);
 
-                            // if (t.triangle.a.y > 20 && Math.random() < 0.03) {
-                            //     let tree = CREATE_A_TREE(t.triangle.a.x, t.triangle.a.y, t.triangle.a.z, 1);
-                            //     window.TREES.push(tree);
-                            // }
-
-
-                            // for (var i = 0; i < 3; i++) {
-                            //     var g = new THREE.PlaneGeometry(randomInRange(0.2, 1.4), randomInRange(1, 3));
-                            //     var m = new THREE.MeshStandardMaterial({
-                            //         map: Math.random() < 0.5 ? snapdragon : nasturtiums,
-                            //         side: THREE.DoubleSide,
-                            //         transparent: true,
-                            //         opacity: 1
-                            //     });
-                            //     var mesh = new THREE.Mesh(g, m);
-                            //     var _ = Math.random() < 0.2 ? a : (Math.random() < 0.4 ? b : c)
-                            //     mesh.position.set(
-                            //         vertices[_ * 3], vertices[_ * 3 + 1], vertices[_ * 3 + 2]
-                            //     );
-                            //     // mesh.rotation.z = -Math.PI;
-                            //     mesh.rotation.y = Math.random() * Math.PI * 2;
-                            //     mesh.position.x += randomInRange(-.2, .2);
-                            //     mesh.position.z += randomInRange(-.2, .2);
-                            //     mesh.castShadow = true;
-                            //     mesh.receiveShadow = true;
-                            //     scene.add(mesh);
-                            // }
+                            if (Math.random() < 0.02) {
+                                let tree = this.createTree(t.triangle.a.x, t.triangle.a.y, t.triangle.a.z, 1);
+                                this.trees.push(tree);
+                            }
 
                         // [Object("SlidingSlope")]
                         } else if (slope < 107) {
@@ -675,12 +654,11 @@ class Terrain {
         planeGeometry.computeVertexNormals();
         planeGeometry.computeBoundingBox();
 
-        var material = new THREE.MeshStandardMaterial({
-            color: 'blue',
+        var material = new THREE.MeshBasicMaterial({
+            color: new THREE.Color('lawngreen'),
             side: THREE.DoubleSide,
-            wireframe: false,
-            opacity: 0.3,
-            transparent: true
+            wireframe: true,
+            transparent: false
         });
 
         this.mesh = new THREE.Mesh(planeGeometry, material);
@@ -763,6 +741,22 @@ class Terrain {
                 scene.add(mesh);
             }
         });
+
+        // Remove triangles outside the SOP from the scene
+        this.trees.forEach((tree) => {
+            if (tree.foliage.parent && !isInSOP(tree.foliage.position, sopCenter, sopRadius)) {
+                scene.remove(tree.trunk);
+                scene.remove(tree.foliage);
+            }
+        });
+
+        // Add trees within the SOP to the scene
+        this.trees.forEach((tree) => {
+            if (!tree.foliage.parent && isInSOP(tree.foliage.position, sopCenter, sopRadius)) {
+                scene.add(tree.trunk);
+                scene.add(tree.foliage);
+            }
+        });
     }
 
     // Helper method to calculate the center of a triangle
@@ -773,16 +767,103 @@ class Terrain {
         return { x: centerX, y: centerY, z: centerZ };
     }
 
-
-}
-
-class Tree {
-    constructor(trunk, foliage) {
-        this.trunk = trunk;  // TubeMesh (representing the trunk)
-        this.foliage = foliage;  // SphereMesh (representing the foliage)
-        this.boundingBox = new THREE.Box3().setFromObject(this.trunk).union(new THREE.Box3().setFromObject(this.foliage));
+    static Tree = class {
+        constructor(trunk, foliage) {
+            this.trunk = trunk;  // TubeMesh (representing the trunk)
+            this.foliage = foliage;  // SphereMesh (representing the foliage)
+            this.boundingBox = new THREE.Box3().setFromObject(this.trunk).union(new THREE.Box3().setFromObject(this.foliage));
+        }
     }
+
+    createTree(x, y, z, alternate) {
+        var trunkHeight = randomInRange(5, 15)
+        var trunkBaseRadius = randomInRange(.05, trunkHeight / 18)
+        var rr = alternate ? randomInRange(.01, .1) : randomInRange(.1, .5)
+        var trunkCurve = []
+        var trunkRadius = []
+        var zS = z
+        var xS = x
+        var yS = y;
+
+        for (; yS < y + trunkHeight; yS += 0.02) {
+            if (Math.random() < 0.13) {
+                zS += randomInRange(-rr, rr)
+            }
+            if (Math.random() < 0.13) {
+                xS += randomInRange(-rr, rr)
+            }
+            var r = trunkBaseRadius
+            trunkRadius.push(r)
+            trunkCurve.push(
+                new THREE.Vector3(
+                    xS,
+                    yS, 
+                    zS
+                )
+            )
+        }
+
+        // Default foliage (spherical)
+        var foliageRadius = randomInRange(trunkHeight * .3, 1.85)
+        const sphereGeometry = new THREE.SphereGeometry(foliageRadius, 10, 10);
+         // Generate a random green value between 0 and 255
+        const greenValue = Math.floor(Math.random() * 256);
+        // Create a new THREE.Color object with the random green value
+        const color = new THREE.Color(Math.random() < 0.05 ? randomInRange(0, 0.5) : 0, greenValue / 255, 0);
+        let sphereMaterial = new THREE.MeshStandardMaterial({
+            color,
+            transparent: false
+        });
+        
+        const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+        sphere.castShadow = true
+        sphere.receiveShadow = true
+        sphere.position.set(xS, yS - foliageRadius, zS); // Set foliage position
+        scene.add(sphere);
+
+        var { array, itemSize } = sphereGeometry.attributes.position
+        for (let i = 0; i < 21; i++) {
+            for (var j = 0; j < 21; j++) {
+                var vertexIndex = (i * (21 + 1) + j) * itemSize
+                var x = array[vertexIndex]
+                var z = array[vertexIndex + 1]
+                var y = array[vertexIndex + 2]
+
+                array[vertexIndex] = randomInRange(x - (foliageRadius * 1.1), x + foliageRadius * 1.1)
+                array[vertexIndex + 1] = randomInRange(y - (foliageRadius * 1.1), y + foliageRadius * 1.1)
+                array[vertexIndex + 2] = randomInRange(z - (foliageRadius * 1.1), z + foliageRadius * 1.1)
+            }
+        }
+
+        const path = new THREE.CatmullRomCurve3(trunkCurve);
+
+        var segments = Math.floor(randomInRange(5, 11))
+        var radialSegments = 15
+
+        // Create the tube geometry
+        const tubeGeometry = new THREE.TubeGeometry(path, segments, trunkBaseRadius);
+
+        const material = new THREE.MeshStandardMaterial({ 
+            // map: barkTexture,
+            color: 'red',
+            side: THREE.DoubleSide
+        });
+
+        // Create the mesh
+        const tubeMesh = new THREE.Mesh(tubeGeometry, material);
+        tubeMesh.castShadow = true
+        tubeMesh.receiveShadow = true
+        tubeMesh.position.y -= 2
+
+        // Add the mesh to the scene
+        scene.add(tubeMesh);
+
+        return new Terrain.Tree(tubeMesh, sphere);
+    }
+
 }
+
+
 
 class SceneController {
     constructor() {
@@ -1405,98 +1486,8 @@ al.position.set(0, 50, 0)
 // setInterval(createClouds, 3000);
 
 
-function getRandomShadeOfGreen() {
-    // Generate a random green value between 0 and 255
-    const greenValue = Math.floor(Math.random() * 256);
-    // Create a new THREE.Color object with the random green value
-    const color = new THREE.Color(Math.random() < 0.05 ? randomInRange(0, 0.5) : 0, greenValue / 255, 0);
-    return color;
-}
 
-function CREATE_A_TREE(x, y, z, alternate) {
-    var trunkHeight = randomInRange(5, 15)
-    var trunkBaseRadius = randomInRange(.05, trunkHeight / 18)
-    var rr = alternate ? randomInRange(.01, .1) : randomInRange(.1, .5)
-    var trunkCurve = []
-    var trunkRadius = []
 
-    
-
-    var zS = z
-    var xS = x
-    var yS = y;
-
-    for (; yS < y + trunkHeight; yS += 0.02) {
-        if (Math.random() < 0.13) {
-            zS += randomInRange(-rr, rr)
-        }
-        if (Math.random() < 0.13) {
-            xS += randomInRange(-rr, rr)
-        }
-        var r = trunkBaseRadius
-        trunkRadius.push(r)
-        trunkCurve.push(
-            new THREE.Vector3(
-                xS,
-                yS, 
-                zS
-            )
-        )
-    }
-
-    // Default foliage (spherical)
-    var foliageRadius = randomInRange(trunkHeight * .3, 1.85)
-    const sphereGeometry = new THREE.SphereGeometry(foliageRadius, 10, 10);
-    let sphereMaterial = new THREE.MeshStandardMaterial({
-        color: getRandomShadeOfGreen(),
-        transparent: false
-    });
-    
-    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-    sphere.castShadow = true
-    sphere.receiveShadow = true
-    sphere.position.set(xS, yS - foliageRadius, zS); // Set foliage position
-    scene.add(sphere);
-
-    var { array, itemSize } = sphereGeometry.attributes.position
-    for (let i = 0; i < 21; i++) {
-        for (var j = 0; j < 21; j++) {
-            var vertexIndex = (i * (21 + 1) + j) * itemSize
-            var x = array[vertexIndex]
-            var z = array[vertexIndex + 1]
-            var y = array[vertexIndex + 2]
-
-            array[vertexIndex] = randomInRange(x - (foliageRadius * 1.1), x + foliageRadius * 1.1)
-            array[vertexIndex + 1] = randomInRange(y - (foliageRadius * 1.1), y + foliageRadius * 1.1)
-            array[vertexIndex + 2] = randomInRange(z - (foliageRadius * 1.1), z + foliageRadius * 1.1)
-        }
-    }
-
-    const path = new THREE.CatmullRomCurve3(trunkCurve);
-
-    var segments = Math.floor(randomInRange(5, 11))
-    var radialSegments = 15
-
-    // Create the tube geometry
-    const tubeGeometry = new THREE.TubeGeometry(path, segments, trunkBaseRadius);
-
-    const material = new THREE.MeshStandardMaterial({ 
-        // map: barkTexture,
-        color: 'red',
-        side: THREE.DoubleSide
-    });
-
-    // Create the mesh
-    const tubeMesh = new THREE.Mesh(tubeGeometry, material);
-    tubeMesh.castShadow = true
-    tubeMesh.receiveShadow = true
-    tubeMesh.position.y -= 2
-
-    // Add the mesh to the scene
-    scene.add(tubeMesh);
-
-    return new Tree(tubeMesh, sphere);
-}
 
 
 
