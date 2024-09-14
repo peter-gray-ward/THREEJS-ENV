@@ -149,7 +149,7 @@ class BoundingVolumeHierarchy {
 }
 
 class Terrain {
-    constructor(center = { x: 0, y: 0, z: 0 }, quadrant = 40, options = { noiseWidth: 80, noiseHeight: 40 }) {
+    constructor(center = { x: 0, y: 0, z: 0 }, quadrant = 100, options = { noiseWidth: 200, noiseHeight: 100 }) {
         this.center = center;
         this.quadrant = quadrant;
         this.sop = Math.floor(quadrant / 3);
@@ -493,7 +493,7 @@ class Terrain {
             color: 'blue',
             side: THREE.DoubleSide,
             wireframe: false,
-            opacity: 1,
+            opacity: .5,
             transparent: true
         });
 
@@ -508,41 +508,86 @@ class Terrain {
     }
 
     updateTerrain(playerPosition) {
-        // Calculate the center of the current quadrant the player is in
-        const sopX = Math.floor(playerPosition.x / (this.sop * 2)) * (this.sop * 2);
-        const sopZ = Math.floor(playerPosition.z / (this.sop * 2)) * (this.sop * 2);
+        // Define the SOP as a center and a radius
+        const sopCenter = { x: playerPosition.x, y: playerPosition.y, z: playerPosition.z };
+        const sopRadius = this.sop; // SOP radius defining the extent of the player's perception
 
-        // Check if the player has moved into a new quadrant
-        if (this.center.x !== sopX || this.center.z !== sopZ) {
-            // Generate new terrain in the new quadrant
-            this.generateNewQuadrant(sopX, sopZ);
+        // Update visible triangles and clusters
+        this.updateVisibleTrianglesAndClusters(sopCenter, sopRadius);
 
-            // Update the terrain's current center and vertices
-            this.center = { x: sopX, y: this.center.y, z: sopZ };
-            this.v0 = { x: this.center.x - this.quadrant, y: this.center.y, z: this.center.z + this.quadrant };
-            this.v1 = { x: this.center.x + this.quadrant, y: this.center.y, z: this.center.z + this.quadrant };
-            this.v2 = { x: this.center.x + this.quadrant, y: this.center.y, z: this.center.z - this.quadrant };
-            this.v3 = { x: this.center.x - this.quadrant, y: this.center.y, z: this.center.z - this.quadrant };
-        }
-    }
-
-
-    generateNewQuadrant(quadrantX, quadrantZ) {
-        // Remove the existing terrain mesh from the scene
-        scene.remove(this.mesh);
-
-        // Update the terrain's center to the new quadrant's center
-        this.center = { x: quadrantX, y: this.center.y, z: quadrantZ };
+        // Update the terrain's current center
+        this.center = sopCenter;
         
-        // Recalculate the vertices (`v0`, `v1`, `v2`, `v3`) based on the new center
+        // Update the terrain vertices (`v0`, `v1`, `v2`, `v3`) if necessary (depends on use case)
         this.v0 = { x: this.center.x - this.quadrant, y: this.center.y, z: this.center.z + this.quadrant };
         this.v1 = { x: this.center.x + this.quadrant, y: this.center.y, z: this.center.z + this.quadrant };
         this.v2 = { x: this.center.x + this.quadrant, y: this.center.y, z: this.center.z - this.quadrant };
         this.v3 = { x: this.center.x - this.quadrant, y: this.center.y, z: this.center.z - this.quadrant };
-
-        // Generate the terrain using the new vertices and center
-        this.generate(); // Reuse the generate() method to create the new mesh
     }
+
+    updateVisibleTrianglesAndClusters(sopCenter, sopRadius) {
+        // Helper function to determine if a point is within the SOP
+        function isInSOP(point, sopCenter, sopRadius) {
+            const dx = point.x - sopCenter.x;
+            const dy = point.y - sopCenter.y;
+            const dz = point.z - sopCenter.z;
+            const distanceSquared = dx * dx + dy * dy + dz * dz;
+            return distanceSquared <= sopRadius * sopRadius;
+        }
+
+        // Remove triangles outside the SOP from the scene
+        this.triangles.forEach((mesh) => {
+            const triangle = mesh.triangle; // Get the triangle representation from the mesh
+            const triangleCenter = this.getTriangleCenter(triangle);
+
+            if (mesh && mesh.parent && !isInSOP(triangleCenter, sopCenter, sopRadius)) {
+                scene.remove(mesh);
+                mesh.triangle.inSOP = false; // Mark as not in SOP
+            }
+        });
+
+        // Add triangles within the SOP to the scene
+        this.triangles.forEach((mesh) => {
+            const triangle = mesh.triangle; // Get the triangle representation from the mesh
+            const triangleCenter = this.getTriangleCenter(triangle);
+
+            if (!mesh.parent && isInSOP(triangleCenter, sopCenter, sopRadius)) {
+                scene.add(mesh);
+                mesh.triangle.inSOP = true; // Mark as in SOP
+            }
+        });
+
+        // Repeat for cliffs and grounds clusters if needed
+        this.cliffMeshes.forEach((mesh) => {
+            const meshCenter = this.getTriangleCenter(mesh.triangle);
+            if ((meshCenter.x < sopCenter.x - sopRadius || meshCenter.x > sopCenter.x + sopRadius ||
+                meshCenter.z < sopCenter.z - sopRadius || meshCenter.z > sopCenter.z + sopRadius)) {
+                scene.remove(mesh);
+            } else {
+                scene.add(mesh);
+            }
+        });
+
+        this.groundMeshes.forEach((mesh) => {
+            const meshCenter = this.getTriangleCenter(mesh.triangle);
+            if ((meshCenter.x < sopCenter.x - sopRadius || meshCenter.x > sopCenter.x + sopRadius ||
+                meshCenter.z < sopCenter.z - sopRadius || meshCenter.z > sopCenter.z + sopRadius)) {
+                scene.remove(mesh);
+            } else {
+                scene.add(mesh);
+            }
+        });
+    }
+
+    // Helper method to calculate the center of a triangle
+    getTriangleCenter(triangle) {
+        const centerX = (triangle.a.x + triangle.b.x + triangle.c.x) / 3;
+        const centerY = (triangle.a.y + triangle.b.y + triangle.c.y) / 3;
+        const centerZ = (triangle.a.z + triangle.b.z + triangle.c.z) / 3;
+        return { x: centerX, y: centerY, z: centerZ };
+    }
+
+
 
 
 }
@@ -1153,7 +1198,7 @@ window.Animate = function() {
         camera.quaternion.multiplyQuaternions(quaternionY, window.camera.quaternion);
     }
 
-    // window.terrain.updateTerrain(window.camera.position);
+    window.terrain.updateTerrain(window.camera.position);
 
     window.renderer.render(window.scene, window.camera);
 };
