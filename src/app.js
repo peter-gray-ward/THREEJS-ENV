@@ -606,7 +606,9 @@ class Terrain {
                     const t2 = TriangleMesh(vertices, b, c, d);
 
                     [t1, t2].forEach((t) => {
-                        const normal = getTriangleNormal(t.triangle);
+                        const v0 = new THREE.Vector3().subVectors(t.triangle.b, t.triangle.a);
+                        const v1 = new THREE.Vector3().subVectors(t.triangle.c, t.triangle.a);
+                        const normal = new THREE.Vector3().crossVectors(v0, v1).normalize();
                         const slope = t.slope;
 
                         if (slope > 150) {
@@ -864,25 +866,6 @@ class Terrain {
 }
 
 
-
-class SceneController {
-    constructor() {
-
-    }
-
-    render() {
-
-    }
-
-    updateBackground() {
-
-    }
-
-    animateNature() {
-
-    }
-}
-
 class UserController {
     constructor(terrain, bvh) {
         this.terrain = terrain;
@@ -961,7 +944,6 @@ class UserController {
             combinedMovement.add(forwardMovement).add(rightMovement);
         }
 
-
         // Handle rotation
         if (this.ArrowUp || this.ArrowDown) {
             if (this.ArrowUp) {
@@ -987,10 +969,58 @@ class UserController {
             this.camera.quaternion.multiplyQuaternions(quaternionY, this.camera.quaternion);
         }
 
+        // Handle collisions before applying movement
+        this.handleCollision();
 
+        // Apply movement after collision handling
         this.camera.position.add(combinedMovement);
 
         this.updateBoundingBox();
+    }
+
+    handleCollision() {
+        // Define the directions to check for collision (forward, backward, left, right, up, down)
+        const directions = [
+            new THREE.Vector3(1, 0, 0),    // Right
+            new THREE.Vector3(-1, 0, 0),   // Left
+            new THREE.Vector3(0, 0, 1),    // Forward
+            new THREE.Vector3(0, 0, -1),   // Backward
+            new THREE.Vector3(0, 1, 0),    // Up
+            new THREE.Vector3(0, -1, 0)    // Down
+        ];
+
+        const collisionDistance = 1; // Adjust the distance threshold for tree collisions
+        const collisionResponseForce = 0.1; // Adjust the response force for the collision
+
+        // Loop through each direction to cast rays and detect collisions
+        for (let dir of directions) {
+            // Create a raycaster for the current direction
+            const raycaster = new THREE.Raycaster(this.camera.position, dir.normalize());
+
+            // Check for intersections with tree trunks and foliage
+            const intersectsTrees = raycaster.intersectObjects(this.terrain.trees.flatMap(tree => [tree.trunk, tree.foliage]), true);
+
+            if (intersectsTrees.length > 0 && intersectsTrees[0].distance < collisionDistance) {
+                // Collision detected with a tree trunk or foliage
+                const intersection = intersectsTrees[0];
+
+                // Calculate the direction to move the camera away from the tree
+                const responseDirection = this.camera.position.clone().sub(intersection.point).normalize();
+
+                // Apply the collision response
+                this.camera.position.add(responseDirection.multiplyScalar(collisionResponseForce));
+
+                // Additional handling for upward and downward collisions
+                if (dir.equals(new THREE.Vector3(0, -1, 0))) {
+                    // If the camera is moving downward, stop falling (standing on tree)
+                    this.camera.velocity.y = 0;
+                    this.camera.position.y = intersection.point.y + 1; // Adjust based on tree height
+                } else if (dir.equals(new THREE.Vector3(0, 1, 0))) {
+                    // If the camera is moving upwards, prevent further upward movement
+                    this.camera.velocity.y = Math.min(this.camera.velocity.y, 0);
+                }
+            }
+        }
     }
 
     handleJumping() {
@@ -1035,7 +1065,6 @@ class UserController {
             }
         }
     }
-
 
 
     // Ensure the wireframe stays in sync with the bounding box
@@ -1086,58 +1115,6 @@ window.sceneRadius = 150
 var origin = new THREE.Mesh(new THREE.SphereGeometry(0.08, 20, 20), new THREE.MeshStandardMaterial({ color: 'turquoise' }));
 origin.position.set(0, 0, 0);
 // Global bounding box for the camera
-
-
-// Function to partition the trees into a 3D grid
-function partitionTrees3D(trees, gridSizeX, gridSizeY, gridSizeZ, terrainSizeX, terrainSizeY, terrainSizeZ) {
-    const partitionedTrees = Array.from({ length: gridSizeX }, () =>
-        Array.from({ length: gridSizeY }, () =>
-            Array.from({ length: gridSizeZ }, () => [])));
-
-    const cellSizeX = terrainSizeX / gridSizeX;
-    const cellSizeY = terrainSizeY / gridSizeY;
-    const cellSizeZ = terrainSizeZ / gridSizeZ;
-
-    var treesFound = 0
-
-    trees.forEach(tree => {
-        const minX = Math.floor((tree.boundingBox.min.x + terrainSizeX / 2) / cellSizeX);
-        const minY = Math.floor((tree.boundingBox.min.y) / cellSizeY);
-        const minZ = Math.floor((tree.boundingBox.min.z + terrainSizeZ / 2) / cellSizeZ);
-        const maxX = Math.floor((tree.boundingBox.max.x + terrainSizeX / 2) / cellSizeX);
-        const maxY = Math.floor((tree.boundingBox.max.y) / cellSizeY);
-        const maxZ = Math.floor((tree.boundingBox.max.z + terrainSizeZ / 2) / cellSizeZ);
-
-
-        for (let x = Math.max(0, minX); x <= Math.min(gridSizeX - 1, maxX); x++) {
-            for (let y = Math.max(0, minY); y <= Math.min(gridSizeY - 1, maxY); y++) {
-                for (let z = Math.max(0, minZ); z <= Math.min(gridSizeZ - 1, maxZ); z++) {
-                    partitionedTrees[x][y][z].push(tree);
-                    treesFound++
-                }
-            }
-        }
-    });
-
-    return partitionedTrees;
-}
-
-// Function to get trees in a 3D sector based on user position
-function getTreesInSector3D(userPosition, partitionedTrees, gridSizeX, gridSizeY, gridSizeZ, terrainSizeX, terrainSizeY, terrainSizeZ) {
-    const cellSizeX = terrainSizeX / gridSizeX;
-    const cellSizeY = terrainSizeY / gridSizeY;
-    const cellSizeZ = terrainSizeZ / gridSizeZ;
-
-    const x = Math.floor((userPosition.x + terrainSizeX / 2) / cellSizeX);
-    const y = Math.floor(userPosition.y / cellSizeY);
-    const z = Math.floor((userPosition.z + terrainSizeZ / 2) / cellSizeZ);
-
-    if (x >= 0 && x < gridSizeX && y >= 0 && y < gridSizeY && z >= 0 && z < gridSizeZ) {
-        return partitionedTrees[x][y][z];
-    }
-
-    return [];
-}
 
 
 window.addEventListener('keydown', function(e) {
@@ -1228,107 +1205,7 @@ const mouse = new THREE.Vector2();
 // });
 
 
-function generatePointsInTriangle(A, B, C, numPoints = 40) {
-    const points = [];
-    for (let i = 0; i < numPoints; i++) {
-        // Generate two random numbers
-        const r1 = Math.random();
-        const r2 = Math.random();
-        const sqrtR1 = Math.sqrt(r1);
 
-        // Calculate barycentric coordinates
-        const lambda1 = 1 - sqrtR1;
-        const lambda2 = sqrtR1 * (1 - r2);
-        const lambda3 = sqrtR1 * r2;
-
-        // Calculate the coordinates of the random point
-        const x = lambda1 * A.x + lambda2 * B.x + lambda3 * C.x;
-        const y = lambda1 * A.y + lambda2 * B.y + lambda3 * C.y;
-        const z = lambda1 * A.z + lambda2 * B.z + lambda3 * C.z;
-
-        // Create a new Vector3 and add it to the points array
-        points.push(new THREE.Vector3(x, y, z));
-    }
-    return points;
-}
-
-
-function getTriangleNormal(triangle) {
-    const v0 = new THREE.Vector3().subVectors(triangle.b, triangle.a);
-    const v1 = new THREE.Vector3().subVectors(triangle.c, triangle.a);
-    return new THREE.Vector3().crossVectors(v0, v1).normalize();
-}
-
-
-function TriangleAsUnderFoot(cameraBoundingBox, triangle) {
-    const normal = getTriangleNormal(triangle);
-    const slope = Math.acos(normal.dot(new THREE.Vector3(0, 1, 0))) * (180 / Math.PI);
-
-    // Check if the triangle is within the camera bounding box vertically
-    const minZ = Math.min(triangle.a.z, triangle.b.z, triangle.c.z);
-    const maxZ = Math.max(triangle.a.z, triangle.b.z, triangle.c.z);
-
-    if (cameraBoundingBox.min.z <= maxZ && cameraBoundingBox.max.z >= minZ) {
-        return { Vector3: normal, slope: slope };
-    }
-    return null;
-}
-
-
-function TriangleAsAdjacent(triangle1, triangle2) {
-    const vertices1 = [triangle1.a, triangle1.b, triangle1.c];
-    const vertices2 = [triangle2.a, triangle2.b, triangle2.c];
-
-    const sharedVertices = vertices1.filter(v1 =>
-        vertices2.some(v2 => v1.equals(v2))
-    );
-
-    return sharedVertices.length === 2;
-}
-
-
-function TriangleAsOverhead(cameraBoundingBox, triangle) {
-    const normal = getTriangleNormal(triangle);
-    const slope = Math.acos(normal.dot(new THREE.Vector3(0, -1, 0))) * (180 / Math.PI);
-
-    // Check if the triangle is within the camera bounding box vertically
-    const minZ = Math.min(triangle.a.z, triangle.b.z, triangle.c.z);
-    const maxZ = Math.max(triangle.a.z, triangle.b.z, triangle.c.z);
-
-    if (cameraBoundingBox.min.z <= maxZ && cameraBoundingBox.max.z >= minZ) {
-        return { Vector3: normal, slope: slope };
-    }
-    return null;
-}
-
-
-function GetMeshForTriangle(mesh) {
-    for (var i = 0; i < dom.length; i++) {
-        if (dom[i].triangle == mesh.triangle) {
-            var cbb = new THREE.Box3().setFromCenterAndSize(
-                camera.position,
-                new THREE.Vector3(1, 1, 1) // Adjust the size as needed
-            );
-            return {
-                mesh,
-                underFoot: TriangleAsUnderFoot(cbb, triangle),
-                overHead: TriangleAsOverhead(cbb, triangle)
-            }
-        }
-    }
-    return null;
-}
-
-function getAdjacentIndices(mapIndex) {
-    const [x, y, z] = mapIndex.split('_').map(Number);
-    const adjacentIndices = [
-        `${x}_${y}_${z}`,
-        `${x+1}_${y}_${z}`,
-        `${x}_${y+1}_${z}`,
-        `${x+1}_${y+1}_${z}`
-    ];
-    return adjacentIndices;
-}
 
 var p = document.createElement('pre');
 p.style.background = 'rgba(0,0,0,0.8)'
@@ -1375,97 +1252,6 @@ const wireframeBox = new THREE.Mesh(boxGeometry, wireframeMaterial);
 
 // Add the wireframe to the scene
 scene.add(wireframeBox);
-
-
-function checkTreeCollision(cameraBoundingBox) {
-    const treesInNearbySectors = getTreesInNearbySectors(cameraBoundingBox);
-
-    const treesTouchingUser = [];
-
-    treesInNearbySectors.forEach(tree => {
-        // Check collision with the tree's trunk
-        const trunkBoundingBox = new THREE.Box3().setFromObject(tree.trunk);
-        if (trunkBoundingBox.intersectsBox(cameraBoundingBox)) {
-            treesTouchingUser.push(tree);
-        }
-
-        // Optionally check collision with foliage (if applicable)
-        const foliageBoundingBox = new THREE.Box3().setFromObject(tree.foliage);
-        if (foliageBoundingBox.intersectsBox(cameraBoundingBox)) {
-            treesTouchingUser.push(tree);
-        }
-    });
-
-    return treesTouchingUser;
-}
-
-// Function to get trees from nearby sectors based on camera's bounding box
-function getTreesInNearbySectors(cameraBoundingBox) {
-    const userPosition = cameraBoundingBox.getCenter(new THREE.Vector3());
-
-    // Assuming you have a grid-based partitioning system like before
-    // This function gets trees from the grid sectors that are near the camera
-    const nearbyTrees = [];
-
-    const sectorsToCheck = getSectorsToCheck(userPosition);
-
-    sectorsToCheck.forEach(sector => {
-        // Add all trees in the sector to the list of trees to check
-        nearbyTrees.push(...window.TREES[sector.x][sector.y][sector.z]);
-    });
-
-    return nearbyTrees;
-}
-
-// Helper function to get which sectors to check based on the camera's position
-// This checks the current sector and optionally adjacent sectors
-function getSectorsToCheck(userPosition) {
-    const gridSizeX = 8, gridSizeY = 8, gridSizeZ = 8;  // Example grid size
-    const terrainSizeX = T*2, terrainSizeY = T*2, terrainSizeZ = T*2;  // Example terrain size
-
-    const cellSizeX = terrainSizeX / gridSizeX;
-    const cellSizeY = terrainSizeY / gridSizeY;
-    const cellSizeZ = terrainSizeZ / gridSizeZ;
-
-    // Calculate which sector the user is in
-    const sectorX = Math.floor((userPosition.x + terrainSizeX / 2) / cellSizeX);
-    const sectorY = Math.floor(userPosition.y / cellSizeY);
-    const sectorZ = Math.floor((userPosition.z + terrainSizeZ / 2) / cellSizeZ);
-
-    // Get neighboring sectors (the sector the user is in and possibly adjacent sectors)
-    const sectorsToCheck = [];
-    for (let x = sectorX - 1; x <= sectorX + 1; x++) {
-        for (let y = sectorY - 1; y <= sectorY + 1; y++) {
-            for (let z = sectorZ - 1; z <= sectorZ + 1; z++) {
-                if (x >= 0 && x < gridSizeX && y >= 0 && y < gridSizeY && z >= 0 && z < gridSizeZ) {
-                    sectorsToCheck.push({ x, y, z });
-                }
-            }
-        }
-    }
-
-    return sectorsToCheck;
-}
-
-
-// Helper function to check if a point is inside a triangle
-function isPointInTriangle(point, triangle) {
-    var v0 = new THREE.Vector3().subVectors(triangle.c, triangle.a);
-    var v1 = new THREE.Vector3().subVectors(triangle.b, triangle.a);
-    var v2 = new THREE.Vector3().subVectors(point, triangle.a);
-
-    var dot00 = v0.dot(v0);
-    var dot01 = v0.dot(v1);
-    var dot02 = v0.dot(v2);
-    var dot11 = v1.dot(v1);
-    var dot12 = v1.dot(v2);
-
-    var invDenom = 1 / (dot00 * dot11 - dot01 * dot01);
-    var u = (dot11 * dot02 - dot01 * dot12) * invDenom;
-    var v = (dot00 * dot12 - dot01 * dot02) * invDenom;
-
-    return (u >= 0) && (v >= 0) && (u + v < 1);
-}
 
 
 
