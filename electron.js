@@ -37,6 +37,9 @@ app.whenReady().then(() => {
       filePath = path.join(__dirname, url);
     }
 
+
+    console.log('>>>>>', filePath);
+
     // Return the file
     callback(filePath);
   });

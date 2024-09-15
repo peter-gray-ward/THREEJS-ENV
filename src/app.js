@@ -203,6 +203,20 @@ class BoundingVolumeHierarchy {
 
 }
 
+class Textures {
+    constructor() {
+        this.barks = Array.from({ length: 7 }).map((_, i) => {
+            return new THREE.TextureLoader().load(`/images/trees/bark/bark-${i + 1}.jpg`);
+        });
+        this.branches = Array.from({ length: 4 }).map((_, i) => {
+            return new THREE.TextureLoader().load(`/images/trees/foliage/branches/tree-branch-${i + 1}.png`);
+        });
+        this.foliage = Array.from({ length: 4 }).map((_, i) => {
+            return new THREE.TextureLoader().load(`/images/trees/foliage/textures/foliage-${i + 1}.jpg`);
+        });
+    }
+}
+
 class Sky {
 
     constructor(user) {
@@ -320,7 +334,7 @@ class Sky {
 }
 
 class Terrain {
-    constructor(center = { x: 0, y: 0, z: 0 }, quadrant = 100, options = { noiseWidth: 200, noiseHeight: 100 }) {
+    constructor(center = { x: 0, y: 0, z: 0 }, quadrant = 100, options = { noiseWidth: 200, noiseHeight: 100 }, textures = new Textures()) {
         this.center = center;
         this.quadrant = quadrant;
         this.sop = Math.floor(quadrant / 3);
@@ -340,6 +354,7 @@ class Terrain {
         this.groundMeshes = [];
         this.trees = [];
         this.altitudeVariance = 10;
+        this.textures = textures;
     }
 
     generatePerlinNoise(options = {}) {
@@ -425,6 +440,7 @@ class Terrain {
             z: positions[index + 2]     // z-coordinate
         };
     }
+
 
 
     // Helper function to find connected clusters
@@ -778,8 +794,10 @@ class Terrain {
     }
 
     createTree(x, y, z, alternate) {
-        var trunkHeight = randomInRange(5, 15)
-        var trunkBaseRadius = randomInRange(.05, trunkHeight / 18)
+        const textureIndex = Math.floor(Math.random() * 7);
+
+        var trunkHeight = randomInRange(5, 20)
+        var trunkBaseRadius = randomInRange(.3, trunkHeight / 18)
         var rr = alternate ? randomInRange(.01, .1) : randomInRange(.1, .5)
         var trunkCurve = []
         var trunkRadius = []
@@ -806,21 +824,31 @@ class Terrain {
         }
 
         // Default foliage (spherical)
-        var foliageRadius = randomInRange(trunkHeight * .3, 1.85)
+        var foliageRadius = randomInRange(trunkHeight * .3, 2.85)
         const sphereGeometry = new THREE.SphereGeometry(foliageRadius, 10, 10);
-         // Generate a random green value between 0 and 255
         const greenValue = Math.floor(Math.random() * 256);
-        // Create a new THREE.Color object with the random green value
         const color = new THREE.Color(Math.random() < 0.05 ? randomInRange(0, 0.5) : 0, greenValue / 255, 0);
+        const foliageIndex = textureIndex > 4 ? textureIndex - 3 : textureIndex;
+        const foliageTexture = this.textures.branches[Math.floor(Math.random() * 4)];
+
+        // Set how many times the texture should repeat in the U and V directions
+        foliageTexture.wrapS = THREE.RepeatWrapping; // Repeat horizontally
+        foliageTexture.wrapT = THREE.RepeatWrapping; // Repeat vertically
+
+        // Adjust these values to control the repetition frequency
+        foliageTexture.repeat.set(10, 10); // Increase these numbers for more repetitions and smaller texture
+
         let sphereMaterial = new THREE.MeshStandardMaterial({
             color,
-            transparent: false
+            map: foliageTexture,
+            transparent: true
         });
+
         
         const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
         sphere.castShadow = true
         sphere.receiveShadow = true
-        sphere.position.set(xS, yS - foliageRadius, zS); // Set foliage position
+        sphere.position.set(xS, yS - (foliageRadius / 2), zS); // Set foliage position
         scene.add(sphere);
 
         var { array, itemSize } = sphereGeometry.attributes.position
@@ -837,6 +865,7 @@ class Terrain {
             }
         }
 
+
         const path = new THREE.CatmullRomCurve3(trunkCurve);
 
         var segments = Math.floor(randomInRange(5, 11))
@@ -846,8 +875,8 @@ class Terrain {
         const tubeGeometry = new THREE.TubeGeometry(path, segments, trunkBaseRadius);
 
         const material = new THREE.MeshStandardMaterial({ 
-            // map: barkTexture,
-            color: 'red',
+            map: this.textures.barks[textureIndex],
+            // color: 'red',
             side: THREE.DoubleSide
         });
 
@@ -875,7 +904,7 @@ class UserController {
         this.a = false;
         this.s = false;
         this.d = false;
-        this.wS = .1
+        this.wS = .3
         this.aS = .1
         this.sS = .1
         this.dS = .1
@@ -990,10 +1019,14 @@ class UserController {
         ];
 
         const collisionDistance = 1; // Adjust the distance threshold for tree collisions
-        const collisionResponseForce = 0.1; // Adjust the response force for the collision
+        let collisionResponseForce = 0.1; // Adjust the response force for the collision
 
         // Loop through each direction to cast rays and detect collisions
+        var i = 0;
         for (let dir of directions) {
+            if (i++ == 2) {
+                collisionResponseForce = 0.3;
+            }
             // Create a raycaster for the current direction
             const raycaster = new THREE.Raycaster(this.camera.position, dir.normalize());
 
@@ -1207,17 +1240,6 @@ const mouse = new THREE.Vector2();
 
 
 
-var p = document.createElement('pre');
-p.style.background = 'rgba(0,0,0,0.8)'
-p.style.color = 'white'
-document.body.appendChild(p);
-p.style.position = 'absolute'
-p.style.left = '0px'
-p.style.top = '0px'
-p.style.overflow = 'auto';
-p.style.maxHeight = '100vh';
-p.style.padding = '0.15rem 1rem'
-
 
 
 
@@ -1231,13 +1253,9 @@ p.style.padding = '0.15rem 1rem'
 // [Timeline("Start")]
 window.Animate = function() {
     window.requestAnimationFrame(Animate);
-
     window.sky.update();
-
     window.user.handleMovement();
-
     window.terrain.updateTerrain(window.user.camera.position);
-
     window.renderer.render(window.scene, window.user.camera);
 };
 
