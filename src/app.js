@@ -27,11 +27,9 @@ function TriangleMesh(vertices, a, b, c) {
     triangleGeometry.computeVertexNormals();
     triangleGeometry.computeBoundingBox();
 
-    const color = Math.random() < 0.5 ? 'whitesmoke' : '#EBEDEF'//new THREE.Color(Math.random(), Math.random(), Math.random())
-
-    const triangleMaterial = new THREE.MeshStandardMaterial({
-        color, // Random color for the triangles
-        side: THREE.DoubleSide
+    const triangleMaterial = new THREE.MeshBasicMaterial({
+        transparent: true,
+        opacity: 0
     });
     const triangleMesh = new THREE.Mesh(triangleGeometry, triangleMaterial);
     triangleMesh.castShadow = true;
@@ -211,7 +209,7 @@ class Textures {
         this.branches = Array.from({ length: 4 }).map((_, i) => {
             return new THREE.TextureLoader().load(`/images/trees/foliage/branches/tree-branch-${i + 1}.png`);
         });
-        this.foliage = Array.from({ length: 4 }).map((_, i) => {
+        this.foliage = Array.from({ length: 7 }).map((_, i) => {
             return new THREE.TextureLoader().load(`/images/trees/foliage/textures/foliage-${i + 1}.jpg`);
         });
     }
@@ -220,8 +218,11 @@ class Textures {
 class Sky {
 
     constructor(user) {
+        this.counter = 0;
         this.user = user;
         this.sceneRadius = 150;
+        this.angularSpeed = 2 * Math.PI;
+        this.time = 0;
 
         this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, .9); // Sky and ground color
         this.hemisphereLight.position.set(0, 150, 0);
@@ -242,13 +243,19 @@ class Sky {
         // Configure the shadow camera for the directional light (this affects shadow casting area)
         this.sun.shadow.camera.near = 0.05;
         this.sun.shadow.camera.far = 500;
-        this.sun.shadow.camera.left = -100;
-        this.sun.shadow.camera.right = 100;
-        this.sun.shadow.camera.top = 100;
-        this.sun.shadow.camera.bottom = -100;
+        this.sun.shadow.camera.left = -500;
+        this.sun.shadow.camera.right = 500;
+        this.sun.shadow.camera.top = 500;
+        this.sun.shadow.camera.bottom = -500;
         this.sky = [];
-        this.sphere = new THREE.Mesh(new THREE.SphereGeometry(2, 30, 30), new THREE.MeshBasicMaterial({ color: 'white' }));
-        this.sphere.position.copy(this.sun);
+        this.sphere = new THREE.Mesh(
+            new THREE.SphereGeometry(2, 30, 30), 
+            new THREE.MeshBasicMaterial({ 
+                side: THREE.DoubleSide, 
+                color: 'white' 
+            })
+        );
+        this.sphere.position.set(0, 150, 0);
         scene.add(this.sphere)
 
         this.createDome();
@@ -294,6 +301,16 @@ class Sky {
     }
 
     update() {
+        // this.time += 0.001;
+        // var theta = this.angularSpeed * this.time;
+        // var sunX = this.sceneRadius * Math.cos(theta);
+        // var sunY = this.sceneRadius * Math.sin(theta);
+        
+        // this.sun.position.x = sunX;
+        // this.sun.position.y = sunY;
+        // this.sphere.position.x = sunX;
+        // this.sphere.position.y = sunY;
+
         for (var i = 0; i < this.sky.length; i++) {
             var distanceToSun = this.sky[i].position.distanceTo(this.sun.position);
 
@@ -328,7 +345,6 @@ class Sky {
             } else if (distanceToSun > day) {
                 this.sky[i].material.opacity = intensity * .13;
             }
-            // if (distanceToSun > maxDistance) controller.Sky[i].material.opacity = Math.sqrt(opacity, 3);
         }
     }
 }
@@ -337,7 +353,7 @@ class Terrain {
     constructor(center = { x: 0, y: 0, z: 0 }, quadrant = 100, options = { noiseWidth: 200, noiseHeight: 100 }, textures = new Textures()) {
         this.center = center;
         this.quadrant = quadrant;
-        this.sop = Math.floor(quadrant / 3);
+        this.sop = Math.floor(quadrant / 2);
         this.width = quadrant * 2;
         this.height = quadrant * 2;
         this.v0 = { x: center.x - quadrant, y: center.y, z: center.z + quadrant };
@@ -440,8 +456,6 @@ class Terrain {
             z: positions[index + 2]     // z-coordinate
         };
     }
-
-
 
     // Helper function to find connected clusters
     findClusters(triangles = []) {
@@ -552,7 +566,7 @@ class Terrain {
             const geometry = createBufferGeometryFromCluster(cluster);
             const material = new THREE.MeshStandardMaterial({
                 color: 'lawngreen',
-                side: THREE.BackSide
+                side: THREE.DoubleSide
             });
             const mesh = new THREE.Mesh(geometry, material);
             mesh.receiveShadow = true;
@@ -634,7 +648,7 @@ class Terrain {
                             t.climbable = true;
                             this.grounds.push(t.triangle);
 
-                            if (Math.random() < 0.02) {
+                            if (Math.random() < 0.01) {
                                 let tree = this.createTree(t.triangle.a.x, t.triangle.a.y, t.triangle.a.z, 1);
                                 this.trees.push(tree);
                             }
@@ -672,16 +686,24 @@ class Terrain {
         planeGeometry.computeVertexNormals();
         planeGeometry.computeBoundingBox();
 
-        var material = new THREE.MeshBasicMaterial({
-            color: new THREE.Color('lawngreen'),
+        var forestFloorTexture = new THREE.TextureLoader().load("/images/forest-floor-2.jpg");
+
+        forestFloorTexture.wrapS = THREE.RepeatWrapping; // Repeat horizontally
+        forestFloorTexture.wrapT = THREE.RepeatWrapping; // Repeat vertically
+        forestFloorTexture.repeat.set(30, 30);
+
+        var material = new THREE.MeshStandardMaterial({
+            map: forestFloorTexture,
             side: THREE.DoubleSide,
-            wireframe: true,
+            wireframe: false,
             transparent: false
         });
 
         this.mesh = new THREE.Mesh(planeGeometry, material);
         this.mesh.castShadow = true;
         this.mesh.receiveShadow = true;
+
+       
 
         this.mesh.position.set(0, 0, 0);
         scene.add(this.mesh);
@@ -796,8 +818,8 @@ class Terrain {
     createTree(x, y, z, alternate) {
         const textureIndex = Math.floor(Math.random() * 7);
 
-        var trunkHeight = randomInRange(5, 20)
-        var trunkBaseRadius = randomInRange(.3, trunkHeight / 18)
+        var trunkHeight = randomInRange(7, 25)
+        var trunkBaseRadius = randomInRange(.1, .8)
         var rr = alternate ? randomInRange(.01, .1) : randomInRange(.1, .5)
         var trunkCurve = []
         var trunkRadius = []
@@ -829,7 +851,7 @@ class Terrain {
         const greenValue = Math.floor(Math.random() * 256);
         const color = new THREE.Color(Math.random() < 0.05 ? randomInRange(0, 0.5) : 0, greenValue / 255, 0);
         const foliageIndex = textureIndex > 4 ? textureIndex - 3 : textureIndex;
-        const foliageTexture = this.textures.branches[Math.floor(Math.random() * 4)];
+        const foliageTexture = this.textures.foliage[Math.floor(Math.random() * 7)];
 
         // Set how many times the texture should repeat in the U and V directions
         foliageTexture.wrapS = THREE.RepeatWrapping; // Repeat horizontally
@@ -848,7 +870,7 @@ class Terrain {
         const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
         sphere.castShadow = true
         sphere.receiveShadow = true
-        sphere.position.set(xS, yS - (foliageRadius / 2), zS); // Set foliage position
+        sphere.position.set(xS, yS + (foliageRadius / 2), zS); // Set foliage position
         scene.add(sphere);
 
         var { array, itemSize } = sphereGeometry.attributes.position
@@ -1250,16 +1272,6 @@ const mouse = new THREE.Vector2();
 // scene.add(dimFairyLight)
 
 
-// [Timeline("Start")]
-window.Animate = function() {
-    window.requestAnimationFrame(Animate);
-    window.sky.update();
-    window.user.handleMovement();
-    window.terrain.updateTerrain(window.user.camera.position);
-    window.renderer.render(window.scene, window.user.camera);
-};
-
-
 // Create a wireframe box to visualize the bounding box
 const boxGeometry = new THREE.BoxGeometry(1, 1, 1); // Adjust dimensions as needed
 const wireframeMaterial = new THREE.MeshBasicMaterial({
@@ -1293,6 +1305,16 @@ al.position.set(0, 50, 0)
 
 
 
+
+
+// [Timeline("Start")]
+window.Animate = function() {
+    window.requestAnimationFrame(Animate);
+    window.sky.update();
+    window.user.handleMovement();
+    window.terrain.updateTerrain(window.user.camera.position);
+    window.renderer.render(window.scene, window.user.camera);
+};
 
 
 Animate();
