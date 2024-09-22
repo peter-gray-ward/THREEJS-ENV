@@ -2,7 +2,6 @@ import * as THREE from '/node_modules/three/build/three.module.min.js';
 
 
 window.scene = new THREE.Scene();
-window.scene.add(window.camera);
 window.renderer = new THREE.WebGLRenderer();
 window.renderer.setSize(window.innerWidth, window.innerHeight);
 window.renderer.shadowMap.enabled = true;
@@ -12,7 +11,7 @@ document.body.appendChild(window.renderer.domElement);
 
 const TERMINAL_VELOCITY = -1.1 // lol
 
-function TriangleMesh(vertices, a, b, c) {
+function TriangleMesh(vertices, a, b, c, terrainWidth, terrainHeight) {
     const triangleGeometry = new THREE.BufferGeometry();
 
     // Extract vertex positions
@@ -27,29 +26,53 @@ function TriangleMesh(vertices, a, b, c) {
     triangleGeometry.computeVertexNormals();
     triangleGeometry.computeBoundingBox();
 
+    // Calculate UVs (using simple planar mapping based on X and Z coordinates)
+    const uvs = [
+        vertexPositions[0] / terrainWidth, vertexPositions[2] / terrainHeight,  // Vertex a
+        vertexPositions[3] / terrainWidth, vertexPositions[5] / terrainHeight,  // Vertex b
+        vertexPositions[6] / terrainWidth, vertexPositions[8] / terrainHeight   // Vertex c
+    ];
+
+    triangleGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));  // Add UVs
+
     const triangleMaterial = new THREE.MeshBasicMaterial({
         transparent: true,
         opacity: 0
     });
+
     const triangleMesh = new THREE.Mesh(triangleGeometry, triangleMaterial);
     triangleMesh.castShadow = true;
     triangleMesh.receiveShadow = true;
+
+    // Store the triangle geometry in a THREE.Triangle object
     triangleMesh.triangle = new THREE.Triangle(
         new THREE.Vector3(vertexPositions[0], vertexPositions[1], vertexPositions[2]),
         new THREE.Vector3(vertexPositions[3], vertexPositions[4], vertexPositions[5]),
         new THREE.Vector3(vertexPositions[6], vertexPositions[7], vertexPositions[8])
     );
-    triangleMesh.rgb = undefined
 
-    // Calculate normal and slope
+    // Calculate the triangle's normal and slope
     const normal = new THREE.Vector3();
     triangleMesh.triangle.getNormal(normal);
     const slope = Math.acos(normal.dot(new THREE.Vector3(0, 1, 0))) * (180 / Math.PI);
+
     triangleMesh.slope = slope;
     triangleMesh.normal = normal;
+    triangleMesh.triangle.uvs = uvs;  // Store UVs for later use (e.g., for texture painting)
 
     return triangleMesh;
 }
+
+function getInstancePosition(instancedMesh, index) {
+    const matrix = new THREE.Matrix4();
+    instancedMesh.getMatrixAt(index, matrix);  // Get the transformation matrix for the instance
+
+    const position = new THREE.Vector3();
+    position.setFromMatrixPosition(matrix);  // Extract the position from the matrix
+
+    return position;
+}
+
 
 class BoundingVolumeHierarchy {
 
@@ -224,7 +247,7 @@ class Sky {
         this.angularSpeed = 2 * Math.PI;
         this.time = 0;
 
-        this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, .9); // Sky and ground color
+        this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, .09); // Sky and ground color
         this.hemisphereLight.position.set(0, 150, 0);
         scene.add(this.hemisphereLight);
 
@@ -353,14 +376,14 @@ class Terrain {
     constructor(center = { x: 0, y: 0, z: 0 }, quadrant = 100, options = { noiseWidth: 200, noiseHeight: 100 }, textures = new Textures()) {
         this.center = center;
         this.quadrant = quadrant;
-        this.sop = Math.floor(quadrant / 2);
+        this.sop = quadrant * 0.5;
         this.width = quadrant * 2;
         this.height = quadrant * 2;
         this.v0 = { x: center.x - quadrant, y: center.y, z: center.z + quadrant };
         this.v1 = { x: center.x + quadrant, y: center.y, z: center.z + quadrant }; 
         this.v2 = { x: center.x + quadrant, y: center.y, z: center.z - quadrant }; 
         this.v3 = { x: center.x - quadrant, y: center.y, z: center.z - quadrant };
-        this.segments = quadrant * 2;
+        this.segments = quadrant;
         this.noiseWidth = options.noiseWidth;
         this.noiseHeight = options.noiseHeight;
         this.cliffs = [];
@@ -369,6 +392,7 @@ class Terrain {
         this.cliffMeshes = [];
         this.groundMeshes = [];
         this.trees = [];
+        this.grasses = [];
         this.altitudeVariance = 10;
         this.textures = textures;
     }
@@ -577,19 +601,38 @@ class Terrain {
         return meshes;
     }
 
+
+    getBarycentricCoordinates(p, triangle) {
+        const v0 = new THREE.Vector3().subVectors(triangle.b, triangle.a);
+        const v1 = new THREE.Vector3().subVectors(triangle.c, triangle.a);
+        const v2 = new THREE.Vector3().subVectors(p, triangle.a);
+
+        const d00 = v0.dot(v0);
+        const d01 = v0.dot(v1);
+        const d11 = v1.dot(v1);
+        const d20 = v2.dot(v0);
+        const d21 = v2.dot(v1);
+
+        const denom = d00 * d11 - d01 * d01;
+        const v = (d11 * d20 - d01 * d21) / denom;
+        const w = (d00 * d21 - d01 * d20) / denom;
+        const u = 1.0 - v - w;
+
+        return [u, v, w];  // Return the barycentric weights for the three vertices
+    }
+
+
+  
     generate() {
+        const mapResolution = 10;
         let vertices = [];
         let indices = [];
-        let uvs = [];
-        const cellSize = 1;
         const segmentSize = 1 / this.segments;
+        const groundColorMap = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(0));  // Initialize ground color map
 
         let perlinNoise = this.generatePerlinNoise();
 
-        const centerX = 0.5;
-        const centerY = 0.5;
-        const flatRadius = 0.1; // Adjust this radius as needed
-
+        // Generate vertices and initial setup
         for (let i = 0; i <= this.segments; i++) {
             for (let j = 0; j <= this.segments; j++) {
                 let x = i * segmentSize;
@@ -605,111 +648,98 @@ class Terrain {
                 let height = perlinNoise[noiseY * this.noiseWidth + noiseX] * this.altitudeVariance;
 
                 v.y += height;
-                
-                vertices.push(v.x, v.y, v.z);
-                uvs.push(x, y);
 
+                vertices.push(v.x, v.y, v.z);
             }
         }
 
+        // Process triangles and apply grass
         for (let i = 0; i < this.segments; i++) {
-
             for (let j = 0; j < this.segments; j++) {
                 let a = i + j * (this.segments + 1);
                 let b = (i + 1) + j * (this.segments + 1);
                 let c = (i + 1) + (j + 1) * (this.segments + 1);
                 let d = i + (j + 1) * (this.segments + 1);
 
-                if (a >= 0 
-                    && b >= 0 
-                    && c >= 0 
-                    && d >= 0 
-                    && a < vertices.length / 3 
-                    && b < vertices.length / 3 
-                    && c < vertices.length / 3 
-                    && d < vertices.length / 3) {
-
+                if (a >= 0 && b >= 0 && c >= 0 && d >= 0 && a < vertices.length / 3 && b < vertices.length / 3 && c < vertices.length / 3 && d < vertices.length / 3) {
                     indices.push(a, b, d);
                     indices.push(b, c, d);
 
-                    const t1 = TriangleMesh(vertices, a, b, d);          
-                    const t2 = TriangleMesh(vertices, b, c, d);
+                    const t1 = TriangleMesh(vertices, a, b, d, this.width, this.height);          
+                    const t2 = TriangleMesh(vertices, b, c, d, this.width, this.height);
 
-                    [t1, t2].forEach((t) => {
-                        const v0 = new THREE.Vector3().subVectors(t.triangle.b, t.triangle.a);
-                        const v1 = new THREE.Vector3().subVectors(t.triangle.c, t.triangle.a);
-                        const normal = new THREE.Vector3().crossVectors(v0, v1).normalize();
-                        const slope = t.slope;
+                    [t1, t2].forEach((triangle) => {
+                        const isGrass = Math.random() < 0.2;  // 30% chance for grass
+                        const isTree = Math.random() < 0.033;
 
-                        if (slope > 150) {
-                            // moveMeshAlongNormal(t, -0.03)
-                            // scene.add(t);
-                            this.triangles.push(t);
-                            t.climbable = true;
-                            this.grounds.push(t.triangle);
-
-                            if (Math.random() < 0.01) {
-                                let tree = this.createTree(t.triangle.a.x, t.triangle.a.y, t.triangle.a.z, 1);
-                                this.trees.push(tree);
+                        if (isGrass) {
+                            const grassResult = this.applyGrassToTriangle(triangle.triangle, randomInRange(11, 58), randomInRange(0.1, 1), randomInRange(0.05, 0.07));  // Apply grass to the triangle
+                            
+                            // // For each grass blade, calculate its barycentric coordinates and distribute grass intensity
+                            if (i % 2 == 0 && j % 2 == 0) {
+                                grassResult.bladePositions.forEach((bladePosition) => {
+                                    const closestVertexIndex = this.findClosestVertex(bladePosition, vertices);
+                                    if (closestVertexIndex >= 0 && closestVertexIndex < vertices.length / 3) {
+                                        const x = Math.floor(closestVertexIndex / (this.segments + 1));
+                                        const y = closestVertexIndex % (this.segments + 1);
+                                        groundColorMap[x][y] += 1;  // Increment the grass density at the closest vertex
+                                    }
+                                });
                             }
 
-                        // [Object("SlidingSlope")]
-                        } else if (slope < 107) {
-                            // moveMeshAlongNormal(t, -0.05);
-                            t.climbable = false;
-                            this.triangles.push(t);
-                            this.cliffs.push(t.triangle)
-                        } else {
-                            this.triangles.push(t);
-                            // scene.add(t);
-                            t.climbable = true;
-                            // this.other.push(t.triangle)
+                            this.grasses = this.grasses.concat(grassResult.mesh);
                         }
 
+                        if (isTree) {
+                            var tree = this.createTree(triangle.triangle.a.x, triangle.triangle.a.y, triangle.triangle.a.z, 1);
+                            this.trees.push(tree)
+                        }
                     });
-                } else {
-                    console.warn(`Invalid indices detected: a=${a}, b=${b}, c=${c}, d=${d}`);
                 }
             }
         }
 
-        this.cliffsMeshes = this.clusterCliffs();
-        this.groundMeshes = this.clusterGrounds();
+        // Now, let's apply the grass density in groundColorMap to color the vertices
+        const colors = [];
+        for (let i = 0; i < groundColorMap.length; i++) {
+            for (let j = 0; j < groundColorMap[i].length; j++) {
+                const density = groundColorMap[i][j];
+                if (density > 0) {
+                    // More grass means more green intensity
+                    const greenIntensity = Math.min(1, density / 10);  // Scale density for grass intensity
+                    colors.push(0, greenIntensity, 0);  // RGB color with green based on grass density
+                } else {
+                    // No grass means brown soil
+                    colors.push(randomInRange(0.1, 0.3), randomInRange(0.11, 0.15), randomInRange(0, 0.08));  // RGB color for dark brown soil
+                }
+            }
+        }
 
-        // window.TREES = partitionTrees3D(window.TREES, 8, 8, 8, gridSize, gridSize, gridSize);
-
-
-        var planeGeometry = new THREE.BufferGeometry();
+        // Apply vertex colors to the geometry
+        const planeGeometry = new THREE.BufferGeometry();
         planeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        planeGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        planeGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));  // Add vertex colors
         planeGeometry.setIndex(indices);
         planeGeometry.computeVertexNormals();
         planeGeometry.computeBoundingBox();
 
-        var forestFloorTexture = new THREE.TextureLoader().load("/images/forest-floor-2.jpg");
-
-        forestFloorTexture.wrapS = THREE.RepeatWrapping; // Repeat horizontally
-        forestFloorTexture.wrapT = THREE.RepeatWrapping; // Repeat vertically
-        forestFloorTexture.repeat.set(30, 30);
-
-        var material = new THREE.MeshStandardMaterial({
-            map: forestFloorTexture,
+        // Apply the custom texture to the terrain
+        const material = new THREE.MeshStandardMaterial({
+            vertexColors: true,  // Enable vertex colors
             side: THREE.DoubleSide,
-            wireframe: false,
             transparent: false
         });
 
-        this.mesh = new THREE.Mesh(planeGeometry, material);
-        this.mesh.castShadow = true;
-        this.mesh.receiveShadow = true;
+        const mesh = new THREE.Mesh(planeGeometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
 
-       
-
-        this.mesh.position.set(0, 0, 0);
+        this.mesh = mesh;
         scene.add(this.mesh);
 
         return this;
     }
+
 
     updateTerrain(playerPosition) {
         // Define the SOP as a center and a radius
@@ -795,6 +825,22 @@ class Terrain {
             if (!tree.foliage.parent && isInSOP(tree.foliage.position, sopCenter, sopRadius)) {
                 scene.add(tree.trunk);
                 scene.add(tree.foliage);
+            }
+        });
+
+        // Remove triangles outside the SOP from the scene
+        this.grasses.forEach((grass) => {
+            var pos = getInstancePosition(grass, 0);
+            if (grass.parent && !isInSOP(pos, sopCenter, sopRadius)) {
+                scene.remove(grass);
+            }
+        });
+
+        // Add grasses within the SOP to the scene
+        this.grasses.forEach((grass) => {
+            var pos = getInstancePosition(grass, 0);
+            if (!grass.parent && isInSOP(pos, sopCenter, sopRadius)) {
+                scene.add(grass);
             }
         });
     }
@@ -914,6 +960,77 @@ class Terrain {
         return new Terrain.Tree(tubeMesh, sphere);
     }
 
+    findClosestVertex(position, vertices) {
+        let closestIndex = -1;
+        let closestDistance = Infinity;
+
+        for (let i = 0; i < vertices.length / 3; i++) {
+            const vertexPosition = new THREE.Vector3(vertices[i * 3], vertices[i * 3 + 1], vertices[i * 3 + 2]);
+            const distance = position.distanceTo(vertexPosition);
+
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestIndex = i;
+            }
+        }
+
+        return closestIndex;
+    }
+
+
+    applyGrassToTriangle(triangle, bladeCount = 11, bladeHeight = 1, bladeWidth = 0.1) {
+        // Create geometry for a single grass blade
+        const bladeGeometry = new THREE.PlaneGeometry(bladeWidth, bladeHeight, 1, 4);
+        bladeGeometry.translate(0, bladeHeight / 2, 0);  // Set the blade's pivot at the bottom
+
+        const material = new THREE.MeshStandardMaterial({
+            color: 0x00ff0f,
+            side: THREE.DoubleSide,
+        });
+
+        // Create an InstancedMesh to handle multiple instances of grass blades efficiently
+        const instancedMesh = new THREE.InstancedMesh(bladeGeometry, material, bladeCount);
+        const bladePositions = [];  // To store blade positions for density updates
+
+        const dummy = new THREE.Object3D(); // Temporary object for positioning each blade
+
+        for (let i = 0; i < bladeCount; i++) {
+            // Randomly generate positions for each blade on the triangle surface
+            const u = Math.random();
+            const v = Math.random() * (1 - u);  // Ensure the point lies within the triangle
+
+            // Interpolate the position on the triangle
+            const posX = (1 - u - v) * triangle.a.x + u * triangle.b.x + v * triangle.c.x;
+            const posY = (1 - u - v) * triangle.a.y + u * triangle.b.y + v * triangle.c.y;
+            const posZ = (1 - u - v) * triangle.a.z + u * triangle.b.z + v * triangle.c.z;
+
+            // Store the grass blade position for groundColorMap updates
+            bladePositions.push(new THREE.Vector3(posX, posY, posZ));
+
+            // Randomly rotate and position the grass blade
+            const randomRotation = Math.random() * Math.PI * 2;
+            dummy.position.set(posX, posY, posZ);
+            dummy.rotation.y = randomRotation;
+
+            // Apply transformation to the instance
+            dummy.updateMatrix();
+            instancedMesh.setMatrixAt(i, dummy.matrix);
+        }
+
+        instancedMesh.castShadow = true;
+        instancedMesh.receiveShadow = true;
+
+        // Return both the instanced mesh and the positions of the grass blades
+        return {
+            mesh: instancedMesh,
+            bladePositions: bladePositions  // Return the positions of the grass blades
+        };
+    }
+
+
+
+
+
 }
 
 
@@ -926,11 +1043,11 @@ class UserController {
         this.a = false;
         this.s = false;
         this.d = false;
-        this.wS = .3
+        this.wS = .2
         this.aS = .1
         this.sS = .1
         this.dS = .1
-        this.tS = .2
+        this.tS = .4
         this.shift = false
         this.space = false;
         this.ArrowUp = false;
@@ -975,16 +1092,23 @@ class UserController {
 
             if (this.w) {
                 this.camera.getWorldDirection(direction);
+                // Ignore the y component to keep movement on the horizontal plane
+                direction.y = 0;
+                direction.normalize();  // Normalize to ensure the vector length stays consistent
                 forwardMovement.add(direction.multiplyScalar(this.isJumping ? this.wS * 0.5 : this.wS));
             }
+            if (this.s) {
+                this.camera.getWorldDirection(direction);
+                // Ignore the y component to keep movement on the horizontal plane
+                direction.y = 0;
+                direction.normalize();
+                forwardMovement.add(direction.multiplyScalar(this.isJumping ? -this.sS * 0.5 : -this.sS));
+            }
+
             if (this.a) {
                 this.camera.getWorldDirection(direction);
                 right.crossVectors(this.camera.up, direction).normalize();
                 rightMovement.add(right.multiplyScalar(this.isJumping ? this.aS * 0.5 : this.aS));
-            }
-            if (this.s) {
-                this.camera.getWorldDirection(direction);
-                forwardMovement.add(direction.multiplyScalar(this.isJumping ? -this.sS * 0.5 : -this.sS));
             }
             if (this.d) {
                 this.camera.getWorldDirection(direction);
@@ -1032,50 +1156,128 @@ class UserController {
     handleCollision() {
         // Define the directions to check for collision (forward, backward, left, right, up, down)
         const directions = [
-            new THREE.Vector3(1, 0, 0),    // Right
-            new THREE.Vector3(-1, 0, 0),   // Left
-            new THREE.Vector3(0, 0, 1),    // Forward
-            new THREE.Vector3(0, 0, -1),   // Backward
-            new THREE.Vector3(0, 1, 0),    // Up
-            new THREE.Vector3(0, -1, 0)    // Down
+            [ new THREE.Vector3(1, 0, 0),  this.dS],    // Right
+            [ new THREE.Vector3(-1, 0, 0), this.aS],   // Left
+            [ new THREE.Vector3(0, 0, 1),  this.wS],    // Forward
+            [ new THREE.Vector3(0, 0, -1), this.sS],   // Backward
+            [ new THREE.Vector3(0, 1, 0),  this.jumpVelocity],    // Up
+            [ new THREE.Vector3(0, -1, 0), 0.03 * 0.8]   // Down
         ];
 
-        const collisionDistance = 1; // Adjust the distance threshold for tree collisions
-        let collisionResponseForce = 0.1; // Adjust the response force for the collision
+        var dirs = {d:true,a:true,w:true,s:true,up:true,down:true}
+        const cameraBoundingBox = new THREE.Box3(
+            new THREE.Vector3(this.camera.position.x - 0.5, this.camera.position.y - 1.0, this.camera.position.z - 0.5), // Min point (simulating human size)
+            new THREE.Vector3(this.camera.position.x + 0.5, this.camera.position.y + 1.0, this.camera.position.z + 0.5)  // Max point (simulating human size)
+        );
+
 
         // Loop through each direction to cast rays and detect collisions
         var i = 0;
         for (let dir of directions) {
-            if (i++ == 2) {
-                collisionResponseForce = 0.3;
-            }
-            // Create a raycaster for the current direction
-            const raycaster = new THREE.Raycaster(this.camera.position, dir.normalize());
+            const raycaster = new THREE.Raycaster(this.camera.position, dir[0].normalize());
 
             // Check for intersections with tree trunks and foliage
             const intersectsTrees = raycaster.intersectObjects(this.terrain.trees.flatMap(tree => [tree.trunk, tree.foliage]), true);
 
-            if (intersectsTrees.length > 0 && intersectsTrees[0].distance < collisionDistance) {
-                // Collision detected with a tree trunk or foliage
-                const intersection = intersectsTrees[0];
+            var objs = []
 
-                // Calculate the direction to move the camera away from the tree
-                const responseDirection = this.camera.position.clone().sub(intersection.point).normalize();
+            if (intersectsTrees.length > 0) {
 
-                // Apply the collision response
-                this.camera.position.add(responseDirection.multiplyScalar(collisionResponseForce));
+                intersectsTrees.forEach(m => {
+                    var radii = [
+                        (m.object.geometry.boundingBox.max.x - m.object.geometry.boundingBox.min.x) / 2,
+                        (m.object.geometry.boundingBox.max.y - m.object.geometry.boundingBox.min.y) / 2,
+                        (m.object.geometry.boundingBox.max.z - m.object.geometry.boundingBox.min.z) / 2
+                    ];
 
-                // Additional handling for upward and downward collisions
-                if (dir.equals(new THREE.Vector3(0, -1, 0))) {
-                    // If the camera is moving downward, stop falling (standing on tree)
-                    this.camera.velocity.y = 0;
-                    this.camera.position.y = intersection.point.y + 1; // Adjust based on tree height
-                } else if (dir.equals(new THREE.Vector3(0, 1, 0))) {
-                    // If the camera is moving upwards, prevent further upward movement
-                    this.camera.velocity.y = Math.min(this.camera.velocity.y, 0);
+
+                    if (m.distance <= radii[dir.check]) {
+                        this.canMove[dir.axis] = false;  // Block movement in the corresponding direction
+                    }
+
+                    // right
+                    if (this.d && m.distance <= radii[0]) {
+                        dirs.d = false
+                        objs.push(m.object)
+                    }
+
+                    // left
+                    if (this.a && m.distance <= radii[0]) {
+                        dirs.a = false
+                        objs.push(m.object)
+                    }
+
+                    // forward
+                    if (this.w && m.distance <= radii[2]) {
+                        dirs.w = false
+                        objs.push(m.object)
+                    } 
+
+                    // back
+                    if (this.s && m.distance <= radii[2]) {
+                        dirs.s = false
+                        objs.push(m.object)
+                    } 
+
+                    // up
+                    if (this.isJumping && m.distance <= radii[1]) {
+                        this.camera.velocity.y = 0;
+                        dirs.up = false
+                        objs.push(m.object)
+                    } 
+
+                    // down
+                    if (this.camera.velocity.y < 0 && m.distance <= radii[1]) {
+                        this.camera.velocity.y = 0;
+                        objs.push(m.object)
+                    } 
+
+                })
+            }
+
+            
+
+            i++;
+        }
+
+        for (var d in dirs) {
+            if (!dirs[d]) {
+                switch (d) {
+                case 'w':   
+                    this.wS = 0;
+                    break;
+                case 'a':
+                    this.aS = 0
+                    break
+                case 's':
+                    this.sS = 0
+                    break;
+                case 'd':
+                    this.dS = 0
+                    break
+                }
+            } else {
+                switch (d) {
+                case 'w':
+                    this.wS = .2
+                    break;
+                case 'a':
+                    this.aS = .1
+                    break;
+                case 's':
+                    this.sS = .1
+                    break;
+                case 'd':
+                    this.dS = .1
+                    break;
                 }
             }
         }
+
+        document.getElementById('loaded').innerHTML =  `
+${objs.map(o => `${o.uuid}`).join(',')}
+${JSON.stringify(dirs, null, 2)}
+        `
     }
 
     handleJumping() {
@@ -1091,16 +1293,17 @@ class UserController {
 
         if (this.intersectsTerrain.length > 0 && this.intersectsTerrain[0].distance < 1) { // Adjust distance as needed
             const intersection = this.intersectsTerrain[0];
-            this.isJumping = false;
-            this.jumpVelocity = 0; // Reset jump velocity
             this.camera.position.y = intersection.point.y + 1; // Adjust for the height of the triangle surface
+            this.camera.velocity.y = 0; // Reset vertical velocity upon collision
+            this.isJumping = false;  // Ensure jumping is reset when grounded
         }
+
     }
 
     applyGravity() {
         // Apply gravity only if not jumping
         if (!this.isJumping) {
-            this.camera.velocity.y += -0.02; // Gravity effect
+            this.camera.velocity.y += -0.05; // Increase gravity effect (from -0.02 to -0.05)
 
             // Limit falling speed to terminal velocity
             if (this.camera.velocity.y < TERMINAL_VELOCITY) {
@@ -1184,7 +1387,7 @@ window.addEventListener('keydown', function(e) {
         user.d = true;
     } else if (key == ' ') {
         user.isJumping = true;
-        user.jumpVelocity = 0.2;
+        user.jumpVelocity = 0.4;
     } else if (key == 'ARROWUP') {
         user.ArrowUp = true;
     } else if (key == 'ARROWDOWN') {
@@ -1294,9 +1497,9 @@ var nasturtiums = new THREE.TextureLoader().load("/images/nasturtiums.jpg")
 
 
 
-var al = new THREE.AmbientLight(0xffffce, 0.05);
-scene.add(al);
-al.position.set(0, 50, 0)
+// var al = new THREE.AmbientLight(0xffffce, 0.05);
+// scene.add(al);
+// al.position.set(0, 50, 0)
 
 
 // setInterval(createClouds, 3000);
