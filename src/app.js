@@ -12,6 +12,7 @@ document.body.appendChild(window.renderer.domElement);
 const TERMINAL_VELOCITY = -1.1 // lol
 
 function TriangleMesh(vertices, a, b, c, terrainWidth, terrainHeight) {
+
     const triangleGeometry = new THREE.BufferGeometry();
 
     // Extract vertex positions
@@ -247,8 +248,8 @@ class Sky {
         this.angularSpeed = 2 * Math.PI;
         this.time = 0;
 
-        this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, .09); // Sky and ground color
-        this.hemisphereLight.position.set(0, 150, 0);
+        this.hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, .15); // Sky and ground color
+        this.hemisphereLight.position.set(0, 100, 0);
         scene.add(this.hemisphereLight);
 
 
@@ -376,9 +377,20 @@ class Terrain {
     constructor(center = { x: 0, y: 0, z: 0 }, quadrant = 100, options = { noiseWidth: 200, noiseHeight: 100 }, textures = new Textures()) {
         this.center = center;
         this.quadrant = quadrant;
-        this.sop = quadrant * 0.5;
         this.width = quadrant * 2;
         this.height = quadrant * 2;
+        this.sop = {
+            trees: quadrant * 3,
+            grasses: quadrant * .3
+        }
+        this.Grass = [
+            '#33462d', //
+            '#435c3a', //
+            '#4e5e3e', //
+            '#53634c', //
+            '#536c46', //
+            '#5d6847', //
+        ];
         this.v0 = { x: center.x - quadrant, y: center.y, z: center.z + quadrant };
         this.v1 = { x: center.x + quadrant, y: center.y, z: center.z + quadrant }; 
         this.v2 = { x: center.x + quadrant, y: center.y, z: center.z - quadrant }; 
@@ -397,10 +409,42 @@ class Terrain {
         this.textures = textures;
     }
 
+    generateRollingPerlinNoise(options = {}) {
+        let octaveCount = options.octaveCount || 4;
+        let amplitude = options.amplitude || 0.003;  // Slightly higher amplitude for rolling hills
+        let persistence = options.persistence || 0.15;  // Moderate persistence for rolling terrain
+        let whiteNoise = this.generateWhiteNoise();
+
+        let smoothNoiseList = new Array(octaveCount);
+        for (let i = 0; i < octaveCount; ++i) {
+            smoothNoiseList[i] = this.generateSmoothNoise(i, whiteNoise);
+        }
+
+        let perlinNoise = new Array(this.width * this.height);
+        let totalAmplitude = 0;
+
+        for (let i = octaveCount - 1; i >= 0; --i) {
+            amplitude *= persistence;
+            totalAmplitude += amplitude;
+
+            for (let j = 0; j < perlinNoise.length; ++j) {
+                perlinNoise[j] = perlinNoise[j] || 0;
+                perlinNoise[j] += smoothNoiseList[i][j] * amplitude;
+            }
+        }
+
+        for (let i = 0; i < perlinNoise.length; ++i) {
+            perlinNoise[i] /= totalAmplitude;
+        }
+
+        return perlinNoise;
+    }
+
+
     generatePerlinNoise(options = {}) {
         let octaveCount = options.octaveCount || 4;
-        let amplitude = options.amplitude || 0.1;
-        let persistence = options.persistence || 0.2;
+        let amplitude = options.amplitude || 0.05;
+        let persistence = options.persistence || 0.1;
         let whiteNoise = this.generateWhiteNoise();
 
         let smoothNoiseList = new Array(octaveCount);
@@ -630,7 +674,7 @@ class Terrain {
         const segmentSize = 1 / this.segments;
         const groundColorMap = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(0));  // Initialize ground color map
 
-        let perlinNoise = this.generatePerlinNoise();
+        let perlinNoise = this.generateRollingPerlinNoise();
 
         // Generate vertices and initial setup
         for (let i = 0; i <= this.segments; i++) {
@@ -653,7 +697,24 @@ class Terrain {
             }
         }
 
-        // Process triangles and apply grass
+        var grassPatches = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(false));  // Initialize an array to track grass patches
+
+        for (let i = 0; i < this.segments; i++) {
+            for (let j = 0; j < this.segments; j++) {
+                // Define the random range for grass patches
+                const isInGrassPatch = (i >= randomInRange(0, this.quadrant * 2) && i <= randomInRange(0, this.quadrant * 2)) &&
+                                       (j >= randomInRange(0, this.quadrant * 2) && j <= randomInRange(10, this.quadrant * 2));
+
+                // Store grass patch in grassPatches array
+                if (isInGrassPatch) {
+                    grassPatches[i][j] = true;  // Mark this cell as part of a grass patch
+                }
+            }
+        }
+
+
+
+        // Process triangles and apply grass in defined ranges
         for (let i = 0; i < this.segments; i++) {
             for (let j = 0; j < this.segments; j++) {
                 let a = i + j * (this.segments + 1);
@@ -664,35 +725,59 @@ class Terrain {
                 if (a >= 0 && b >= 0 && c >= 0 && d >= 0 && a < vertices.length / 3 && b < vertices.length / 3 && c < vertices.length / 3 && d < vertices.length / 3) {
                     indices.push(a, b, d);
                     indices.push(b, c, d);
+                    
 
-                    const t1 = TriangleMesh(vertices, a, b, d, this.width, this.height);          
+                    const t1 = TriangleMesh(vertices, a, b, d, this.width, this.height);
                     const t2 = TriangleMesh(vertices, b, c, d, this.width, this.height);
 
                     [t1, t2].forEach((triangle) => {
-                        const isGrass = Math.random() < 0.2;  // 30% chance for grass
-                        const isTree = Math.random() < 0.033;
+                        const isTree = Math.random() < 0.03;
 
-                        if (isGrass) {
-                            const grassResult = this.applyGrassToTriangle(triangle.triangle, randomInRange(11, 58), randomInRange(0.1, 1), randomInRange(0.05, 0.07));  // Apply grass to the triangle
+                        //  // Check if this triangle is either in a grass patch or adjacent to one
+                        const isNearGrassPatch = (grassPatches[i][j] || 
+                                                  (i > 0 && grassPatches[i - 1][j]) ||  // Check left
+                                                  (i < this.segments && grassPatches[i + 1][j]) ||  // Check right
+                                                  (j > 0 && grassPatches[i][j - 1]) ||  // Check above
+                                                  (j < this.segments && grassPatches[i][j + 1]) ||  // Check below
+                                                  (i > 0 && j > 0 && grassPatches[i - 1][j - 1]) ||  // Check top-left diagonal
+                                                  (i < this.segments && j > 0 && grassPatches[i + 1][j - 1]) ||  // Check top-right diagonal
+                                                  (i > 0 && j < this.segments && grassPatches[i - 1][j + 1]) ||  // Check bottom-left diagonal
+                                                  (i < this.segments && j < this.segments && grassPatches[i + 1][j + 1])  // Check bottom-right diagonal
+                        );
+
+
+                        if (Math.random() < 0.1) {
+             
+                            const grassResult = this.applyGrassToTriangle(
+                                triangle.triangle,
+                                randomInRange(20, 30),
+                                randomInRange(0.1, 0.2),
+                                randomInRange(0.05, 0.07)
+                            );  // Apply grass to the triangle
                             
-                            // // For each grass blade, calculate its barycentric coordinates and distribute grass intensity
-                            if (i % 2 == 0 && j % 2 == 0) {
-                                grassResult.bladePositions.forEach((bladePosition) => {
-                                    const closestVertexIndex = this.findClosestVertex(bladePosition, vertices);
-                                    if (closestVertexIndex >= 0 && closestVertexIndex < vertices.length / 3) {
-                                        const x = Math.floor(closestVertexIndex / (this.segments + 1));
-                                        const y = closestVertexIndex % (this.segments + 1);
-                                        groundColorMap[x][y] += 1;  // Increment the grass density at the closest vertex
-                                    }
-                                });
-                            }
+                            // Apply spikiness by perturbing the vertices' Z (height) values
+                            const perturbation = randomInRange(randomInRange(-0.2, 0.1), randomInRange(0.1, .9));  // Adjust the intensity of spikiness
+                            [a, b, d].forEach((vertexIndex) => {
+                                vertices[vertexIndex * 3 + 2] += perturbation;  // Alter the Z coordinate of the vertex to create roughness
+                            });
+
+                            // Mark grass on groundColorMap to match patches
+                            grassResult.bladePositions.forEach((bladePosition) => {
+                                const closestVertexIndex = this.findClosestVertex(bladePosition, vertices);
+                                if (closestVertexIndex >= 0 && closestVertexIndex < vertices.length / 3) {
+                                    const x = Math.floor(closestVertexIndex / (this.segments + 1));
+                                    const y = closestVertexIndex % (this.segments + 1);
+                                    groundColorMap[x][y] += 1;  // Increment the grass density at the closest vertex
+                                }
+                            });
 
                             this.grasses = this.grasses.concat(grassResult.mesh);
+                           
                         }
 
                         if (isTree) {
                             var tree = this.createTree(triangle.triangle.a.x, triangle.triangle.a.y, triangle.triangle.a.z, 1);
-                            this.trees.push(tree)
+                            this.trees.push(tree);
                         }
                     });
                 }
@@ -701,16 +786,24 @@ class Terrain {
 
         // Now, let's apply the grass density in groundColorMap to color the vertices
         const colors = [];
-        for (let i = 0; i < groundColorMap.length; i++) {
-            for (let j = 0; j < groundColorMap[i].length; j++) {
+        const gridSize = groundColorMap.length;  // Assuming groundColorMap is a 2D array of the grid size
+
+        for (let i = 0; i < gridSize; i++) {
+            for (let j = 0; j < gridSize; j++) {
                 const density = groundColorMap[i][j];
-                if (density > 0) {
-                    // More grass means more green intensity
-                    const greenIntensity = Math.min(1, density / 10);  // Scale density for grass intensity
-                    colors.push(0, greenIntensity, 0);  // RGB color with green based on grass density
-                } else {
-                    // No grass means brown soil
-                    colors.push(randomInRange(0.1, 0.3), randomInRange(0.11, 0.15), randomInRange(0, 0.08));  // RGB color for dark brown soil
+
+                // Ensure that color application and grass application use the same coordinates
+                const vertexIndex = i * (this.segments + 1) + j;  // Adjust based on segment count and grid
+
+                if (vertexIndex < vertices.length / 3) {  // Ensure vertex index is within bounds
+                    if (density > 0) {
+                        // More grass means more green intensity
+                        const greenIntensity = Math.min(1, density / 10);  // Scale density for grass intensity
+                        colors.push(randomInRange(0, 0.1), greenIntensity, randomInRange(0, 0.1));  // RGB color with green based on grass density
+                    } else {
+                        // No grass means brown soil
+                        colors.push(randomInRange(0.1, 0.3), randomInRange(0.11, 0.15), randomInRange(0, 0.08));  // RGB color for dark brown soil
+                    }
                 }
             }
         }
@@ -744,10 +837,9 @@ class Terrain {
     updateTerrain(playerPosition) {
         // Define the SOP as a center and a radius
         const sopCenter = { x: playerPosition.x, y: playerPosition.y, z: playerPosition.z };
-        const sopRadius = this.sop; // SOP radius defining the extent of the player's perception
 
         // Update visible triangles and clusters
-        this.updateVisibleTrianglesAndClusters(sopCenter, sopRadius);
+        this.updateVisibleTrianglesAndClusters(sopCenter);
 
         // Update the terrain's current center
         this.center = sopCenter;
@@ -759,7 +851,7 @@ class Terrain {
         this.v3 = { x: this.center.x - this.quadrant, y: this.center.y, z: this.center.z - this.quadrant };
     }
 
-    updateVisibleTrianglesAndClusters(sopCenter, sopRadius) {
+    updateVisibleTrianglesAndClusters(sopCenter) {
         // Helper function to determine if a point is within the SOP
         function isInSOP(point, sopCenter, sopRadius) {
             const dx = point.x - sopCenter.x;
@@ -814,7 +906,7 @@ class Terrain {
 
         // Remove triangles outside the SOP from the scene
         this.trees.forEach((tree) => {
-            if (tree.foliage.parent && !isInSOP(tree.foliage.position, sopCenter, sopRadius)) {
+            if (tree.foliage.parent && !isInSOP(tree.foliage.position, sopCenter, this.sop.trees)) {
                 scene.remove(tree.trunk);
                 scene.remove(tree.foliage);
             }
@@ -822,7 +914,7 @@ class Terrain {
 
         // Add trees within the SOP to the scene
         this.trees.forEach((tree) => {
-            if (!tree.foliage.parent && isInSOP(tree.foliage.position, sopCenter, sopRadius)) {
+            if (!tree.foliage.parent && isInSOP(tree.foliage.position, sopCenter, this.sop.trees)) {
                 scene.add(tree.trunk);
                 scene.add(tree.foliage);
             }
@@ -831,7 +923,7 @@ class Terrain {
         // Remove triangles outside the SOP from the scene
         this.grasses.forEach((grass) => {
             var pos = getInstancePosition(grass, 0);
-            if (grass.parent && !isInSOP(pos, sopCenter, sopRadius)) {
+            if (grass.parent && !isInSOP(pos, sopCenter, this.sop.grasses)) {
                 scene.remove(grass);
             }
         });
@@ -839,10 +931,11 @@ class Terrain {
         // Add grasses within the SOP to the scene
         this.grasses.forEach((grass) => {
             var pos = getInstancePosition(grass, 0);
-            if (!grass.parent && isInSOP(pos, sopCenter, sopRadius)) {
+            if (!grass.parent && isInSOP(pos, sopCenter, this.sop.grasses)) {
                 scene.add(grass);
             }
         });
+
     }
 
     // Helper method to calculate the center of a triangle
@@ -864,7 +957,7 @@ class Terrain {
     createTree(x, y, z, alternate) {
         const textureIndex = Math.floor(Math.random() * 7);
 
-        var trunkHeight = randomInRange(7, 25)
+        var trunkHeight = randomInRange(3, 25)
         var trunkBaseRadius = randomInRange(.1, .8)
         var rr = alternate ? randomInRange(.01, .1) : randomInRange(.1, .5)
         var trunkCurve = []
@@ -1011,6 +1104,7 @@ class Terrain {
             const randomRotation = Math.random() * Math.PI * 2;
             dummy.position.set(posX, posY, posZ);
             dummy.rotation.y = randomRotation;
+            dummy.rotation.x += randomInRange(-0.01, 0.01)
 
             // Apply transformation to the instance
             dummy.updateMatrix();
