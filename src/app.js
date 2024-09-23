@@ -36,9 +36,11 @@ function TriangleMesh(vertices, a, b, c, terrainWidth, terrainHeight) {
 
     triangleGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));  // Add UVs
 
-    const triangleMaterial = new THREE.MeshBasicMaterial({
+    const triangleMaterial = new THREE.MeshStandardMaterial({
         transparent: true,
-        opacity: 0
+        opacity: 0,
+        side: THREE.DoubleSide
+        // color: new THREE.Color(Math.random(), Math.random(), Math.random())
     });
 
     const triangleMesh = new THREE.Mesh(triangleGeometry, triangleMaterial);
@@ -668,7 +670,6 @@ class Terrain {
 
   
     generate() {
-        const mapResolution = 10;
         let vertices = [];
         let indices = [];
         const segmentSize = 1 / this.segments;
@@ -706,7 +707,7 @@ class Terrain {
                                        (j >= randomInRange(0, this.quadrant * 2) && j <= randomInRange(10, this.quadrant * 2));
 
                 // Store grass patch in grassPatches array
-                if (isInGrassPatch) {
+                if (isInGrassPatch || Math.random() < 0.01) {
                     grassPatches[i][j] = true;  // Mark this cell as part of a grass patch
                 }
             }
@@ -731,6 +732,8 @@ class Terrain {
                     const t2 = TriangleMesh(vertices, b, c, d, this.width, this.height);
 
                     [t1, t2].forEach((triangle) => {
+                        
+
                         const isTree = Math.random() < 0.03;
 
                         //  // Check if this triangle is either in a grass patch or adjacent to one
@@ -746,21 +749,18 @@ class Terrain {
                         );
 
 
-                        if (Math.random() < 0.1) {
-             
+                        if (isNearGrassPatch) {
+                            triangle.material.opacity = .8;
+                            triangle.material.color.set(this.Grass[Math.floor(Math.random() * this.Grass.length)]);
+
                             const grassResult = this.applyGrassToTriangle(
                                 triangle.triangle,
-                                randomInRange(20, 30),
+                                5,
                                 randomInRange(0.1, 0.2),
                                 randomInRange(0.05, 0.07)
                             );  // Apply grass to the triangle
                             
-                            // Apply spikiness by perturbing the vertices' Z (height) values
-                            const perturbation = randomInRange(randomInRange(-0.2, 0.1), randomInRange(0.1, .9));  // Adjust the intensity of spikiness
-                            [a, b, d].forEach((vertexIndex) => {
-                                vertices[vertexIndex * 3 + 2] += perturbation;  // Alter the Z coordinate of the vertex to create roughness
-                            });
-
+                    
                             // Mark grass on groundColorMap to match patches
                             grassResult.bladePositions.forEach((bladePosition) => {
                                 const closestVertexIndex = this.findClosestVertex(bladePosition, vertices);
@@ -774,6 +774,8 @@ class Terrain {
                             this.grasses = this.grasses.concat(grassResult.mesh);
                            
                         }
+
+                        this.triangles.push(triangle);
 
                         if (isTree) {
                             var tree = this.createTree(triangle.triangle.a.x, triangle.triangle.a.y, triangle.triangle.a.z, 1);
@@ -820,7 +822,8 @@ class Terrain {
         const material = new THREE.MeshStandardMaterial({
             vertexColors: true,  // Enable vertex colors
             side: THREE.DoubleSide,
-            transparent: false
+            transparent: false,
+            opacity: 0.1
         });
 
         const mesh = new THREE.Mesh(planeGeometry, material);
@@ -861,25 +864,16 @@ class Terrain {
             return distanceSquared <= sopRadius * sopRadius;
         }
 
-        // Remove triangles outside the SOP from the scene
-        this.triangles.forEach((mesh) => {
-            const triangle = mesh.triangle; // Get the triangle representation from the mesh
-            const triangleCenter = this.getTriangleCenter(triangle);
-
-            if (mesh && mesh.parent && !isInSOP(triangleCenter, sopCenter, sopRadius)) {
-                scene.remove(mesh);
-                mesh.triangle.inSOP = false; // Mark as not in SOP
-            }
-        });
 
         // Add triangles within the SOP to the scene
         this.triangles.forEach((mesh) => {
             const triangle = mesh.triangle; // Get the triangle representation from the mesh
             const triangleCenter = this.getTriangleCenter(triangle);
 
-            if (!mesh.parent && isInSOP(triangleCenter, sopCenter, sopRadius)) {
+            if (!mesh.parent && isInSOP(triangleCenter, sopCenter, this.sop.grasses)) {
                 scene.add(mesh);
-                mesh.triangle.inSOP = true; // Mark as in SOP
+            } else if (mesh.parent && !isInSOP(triangleCenter, sopCenter, this.sop.grasses)) {
+                scene.remove(mesh);
             }
         });
 
@@ -909,29 +903,19 @@ class Terrain {
             if (tree.foliage.parent && !isInSOP(tree.foliage.position, sopCenter, this.sop.trees)) {
                 scene.remove(tree.trunk);
                 scene.remove(tree.foliage);
-            }
-        });
-
-        // Add trees within the SOP to the scene
-        this.trees.forEach((tree) => {
-            if (!tree.foliage.parent && isInSOP(tree.foliage.position, sopCenter, this.sop.trees)) {
+            } else if (!tree.foliage.parent && isInSOP(tree.foliage.position, sopCenter, this.sop.trees)) {
                 scene.add(tree.trunk);
                 scene.add(tree.foliage);
             }
         });
+
 
         // Remove triangles outside the SOP from the scene
         this.grasses.forEach((grass) => {
             var pos = getInstancePosition(grass, 0);
             if (grass.parent && !isInSOP(pos, sopCenter, this.sop.grasses)) {
                 scene.remove(grass);
-            }
-        });
-
-        // Add grasses within the SOP to the scene
-        this.grasses.forEach((grass) => {
-            var pos = getInstancePosition(grass, 0);
-            if (!grass.parent && isInSOP(pos, sopCenter, this.sop.grasses)) {
+            } else if (!grass.parent && isInSOP(pos, sopCenter, this.sop.grasses)) {
                 scene.add(grass);
             }
         });
