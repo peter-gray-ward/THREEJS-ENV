@@ -11,6 +11,13 @@ document.body.appendChild(window.renderer.domElement);
 
 const TERMINAL_VELOCITY = -1.1 // lol
 
+class GrassPatch {
+    constructor(initobject) {
+        this.mesh = initobject.mesh;
+        this.bladePositions = initobject.bladePositions;
+    }
+}
+
 function TriangleMesh(vertices, a, b, c, terrainWidth, terrainHeight) {
 
     const triangleGeometry = new THREE.BufferGeometry();
@@ -84,7 +91,7 @@ class BoundingVolumeHierarchy {
     static BVHNode = class {
         constructor(boundingBox, triangles, left = null, right = null) {
             this.boundingBox = boundingBox;
-            this.triangles = triangles;
+            this.grassTriangles = triangles;
             this.left = left;
             this.right = right;
         }
@@ -386,12 +393,12 @@ class Terrain {
             grasses: quadrant * .3
         }
         this.Grass = [
-            '#33462d', //
-            '#435c3a', //
-            '#4e5e3e', //
-            '#53634c', //
-            '#536c46', //
-            '#5d6847', //
+            '#33462d',
+            '#435c3a',
+            '#4e5e3e',
+            '#53634c',
+            '#536c46',
+            '#5d6847'
         ];
         this.v0 = { x: center.x - quadrant, y: center.y, z: center.z + quadrant };
         this.v1 = { x: center.x + quadrant, y: center.y, z: center.z + quadrant }; 
@@ -402,7 +409,7 @@ class Terrain {
         this.noiseHeight = options.noiseHeight;
         this.cliffs = [];
         this.grounds = [];
-        this.triangles = [];
+        this.grassTriangles = [];
         this.cliffMeshes = [];
         this.groundMeshes = [];
         this.trees = [];
@@ -750,10 +757,10 @@ class Terrain {
 
 
                         if (isNearGrassPatch) {
-                            triangle.material.opacity = .8;
+                            triangle.material.opacity = randomInRange(0.001, 0.5);
                             triangle.material.color.set(this.Grass[Math.floor(Math.random() * this.Grass.length)]);
 
-                            const grassResult = this.applyGrassToTriangle(
+                            const grassResult = this.putGrassBladesOnTriangleCoords(
                                 triangle.triangle,
                                 5,
                                 randomInRange(0.1, 0.2),
@@ -772,10 +779,12 @@ class Terrain {
                             });
 
                             this.grasses = this.grasses.concat(grassResult.mesh);
+
+                            this.grassTriangles.push(triangle);
                            
                         }
 
-                        this.triangles.push(triangle);
+                        
 
                         if (isTree) {
                             var tree = this.createTree(triangle.triangle.a.x, triangle.triangle.a.y, triangle.triangle.a.z, 1);
@@ -866,7 +875,7 @@ class Terrain {
 
 
         // Add triangles within the SOP to the scene
-        this.triangles.forEach((mesh) => {
+        this.grassTriangles.forEach((mesh) => {
             const triangle = mesh.triangle; // Get the triangle representation from the mesh
             const triangleCenter = this.getTriangleCenter(triangle);
 
@@ -1055,42 +1064,36 @@ class Terrain {
     }
 
 
-    applyGrassToTriangle(triangle, bladeCount = 11, bladeHeight = 1, bladeWidth = 0.1) {
+    putGrassBladesOnTriangleCoords(triangle, bladeCount = 11, bladeHeight = 1, bladeWidth = 0.1) {
         // Create geometry for a single grass blade
         const bladeGeometry = new THREE.PlaneGeometry(bladeWidth, bladeHeight, 1, 4);
         bladeGeometry.translate(0, bladeHeight / 2, 0);  // Set the blade's pivot at the bottom
 
-        const material = new THREE.MeshStandardMaterial({
+        const material = Math.random() < 0.5 ? new THREE.MeshBasicMaterial({
             color: 0x00ff0f,
             side: THREE.DoubleSide,
-        });
+        }) : new THREE.MeshStandardMaterial({
+            color: 0x00ff0f,
+            side: THREE.DoubleSide,
+        })
 
-        // Create an InstancedMesh to handle multiple instances of grass blades efficiently
         const instancedMesh = new THREE.InstancedMesh(bladeGeometry, material, bladeCount);
-        const bladePositions = [];  // To store blade positions for density updates
+        const bladePositions = [];
 
-        const dummy = new THREE.Object3D(); // Temporary object for positioning each blade
+        const dummy = new THREE.Object3D();
 
         for (let i = 0; i < bladeCount; i++) {
-            // Randomly generate positions for each blade on the triangle surface
             const u = Math.random();
-            const v = Math.random() * (1 - u);  // Ensure the point lies within the triangle
-
-            // Interpolate the position on the triangle
+            const v = Math.random() * (1 - u);
             const posX = (1 - u - v) * triangle.a.x + u * triangle.b.x + v * triangle.c.x;
             const posY = (1 - u - v) * triangle.a.y + u * triangle.b.y + v * triangle.c.y;
             const posZ = (1 - u - v) * triangle.a.z + u * triangle.b.z + v * triangle.c.z;
-
-            // Store the grass blade position for groundColorMap updates
             bladePositions.push(new THREE.Vector3(posX, posY, posZ));
-
-            // Randomly rotate and position the grass blade
             const randomRotation = Math.random() * Math.PI * 2;
             dummy.position.set(posX, posY, posZ);
             dummy.rotation.y = randomRotation;
             dummy.rotation.x += randomInRange(-0.01, 0.01)
-
-            // Apply transformation to the instance
+            dummy.scale.set(randomInRange(0.8, 1.2), randomInRange(0.8, 2.2),randomInRange(0.8, 1.2))
             dummy.updateMatrix();
             instancedMesh.setMatrixAt(i, dummy.matrix);
         }
@@ -1098,11 +1101,10 @@ class Terrain {
         instancedMesh.castShadow = true;
         instancedMesh.receiveShadow = true;
 
-        // Return both the instanced mesh and the positions of the grass blades
-        return {
+        return new GrassPatch({
             mesh: instancedMesh,
-            bladePositions: bladePositions  // Return the positions of the grass blades
-        };
+            bladePositions: bladePositions 
+        });
     }
 
 
@@ -1121,11 +1123,11 @@ class UserController {
         this.a = false;
         this.s = false;
         this.d = false;
-        this.wS = .2
+        this.wS = .05
         this.aS = .1
         this.sS = .1
         this.dS = .1
-        this.tS = .4
+        this.tS = .1
         this.shift = false
         this.space = false;
         this.ArrowUp = false;
@@ -1136,7 +1138,69 @@ class UserController {
         this.jumpVelocity = 0;
         this.velocity = new THREE.Vector3(); // General velocity
         this.intersectsTerrain = [];
+        this.time_held = {
+            w:0,
+            a:0,
+            s:0,
+            d:0
+        }
+        this.addEventListener();
         this.init();
+    }
+
+    addEventListener() {
+        window.addEventListener('keydown', function(e) {
+            const key = e.key.toUpperCase();
+            if (key == 'W') {
+                user.w = true;
+                this.time_held.w = new Date().getTime();
+            } else if (key == 'A') {
+                user.a = true;
+            } else if (key == 'S') {
+                user.s = true;
+            } else if (key == 'D') {
+                user.d = true;
+            } else if (key == ' ') {
+                user.isJumping = true;
+                user.jumpVelocity = 0.4;
+            } else if (key == 'ARROWUP') {
+                user.ArrowUp = true;
+            } else if (key == 'ARROWDOWN') {
+                user.ArrowDown = true;
+            } else if (key == 'ARROWLEFT') {
+                user.ArrowLeft = true;
+            } else if (key == 'ARROWRIGHT') {
+                user.ArrowRight = true;
+            } else if (key == 'SHIFT') {
+                user.shift = true;
+            }
+        })
+        
+        window.addEventListener('keyup', function(e) {
+            const key = e.key.toUpperCase();
+            if (key == 'W') {
+                user.w = false;
+                this.time_held.w = 0;
+            } else if (key == 'A') {
+                user.a = false;
+            } else if (key == 'S') {
+                user.s = false;
+            } else if (key == 'D') {
+                user.d = false;
+            } else if (key == ' ') {
+                user.space = false;
+            } else if (key == 'ARROWUP') {
+                user.ArrowUp = false;
+            } else if (key == 'ARROWDOWN') {
+                user.ArrowDown = false;
+            } else if (key == 'ARROWLEFT') {
+                user.ArrowLeft = false;
+            } else if (key == 'ARROWRIGHT') {
+                user.ArrowRight = false;
+            } else if (key == 'SHIFT') {
+                user.shift = false;
+            }
+        })
     }
 
     init() {
@@ -1153,6 +1217,7 @@ class UserController {
     }
 
     handleMovement() {
+        const now = new Date().getTime();
         // Handle gravity and jumping
         if (this.isJumping) {
             this.handleJumping();
@@ -1169,11 +1234,13 @@ class UserController {
             var rightMovement = new THREE.Vector3();
 
             if (this.w) {
+                const MOVE_FORWARD = this.wS;
+
                 this.camera.getWorldDirection(direction);
                 // Ignore the y component to keep movement on the horizontal plane
                 direction.y = 0;
                 direction.normalize();  // Normalize to ensure the vector length stays consistent
-                forwardMovement.add(direction.multiplyScalar(this.isJumping ? this.wS * 0.5 : this.wS));
+                forwardMovement.add(direction.multiplyScalar(MOVE_FORWARD));
             }
             if (this.s) {
                 this.camera.getWorldDirection(direction);
@@ -1232,22 +1299,21 @@ class UserController {
     }
 
     handleCollision() {
+        
+    }
+
+    handleCollision() {
         // Define the directions to check for collision (forward, backward, left, right, up, down)
         const directions = [
-            [ new THREE.Vector3(1, 0, 0),  this.dS],    // Right
-            [ new THREE.Vector3(-1, 0, 0), this.aS],   // Left
-            [ new THREE.Vector3(0, 0, 1),  this.wS],    // Forward
-            [ new THREE.Vector3(0, 0, -1), this.sS],   // Backward
-            [ new THREE.Vector3(0, 1, 0),  this.jumpVelocity],    // Up
-            [ new THREE.Vector3(0, -1, 0), 0.03 * 0.8]   // Down
+            [new THREE.Vector3(1, 0, 0),  this.dS],    // Right
+            [new THREE.Vector3(-1, 0, 0), this.aS],   // Left
+            [new THREE.Vector3(0, 0, 1),  this.wS],    // Forward
+            [new THREE.Vector3(0, 0, -1), this.sS],   // Backward
+            [new THREE.Vector3(0, 1, 0),  this.jumpVelocity],    // Up
+            [new THREE.Vector3(0, -1, 0), 0.03 * 0.8]   // Down
         ];
 
-        var dirs = {d:true,a:true,w:true,s:true,up:true,down:true}
-        const cameraBoundingBox = new THREE.Box3(
-            new THREE.Vector3(this.camera.position.x - 0.5, this.camera.position.y - 1.0, this.camera.position.z - 0.5), // Min point (simulating human size)
-            new THREE.Vector3(this.camera.position.x + 0.5, this.camera.position.y + 1.0, this.camera.position.z + 0.5)  // Max point (simulating human size)
-        );
-
+        var dirs = { d:true, a:true, w:true, s:true,up:true,down:true};
 
         // Loop through each direction to cast rays and detect collisions
         var i = 0;
@@ -1353,8 +1419,21 @@ class UserController {
         }
 
         document.getElementById('loaded').innerHTML =  `
+This user ${ this.isJumping ? 'is' : 'is not' } jumping.
 ${objs.map(o => `${o.uuid}`).join(',')}
 ${JSON.stringify(dirs, null, 2)}
+
+wS: ${this.wS}
+aS: ${this.aS}
+sS: ${this.sS}
+dS: ${this.dS}
+
+LEFT: ${this.ArrowLeft}
+RIGHT: ${this.ArrowRight}
+FORWARD: ${this.ArrowUp}
+BACKWARD: ${this.ArrowDown}
+
+${Object.keys(this.time_held).map(k => `${k}: ${this.time_held[k]}`).join('\n')}
         `
     }
 
@@ -1427,7 +1506,7 @@ window.boundingVolumeHierarchy = new BoundingVolumeHierarchy();
 window.user = new UserController(terrain, boundingVolumeHierarchy);
 window.sky = new Sky(window.user);
 
-boundingVolumeHierarchy.init(window.terrain.triangles);
+boundingVolumeHierarchy.init(window.terrain.grassTriangles);
 
 window.sliding = false
 window.THREE = THREE;
@@ -1453,56 +1532,7 @@ origin.position.set(0, 0, 0);
 // Global bounding box for the camera
 
 
-window.addEventListener('keydown', function(e) {
-    const key = e.key.toUpperCase();
-    if (key == 'W') {
-        user.w = true;
-    } else if (key == 'A') {
-        user.a = true;
-    } else if (key == 'S') {
-        user.s = true;
-    } else if (key == 'D') {
-        user.d = true;
-    } else if (key == ' ') {
-        user.isJumping = true;
-        user.jumpVelocity = 0.4;
-    } else if (key == 'ARROWUP') {
-        user.ArrowUp = true;
-    } else if (key == 'ARROWDOWN') {
-        user.ArrowDown = true;
-    } else if (key == 'ARROWLEFT') {
-        user.ArrowLeft = true;
-    } else if (key == 'ARROWRIGHT') {
-        user.ArrowRight = true;
-    } else if (key == 'SHIFT') {
-        user.shift = true;
-    }
-})
 
-window.addEventListener('keyup', function(e) {
-    const key = e.key.toUpperCase();
-    if (key == 'W') {
-        user.w = false;
-    } else if (key == 'A') {
-        user.a = false;
-    } else if (key == 'S') {
-        user.s = false;
-    } else if (key == 'D') {
-        user.d = false;
-    } else if (key == ' ') {
-        user.space = false;
-    } else if (key == 'ARROWUP') {
-        user.ArrowUp = false;
-    } else if (key == 'ARROWDOWN') {
-        user.ArrowDown = false;
-    } else if (key == 'ARROWLEFT') {
-        user.ArrowLeft = false;
-    } else if (key == 'ARROWRIGHT') {
-        user.ArrowRight = false;
-    } else if (key == 'SHIFT') {
-        user.shift = false;
-    }
-})
 
 function randomInRange(from, to, startDistance = 0) {
    const min = Math.min(from, to) + startDistance;
