@@ -1123,7 +1123,7 @@ class UserController {
         this.a = false;
         this.s = false;
         this.d = false;
-        this.wS = .05
+        this.wS = .1
         this.aS = .1
         this.sS = .1
         this.dS = .1
@@ -1149,56 +1149,56 @@ class UserController {
     }
 
     addEventListener() {
-        window.addEventListener('keydown', function(e) {
+        window.addEventListener('keydown', (e) => {
             const key = e.key.toUpperCase();
             if (key == 'W') {
-                user.w = true;
+                this.w = true;
                 this.time_held.w = new Date().getTime();
             } else if (key == 'A') {
-                user.a = true;
+                this.a = true;
             } else if (key == 'S') {
-                user.s = true;
+                this.s = true;
             } else if (key == 'D') {
-                user.d = true;
+                this.d = true;
             } else if (key == ' ') {
-                user.isJumping = true;
-                user.jumpVelocity = 0.4;
+                this.isJumping = true;
+                this.jumpVelocity = 0.4;
             } else if (key == 'ARROWUP') {
-                user.ArrowUp = true;
+                this.ArrowUp = true;
             } else if (key == 'ARROWDOWN') {
-                user.ArrowDown = true;
+                this.ArrowDown = true;
             } else if (key == 'ARROWLEFT') {
-                user.ArrowLeft = true;
+                this.ArrowLeft = true;
             } else if (key == 'ARROWRIGHT') {
-                user.ArrowRight = true;
+                this.ArrowRight = true;
             } else if (key == 'SHIFT') {
-                user.shift = true;
+                this.shift = true;
             }
         })
         
-        window.addEventListener('keyup', function(e) {
+        window.addEventListener('keyup', (e) => {
             const key = e.key.toUpperCase();
             if (key == 'W') {
                 user.w = false;
                 this.time_held.w = 0;
             } else if (key == 'A') {
-                user.a = false;
+                this.a = false;
             } else if (key == 'S') {
-                user.s = false;
+                this.s = false;
             } else if (key == 'D') {
-                user.d = false;
+                this.d = false;
             } else if (key == ' ') {
-                user.space = false;
+                this.space = false;
             } else if (key == 'ARROWUP') {
-                user.ArrowUp = false;
+                this.ArrowUp = false;
             } else if (key == 'ARROWDOWN') {
-                user.ArrowDown = false;
+                this.ArrowDown = false;
             } else if (key == 'ARROWLEFT') {
-                user.ArrowLeft = false;
+                this.ArrowLeft = false;
             } else if (key == 'ARROWRIGHT') {
-                user.ArrowRight = false;
+                this.ArrowRight = false;
             } else if (key == 'SHIFT') {
-                user.shift = false;
+                this.shift = false;
             }
         })
     }
@@ -1299,142 +1299,52 @@ class UserController {
     }
 
     handleCollision() {
-        
-    }
-
-    handleCollision() {
         // Define the directions to check for collision (forward, backward, left, right, up, down)
         const directions = [
-            [new THREE.Vector3(1, 0, 0),  this.dS],    // Right
-            [new THREE.Vector3(-1, 0, 0), this.aS],   // Left
-            [new THREE.Vector3(0, 0, 1),  this.wS],    // Forward
-            [new THREE.Vector3(0, 0, -1), this.sS],   // Backward
-            [new THREE.Vector3(0, 1, 0),  this.jumpVelocity],    // Up
-            [new THREE.Vector3(0, -1, 0), 0.03 * 0.8]   // Down
+            new THREE.Vector3(1, 0, 0),    // Right
+            new THREE.Vector3(-1, 0, 0),   // Left
+            new THREE.Vector3(0, 0, 1),    // Forward
+            new THREE.Vector3(0, 0, -1),   // Backward
+            new THREE.Vector3(0, 1, 0),    // Up
+            new THREE.Vector3(0, -1, 0)    // Down
         ];
 
-        var dirs = { d:true, a:true, w:true, s:true,up:true,down:true};
+        const collisionDistance = 1; // Adjust the distance threshold for tree collisions
+        let collisionResponseForce = 0.1; // Adjust the response force for the collision
 
         // Loop through each direction to cast rays and detect collisions
         var i = 0;
         for (let dir of directions) {
-            const raycaster = new THREE.Raycaster(this.camera.position, dir[0].normalize());
+            if (i++ == 2) {
+                collisionResponseForce = 0.3;
+            }
+            // Create a raycaster for the current direction
+            const raycaster = new THREE.Raycaster(this.camera.position, dir.normalize());
 
             // Check for intersections with tree trunks and foliage
             const intersectsTrees = raycaster.intersectObjects(this.terrain.trees.flatMap(tree => [tree.trunk, tree.foliage]), true);
 
-            var objs = []
+            if (intersectsTrees.length > 0 && intersectsTrees[0].distance < collisionDistance) {
+                // Collision detected with a tree trunk or foliage
+                const intersection = intersectsTrees[0];
 
-            if (intersectsTrees.length > 0) {
+                // Calculate the direction to move the camera away from the tree
+                const responseDirection = this.camera.position.clone().sub(intersection.point).normalize();
 
-                intersectsTrees.forEach(m => {
-                    var radii = [
-                        (m.object.geometry.boundingBox.max.x - m.object.geometry.boundingBox.min.x) / 2,
-                        (m.object.geometry.boundingBox.max.y - m.object.geometry.boundingBox.min.y) / 2,
-                        (m.object.geometry.boundingBox.max.z - m.object.geometry.boundingBox.min.z) / 2
-                    ];
+                // Apply the collision response
+                this.camera.position.add(responseDirection.multiplyScalar(collisionResponseForce));
 
-
-                    if (m.distance <= radii[dir.check]) {
-                        this.canMove[dir.axis] = false;  // Block movement in the corresponding direction
-                    }
-
-                    // right
-                    if (this.d && m.distance <= radii[0]) {
-                        dirs.d = false
-                        objs.push(m.object)
-                    }
-
-                    // left
-                    if (this.a && m.distance <= radii[0]) {
-                        dirs.a = false
-                        objs.push(m.object)
-                    }
-
-                    // forward
-                    if (this.w && m.distance <= radii[2]) {
-                        dirs.w = false
-                        objs.push(m.object)
-                    } 
-
-                    // back
-                    if (this.s && m.distance <= radii[2]) {
-                        dirs.s = false
-                        objs.push(m.object)
-                    } 
-
-                    // up
-                    if (this.isJumping && m.distance <= radii[1]) {
-                        this.camera.velocity.y = 0;
-                        dirs.up = false
-                        objs.push(m.object)
-                    } 
-
-                    // down
-                    if (this.camera.velocity.y < 0 && m.distance <= radii[1]) {
-                        this.camera.velocity.y = 0;
-                        objs.push(m.object)
-                    } 
-
-                })
-            }
-
-            
-
-            i++;
-        }
-
-        for (var d in dirs) {
-            if (!dirs[d]) {
-                switch (d) {
-                case 'w':   
-                    this.wS = 0;
-                    break;
-                case 'a':
-                    this.aS = 0
-                    break
-                case 's':
-                    this.sS = 0
-                    break;
-                case 'd':
-                    this.dS = 0
-                    break
-                }
-            } else {
-                switch (d) {
-                case 'w':
-                    this.wS = .2
-                    break;
-                case 'a':
-                    this.aS = .1
-                    break;
-                case 's':
-                    this.sS = .1
-                    break;
-                case 'd':
-                    this.dS = .1
-                    break;
+                // Additional handling for upward and downward collisions
+                if (dir.equals(new THREE.Vector3(0, -1, 0))) {
+                    // If the camera is moving downward, stop falling (standing on tree)
+                    this.camera.velocity.y = 0;
+                    this.camera.position.y = intersection.point.y + 1; // Adjust based on tree height
+                } else if (dir.equals(new THREE.Vector3(0, 1, 0))) {
+                    // If the camera is moving upwards, prevent further upward movement
+                    this.camera.velocity.y = Math.min(this.camera.velocity.y, 0);
                 }
             }
         }
-
-        document.getElementById('loaded').innerHTML =  `
-This user ${ this.isJumping ? 'is' : 'is not' } jumping.
-${objs.map(o => `${o.uuid}`).join(',')}
-${JSON.stringify(dirs, null, 2)}
-
-wS: ${this.wS}
-aS: ${this.aS}
-sS: ${this.sS}
-dS: ${this.dS}
-
-LEFT: ${this.ArrowLeft}
-RIGHT: ${this.ArrowRight}
-FORWARD: ${this.ArrowUp}
-BACKWARD: ${this.ArrowDown}
-
-${Object.keys(this.time_held).map(k => `${k}: ${this.time_held[k]}`).join('\n')}
-        `
     }
 
     handleJumping() {
