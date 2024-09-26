@@ -83,7 +83,6 @@ function getInstancePosition(instancedMesh, index) {
     return position;
 }
 
-
 class BoundingVolumeHierarchy {
 
     constructor() {}
@@ -382,8 +381,14 @@ class Sky {
     }
 }
 
+
 class Terrain {
-    constructor(center = { x: 0, y: 0, z: 0 }, quadrant = 100, options = { noiseWidth: 200, noiseHeight: 100 }, textures = new Textures()) {
+    constructor(
+        center = { x: 0, y: 0, z: 0 }, 
+        quadrant = 100, 
+        options = { noiseWidth: 200, noiseHeight: 100 }, 
+        textures = new Textures()
+    ) {
         this.center = center;
         this.quadrant = quadrant;
         this.width = quadrant * 2;
@@ -392,6 +397,7 @@ class Terrain {
             trees: quadrant * 3,
             grasses: quadrant * .3
         }
+        this.renderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
         this.Grass = [
             '#33462d',
             '#435c3a',
@@ -416,6 +422,10 @@ class Terrain {
         this.grasses = [];
         this.altitudeVariance = 10;
         this.textures = textures;
+    }
+
+    setSun(sun) {
+        this.sun = sun;
     }
 
     generateRollingPerlinNoise(options = {}) {
@@ -761,10 +771,10 @@ class Terrain {
                             triangle.material.color.set(this.Grass[Math.floor(Math.random() * this.Grass.length)]);
 
                             const grassResult = this.putGrassBladesOnTriangleCoords(
-                                triangle.triangle,
-                                5,
-                                randomInRange(0.1, 0.2),
-                                randomInRange(0.05, 0.07)
+                                triangle,
+                                50,
+                                randomInRange(0.05, 0.2),
+                                randomInRange(0.1, 0.5)
                             );  // Apply grass to the triangle
                             
                     
@@ -778,7 +788,7 @@ class Terrain {
                                 }
                             });
 
-                            this.grasses = this.grasses.concat(grassResult.mesh);
+                            this.grasses = this.grasses.concat(grassResult);
 
                             this.grassTriangles.push(triangle);
                            
@@ -818,6 +828,10 @@ class Terrain {
                 }
             }
         }
+
+        this.colors = colors;
+        this.gridSize = gridSize;
+        
 
         // Apply vertex colors to the geometry
         const planeGeometry = new THREE.BufferGeometry();
@@ -862,6 +876,7 @@ class Terrain {
         this.v2 = { x: this.center.x + this.quadrant, y: this.center.y, z: this.center.z - this.quadrant };
         this.v3 = { x: this.center.x - this.quadrant, y: this.center.y, z: this.center.z - this.quadrant };
     }
+
 
     updateVisibleTrianglesAndClusters(sopCenter) {
         // Helper function to determine if a point is within the SOP
@@ -919,13 +934,16 @@ class Terrain {
         });
 
 
+        
         // Remove triangles outside the SOP from the scene
         this.grasses.forEach((grass) => {
-            var pos = getInstancePosition(grass, 0);
-            if (grass.parent && !isInSOP(pos, sopCenter, this.sop.grasses)) {
-                scene.remove(grass);
-            } else if (!grass.parent && isInSOP(pos, sopCenter, this.sop.grasses)) {
-                scene.add(grass);
+            var mesh = grass.mesh
+            var pos = getInstancePosition(mesh, 0);
+
+            if (mesh.parent && !isInSOP(pos, sopCenter, this.sop.grasses)) {
+                scene.remove(mesh);
+            } else if (!mesh.parent && isInSOP(pos, sopCenter, this.sop.grasses)) {
+                scene.add(mesh);
             }
         });
 
@@ -1064,24 +1082,33 @@ class Terrain {
     }
 
 
-    putGrassBladesOnTriangleCoords(triangle, bladeCount = 11, bladeHeight = 1, bladeWidth = 0.1) {
+    putGrassBladesOnTriangleCoords(triangleMesh, bladeCount = 11, bladeHeight = 1, bladeWidth = 0.1) {
+        var triangle = triangleMesh.triangle
         // Create geometry for a single grass blade
         const bladeGeometry = new THREE.PlaneGeometry(bladeWidth, bladeHeight, 1, 4);
-        bladeGeometry.translate(0, bladeHeight / 2, 0);  // Set the blade's pivot at the bottom
-
-        const material = Math.random() < 0.5 ? new THREE.MeshBasicMaterial({
-            color: 0x00ff0f,
+        // bladeGeometry.translate(0, bladeHeight / 2, 0);  // Set the blade's pivot at the bottom
+        bladeGeometry.computeVertexNormals();
+        // const material = Math.random() < 0.5 ? new THREE.MeshBasicMaterial({
+        //     color: 0x00ff0f,
+        //     side: THREE.DoubleSide,
+        // }) : new THREE.MeshStandardMaterial({
+        //     color: 0x00ff0f,
+        //     side: THREE.DoubleSide,
+        // })
+        const material = new THREE.MeshStandardMaterial({
+            color: new THREE.Color("lawngreen"),
             side: THREE.DoubleSide,
-        }) : new THREE.MeshStandardMaterial({
-            color: 0x00ff0f,
-            side: THREE.DoubleSide,
-        })
+            roughness: 0.8,  // Makes the surface more diffuse
+            metalness: 0.0,  // Non-metallic surface
+        });
+        
 
         const instancedMesh = new THREE.InstancedMesh(bladeGeometry, material, bladeCount);
         const bladePositions = [];
 
         const dummy = new THREE.Object3D();
 
+        const randomRotation = Math.random() * Math.PI * 2;
         for (let i = 0; i < bladeCount; i++) {
             const u = Math.random();
             const v = Math.random() * (1 - u);
@@ -1089,10 +1116,10 @@ class Terrain {
             const posY = (1 - u - v) * triangle.a.y + u * triangle.b.y + v * triangle.c.y;
             const posZ = (1 - u - v) * triangle.a.z + u * triangle.b.z + v * triangle.c.z;
             bladePositions.push(new THREE.Vector3(posX, posY, posZ));
-            const randomRotation = Math.random() * Math.PI * 2;
+            
             dummy.position.set(posX, posY, posZ);
             dummy.rotation.y = randomRotation;
-            dummy.rotation.x += randomInRange(-0.01, 0.01)
+            dummy.rotation.x += randomInRange(2, Math.PI)
             dummy.scale.set(randomInRange(0.8, 1.2), randomInRange(0.8, 2.2),randomInRange(0.8, 1.2))
             dummy.updateMatrix();
             instancedMesh.setMatrixAt(i, dummy.matrix);
@@ -1103,16 +1130,18 @@ class Terrain {
 
         return new GrassPatch({
             mesh: instancedMesh,
+            triangleMesh,
             bladePositions: bladePositions 
         });
     }
 
 
-
+    setCamera(camera) {
+        this.camera = camera;
+    }
 
 
 }
-
 
 class UserController {
     constructor(terrain, bvh) {
@@ -1139,10 +1168,10 @@ class UserController {
         this.velocity = new THREE.Vector3(); // General velocity
         this.intersectsTerrain = [];
         this.time_held = {
-            w:0,
-            a:0,
-            s:0,
-            d:0
+            w: 0,
+            a: 0,
+            s: 0,
+            d: 0
         }
         this.addEventListener();
         this.init();
@@ -1200,7 +1229,7 @@ class UserController {
             } else if (key == 'SHIFT') {
                 this.shift = false;
             }
-        })
+        });
     }
 
     init() {
@@ -1234,7 +1263,13 @@ class UserController {
             var rightMovement = new THREE.Vector3();
 
             if (this.w) {
-                const MOVE_FORWARD = this.wS;
+                var time_held = performance.now() - this.time_held.w;
+                this.time_held.w = performance.now();
+                var MOVE_FORWARD = this.wS;
+
+                if (time_held > 500) {
+                    MOVE_FORWARD *= 11
+                }
 
                 this.camera.getWorldDirection(direction);
                 // Ignore the y component to keep movement on the horizontal plane
@@ -1415,6 +1450,8 @@ window.terrain = new Terrain().generate();
 window.boundingVolumeHierarchy = new BoundingVolumeHierarchy();
 window.user = new UserController(terrain, boundingVolumeHierarchy);
 window.sky = new Sky(window.user);
+window.terrain.setSun(window.sky.sun);
+window.terrain.setCamera(window.user.camera);
 
 boundingVolumeHierarchy.init(window.terrain.grassTriangles);
 
@@ -1510,17 +1547,6 @@ scene.add(wireframeBox);
 var snapdragon = new THREE.TextureLoader().load("/images/snap-dragon.png")
 var nasturtiums = new THREE.TextureLoader().load("/images/nasturtiums.jpg")
 
-
-
-
-
-
-// var al = new THREE.AmbientLight(0xffffce, 0.05);
-// scene.add(al);
-// al.position.set(0, 50, 0)
-
-
-// setInterval(createClouds, 3000);
 
 
 
