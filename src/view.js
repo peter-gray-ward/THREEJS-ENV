@@ -498,7 +498,7 @@ class Terrain {
                                        (j >= randomInRange(0, this.quadrant * 2) && j <= randomInRange(10, this.quadrant * 2));
 
                 // Store grass patch in grassPatches array
-                if (isInGrassPatch || Math.random() < 0.01) {
+                if (isInGrassPatch || Math.random() < VM.map[VM.user.level].grassPatchPersistence) {
                     grassPatches[i][j] = true;  // Mark this cell as part of a grass patch
                 }
             }
@@ -589,14 +589,51 @@ class Terrain {
                         }
                     });
 
-                    this.fadePerimeterGrass(
-                        indices,
-                        vertices,
-                        this.determineGrassClusters(
-                            grassTriangleMap
-                        )
-                    );
+                    
                 }
+            }
+
+
+        }
+
+        let fadedClusters = this.determineGrassClusters();
+        if (fadedClusters.length > 0) {
+            var ii = 0;
+            for (let cluster of fadedClusters) {
+                let perimeterPoints = cluster.perimeterPoints;
+                let center = cluster.center;
+
+                // Create a ring of red spheres around each cluster
+                const sphereGeometry = new THREE.SphereGeometry(0.2, 32, 32); // Adjust radius as needed
+                const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Red color
+
+                for (let i = 0; i < perimeterPoints.length; i += 3) { // Increment by 3 to get each vertex
+                    const point = new THREE.Vector3(
+                        perimeterPoints[i],
+                        perimeterPoints[i + 1],
+                        perimeterPoints[i + 2]
+                    );
+
+                    // Create a sphere at this point
+                    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+                    sphere.position.copy(point);
+
+                    // Add the sphere to the scene
+                    scene.add(sphere);
+
+                    // Optionally, store a reference to the sphere if you need to manipulate it later
+                    if (!this.clusterSpheres) this.clusterSpheres = [];
+                    this.clusterSpheres.push(sphere);
+                }
+
+                // Optionally, create a sphere at the center of the cluster
+                const centerSphere = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.3, 32, 32), // Slightly larger
+                    new THREE.MeshBasicMaterial({ color: 0xff0000 }) // Green color
+                );
+                centerSphere.position.copy(center);
+                centerSphere.centersphere = true;
+                scene.add(centerSphere);
             }
         }
 
@@ -655,7 +692,7 @@ class Terrain {
         return this;
     }
 
-    findNeighborTriangles(triangle) {
+    findTriangleClusterIds(triangle) {
         const neighborIds = [];
         const EPSILON = 0.0001; // Adjust this value based on your mesh scale
     
@@ -676,7 +713,7 @@ class Terrain {
         // Iterate over grassTriangles
         this.grassTriangles.forEach((mesh, index) => {
             const otherTriangle = mesh.triangle;
-            if (triangle !== otherTriangle && shareEdge(triangle, otherTriangle)) {
+            if (mesh.triangle !== otherTriangle && shareEdge(mesh.triangle, otherTriangle)) {
                 neighborIds.push(index);
             }
         });
@@ -684,69 +721,94 @@ class Terrain {
         return neighborIds;
     }
     
-    determineGrassClusters(grassTriangleMap) {
-        grassTriangleMap.forEach((data, id) => {
-            const neighborIds = this.findNeighborTriangles(data.triangle);
-            data.neighbors = neighborIds.filter(nId => grassTriangleMap.has(nId));
-            data.isPerimeter = data.neighbors.length < 3;
-            
-            if (data.isPerimeter) {
-                data.perimeterDirection = this.calculatePerimeterDirection(data.triangle, data.neighbors, grassTriangleMap);
-            } else {
-                grassTriangleMap.delete(id);
+    determineGrassClusters() {
+        const clusters = [];
+        const visited = new Set();
+    
+        const shareEdge = (t1, t2) => {
+            const t1Vertices = [t1.a, t1.b, t1.c];
+            const t2Vertices = [t2.a, t2.b, t2.c];
+            let sharedVertices = 0;
+            for (let v of t1Vertices) {
+                if (t2Vertices.some(v2 => v.distanceTo(v2) < 0.001)) {
+                    sharedVertices++;
+                }
             }
-        })
-        return grassTriangleMap;
+            return sharedVertices >= 2;
+        };
+    
+        const findCluster = (startTriangle) => {
+            const cluster = [];
+            const queue = [startTriangle];
+            
+            while (queue.length > 0) {
+                const currentTriangle = queue.shift();
+                if (!visited.has(currentTriangle)) {
+                    visited.add(currentTriangle);
+                    cluster.push(currentTriangle);
+    
+                    for (const otherTriangle of this.grassTriangles) {
+                        if (!visited.has(otherTriangle) && shareEdge(currentTriangle.triangle, otherTriangle.triangle)) {
+                            queue.push(otherTriangle);
+                        }
+                    }
+                }
+            }
+    
+            return cluster;
+        };
+    
+        const getPerimeterPoints = (cluster) => {
+            const perimeterPoints = [];
+            for (const triangle of cluster) {
+                let neighborCount = 0;
+                for (const otherTriangle of cluster) {
+                    if (triangle !== otherTriangle && shareEdge(triangle.triangle, otherTriangle.triangle)) {
+                        neighborCount++;
+                    }
+                }
+                if (neighborCount < 3) {
+                    perimeterPoints.push(triangle.triangle.a);
+                    perimeterPoints.push(triangle.triangle.b);
+                    perimeterPoints.push(triangle.triangle.c);
+                }
+            }
+            return perimeterPoints;
+        };
+    
+        for (const triangle of this.grassTriangles) {
+            if (!visited.has(triangle)) {
+                const newCluster = findCluster(triangle);
+                if (newCluster.length > 0) {
+                    const center = new THREE.Vector3(0, 0, 0);
+                    let totalVertices = 0;
+    
+                    for (const t of newCluster) {
+                        center.add(t.triangle.a);
+                        center.add(t.triangle.b);
+                        center.add(t.triangle.c);
+                        totalVertices += 3;
+                    }
+    
+                    if (totalVertices > 0) {
+                        center.divideScalar(totalVertices);
+                    }
+    
+                    const perimeterPoints = getPerimeterPoints(newCluster);
+    
+                    clusters.push({
+                        center,
+                        perimeterPoints
+                    });
+                }
+            }
+        }
+    
+        return clusters;
     }
     
     calculatePerimeterDirection(triangle, neighbors, grassTriangleMap) {
-        // Calculate center of the triangle
-        const center = new THREE.Vector3()
-            .add(triangle.a)
-            .add(triangle.b)
-            .add(triangle.c)
-            .divideScalar(3);
-    
-        if (neighbors.length === 0) {
-            console.warn('No neighbors for triangle:', triangle.id);
-            return new THREE.Vector3(0, 1, 0); // Default direction
-        }
-    
-        const clusterCenter = new THREE.Vector3();
-        let validNeighbors = 0;
-    
-        neighbors.forEach(nId => {
-            const neighborData = grassTriangleMap.get(nId);
-            if (neighborData && neighborData.triangle) {
-                const t = neighborData.triangle;
-                const neighborCenter = new THREE.Vector3()
-                    .add(t.a)
-                    .add(t.b)
-                    .add(t.c)
-                    .divideScalar(3);
-                
-                if (!isNaN(neighborCenter.x) && !isNaN(neighborCenter.y) && !isNaN(neighborCenter.z)) {
-                    clusterCenter.add(neighborCenter);
-                    validNeighbors++;
-                }
-            }
-        });
-    
-        if (validNeighbors === 0) {
-            console.warn('No valid neighbors for triangle:', triangle.id);
-            return new THREE.Vector3(0, 1, 0); // Default direction
-        }
-    
-        clusterCenter.divideScalar(validNeighbors);
-    
-        const direction = new THREE.Vector3().subVectors(center, clusterCenter);
-        
-        if (direction.lengthSq() > 0) {
-            return direction.normalize();
-        } else {
-            console.warn('Zero direction vector for triangle:', triangle.id);
-            return new THREE.Vector3(0, 1, 0); // Default direction
-        }
+        return new THREE.Vector3(1,1,1);
     }
 
     fadePerimeterGrass(indices, vertices, perimeterGrassTriangleMap) {
@@ -1024,7 +1086,7 @@ class Terrain {
 
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+                geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
         geometry.setIndex(indices);
         geometry.computeVertexNormals();
 
@@ -1057,10 +1119,10 @@ class Terrain {
         const groundClusters = this.findClusters(this.ground);
         groundClusters.forEach(cluster => {
             const geometry = createBufferGeometryFromCluster(cluster);
-            const material = new THREE.MeshStandardMaterial({
+                const material = new THREE.MeshStandardMaterial({
                 color: 'lawngreen',
-                side: THREE.DoubleSide
-            });
+                    side: THREE.DoubleSide
+                });
             const mesh = new THREE.Mesh(geometry, material);
             mesh.receiveShadow = true;
             mesh.castShadow = true;
@@ -1360,11 +1422,12 @@ class Terrain {
         });
     }
 
-    createGrassPatch(indices, vertices, triangle) {
+    createGrassPatch(indices, vertices, mesh) {
         const grassResult = this.createGrassResult(
-            indices, vertices,
-            triangle,
-            300,
+            indices, 
+            vertices,
+            mesh,
+            VM.map[VM.user.level].grassBladeDensity,
             randomInRange(0.05, 0.2),
             randomInRange(0.1, 0.5)
         );
@@ -1407,6 +1470,8 @@ class UserController {
         this.ArrowRight = false;
         this.ArrowDown = false;
         this.ArrowLeft = false;
+        this.leftShift = false;
+        this.rightShift = false;
         this.isJumping = false;
         this.jumpVelocity = 0;
         this.velocity = new THREE.Vector3(); // General velocity
@@ -1444,8 +1509,10 @@ class UserController {
                 this.ArrowLeft = true;
             } else if (key == 'ARROWRIGHT') {
                 this.ArrowRight = true;
-            } else if (key == 'SHIFT') {
-                this.shift = true;
+            } else if (key === 'ShiftLeft') {
+                this.leftShift = true;
+            } else if (key === 'ShiftRight') {
+                this.rightShift = true;
             }
         })
         
@@ -1470,8 +1537,10 @@ class UserController {
                 this.ArrowLeft = false;
             } else if (key == 'ARROWRIGHT') {
                 this.ArrowRight = false;
-            } else if (key == 'SHIFT') {
-                this.shift = false;
+            } else if (key === 'ShiftLeft') {
+                this.leftShift = false;
+            } else if (key === 'ShiftRight') {
+                this.rightShift = false;
             }
         });
     }
@@ -1481,7 +1550,7 @@ class UserController {
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1600);
         this.camera.touches = new Set()
         this.camera.foot = null;
-        this.camera.position.set(position.x, position.y + 1.1, position.z);
+        this.camera.position.set(position.x, position.y + 2, position.z);
         this.camera.velocity = new THREE.Vector3(0, 0, 0);
         this.cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
             this.camera.position,
@@ -1676,7 +1745,7 @@ class UserController {
         // Set the bounding box based on the this.camera's current position
         this.cameraBoundingBox.setFromCenterAndSize(
             this.camera.position,
-            new THREE.Vector3(1, 1, 1) // Adjust size if needed
+            new THREE.Vector3(1, 2, 1) // Adjust size if needed
         );
         
         // Update the wireframe box position and size to match the bounding box
