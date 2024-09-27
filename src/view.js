@@ -562,14 +562,15 @@ class Terrain {
 
                             this.grasses.push(grassResult);
 
-                            grassTriangleMap.set(triangle.uuid, {
-                                triangle: triangle.triangle,
-                                neighbors: [],
-                                isPerimeter: false
-                            });
+                            // grassTriangleMap.set(triangle.uuid, {
+                            //     triangle: triangle.triangle,
+                            //     neighbors: [],
+                            //     isPerimeter: false
+                            // });
 
-                            this.grassTriangles.push(triangle);
-                           
+                            // triangle.material.transparent = true;
+                            // triangle.material.opacity = 0.1;
+                            // this.grassTriangles.push(triangle);
                         }
                         //
                         // Trees!
@@ -596,52 +597,39 @@ class Terrain {
 
         }
 
-        let fadedClusters = this.determineGrassClusters();
-        if (fadedClusters.length > 0) {
-            var ii = 0;
-            for (let cluster of fadedClusters) {
-                let perimeterPoints = cluster.perimeterPoints;
-                let center = cluster.center;
-
-                // Create a ring of red spheres around each cluster
-                const sphereGeometry = new THREE.SphereGeometry(0.2, 32, 32); // Adjust radius as needed
-                const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Red color
-
-                for (let i = 0; i < perimeterPoints.length; i += 3) { // Increment by 3 to get each vertex
-                    const point = new THREE.Vector3(
-                        perimeterPoints[i],
-                        perimeterPoints[i + 1],
-                        perimeterPoints[i + 2]
-                    );
-
-                    // Create a sphere at this point
-                    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-                    sphere.position.copy(point);
-
-                    // Add the sphere to the scene
-                    scene.add(sphere);
-
-                    // Optionally, store a reference to the sphere if you need to manipulate it later
-                    if (!this.clusterSpheres) this.clusterSpheres = [];
-                    this.clusterSpheres.push(sphere);
-                }
-
-                // Optionally, create a sphere at the center of the cluster
-                const centerSphere = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.3, 32, 32), // Slightly larger
-                    new THREE.MeshBasicMaterial({ color: 0xff0000 }) // Green color
-                );
-                centerSphere.position.copy(center);
-                centerSphere.centersphere = true;
-                scene.add(centerSphere);
-            }
-        }
-
         this.clusterCliffs();
+
+        var isBoundary =(i, j) => {
+            const directions = [
+                [-1, 0], [1, 0], [0, -1], [0, 1],
+                [-1, -1], [-1, 1], [1, -1], [1, 1]
+            ];
+            
+            const currentDensity = this.groundColorMap[i][j];
+            
+            for (const [di, dj] of directions) {
+                const ni = i + di;
+                const nj = j + dj;
+                
+                if (ni >= 0 && ni < this.groundColorMap.length &&
+                    nj >= 0 && nj < this.groundColorMap[0].length) {
+                    const neighborDensity = this.groundColorMap[ni][nj];
+                    
+                    // If one is grassy and the other isn't, it's a boundary
+                    if ((currentDensity > 0 && neighborDensity === 0) ||
+                        (currentDensity === 0 && neighborDensity > 0)) {
+                        return true;
+                    }
+                }
+            }
+            
+            return false;
+        }
 
         // Now, let's apply the grass density in groundColorMap to color the vertices
         const colors = [];
         const gridSize = this.groundColorMap.length;  // Assuming groundColorMap is a 2D array of the grid size
+        const boundaryMarkers = [];
 
         for (let i = 0; i < gridSize; i++) {
             for (let j = 0; j < gridSize; j++) {
@@ -655,6 +643,16 @@ class Terrain {
                         // More grass means more green intensity
                         const greenIntensity = Math.min(1, density / 10);  // Scale density for grass intensity
                         colors.push(randomInRange(0, 0.1), greenIntensity, randomInRange(0, 0.1));  // RGB color with green based on grass density
+                    
+                        // Check neighboring cells for boundaries
+                        if (isBoundary(i, j)) {
+                            const position = new THREE.Vector3(
+                                vertices[vertexIndex * 3],
+                                vertices[vertexIndex * 3 + 1],
+                                vertices[vertexIndex * 3 + 2]
+                            );
+                            boundaryMarkers.push(position);
+                        }
                     } else {
                         // No grass means brown soil
                         colors.push(randomInRange(0.1, 0.3), randomInRange(0.11, 0.15), randomInRange(0, 0.08));  // RGB color for dark brown soil
@@ -662,6 +660,21 @@ class Terrain {
                 }
             }
         }
+
+        // Create red spheres at boundary positions
+        const sphereGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+        const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+
+        boundaryMarkers.forEach(position => {
+            const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+            sphere.position.copy(position);
+            scene.add(sphere);
+        });
+
+        // ... rest of the existing code ...
+
+        // Add this method to the Terrain class
+        
 
         this.colors = colors;
         this.gridSize = gridSize;
@@ -806,54 +819,7 @@ class Terrain {
     
         return clusters;
     }
-    
-    calculatePerimeterDirection(triangle, neighbors, grassTriangleMap) {
-        return new THREE.Vector3(1,1,1);
-    }
 
-    fadePerimeterGrass(indices, vertices, perimeterGrassTriangleMap) {
-        if (perimeterGrassTriangleMap.size === 0) return;
-    
-        const fadeDistance = randomInRange(0.3, 1);
-        const numPoints = 9; // You're using 9 instead of 10, which is fine
-    
-        perimeterGrassTriangleMap.forEach((data, id) => {
-            const triangle = data.triangle;
-            const direction = data.perimeterDirection;
-    
-            // Calculate triangle center
-            const center = new THREE.Vector3()
-                .add(triangle.a)
-                .add(triangle.b)
-                .add(triangle.c)
-                .divideScalar(3);
-    
-            const radius = (
-                center.distanceTo(triangle.a) +
-                center.distanceTo(triangle.b) +
-                center.distanceTo(triangle.c)
-            ) / 3;
-    
-            for (let i = 0; i < numPoints; i++) {
-                const randomAngle = randomInRange(0, Math.PI * 2); // Consider full circle
-                const randomDistance = randomInRange(radius, radius * 1.5);
-    
-                const randomPoint = new THREE.Vector3(
-                    center.x + Math.cos(randomAngle) * randomDistance * direction.x,
-                    center.y + Math.sin(randomAngle) * randomDistance * direction.y,
-                    center.z + randomDistance * direction.z
-                );
-    
-                var grassResult = this.createGrassPatch(indices, vertices, data, randomPoint);
-                if (grassResult) {
-                    this.grasses.push(grassResult);
-                }
-            }
-        });
-    
-        // Consider calling updateGroundMaterial if needed
-        // this.updateGroundMaterial();
-    }
     
     findClosestVertex(point, positionAttribute) {
         let closestIndex = -1;
@@ -869,6 +835,23 @@ class Terrain {
             }
         }
     
+        return closestIndex;
+    }
+
+    findClosestVertex(position, vertices) {
+        let closestIndex = -1;
+        let closestDistance = Infinity;
+
+        for (let i = 0; i < vertices.length / 3; i++) {
+            const vertexPosition = new THREE.Vector3(vertices[i * 3], vertices[i * 3 + 1], vertices[i * 3 + 2]);
+            const distance = position.distanceTo(vertexPosition);
+
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestIndex = i;
+            }
+        }
+
         return closestIndex;
     }
     
@@ -1180,16 +1163,16 @@ class Terrain {
 
 
         // Add triangles within the SOP to the scene
-        this.grassTriangles.forEach((mesh) => {
-            const triangle = mesh.triangle; // Get the triangle representation from the mesh
-            const triangleCenter = this.getTriangleCenter(triangle);
+        // this.grassTriangles.forEach((mesh) => {
+        //     const triangle = mesh.triangle; // Get the triangle representation from the mesh
+        //     const triangleCenter = this.getTriangleCenter(triangle);
 
-            if (!mesh.parent && isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
-                scene.add(mesh);
-            } else if (mesh.parent && !isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
-                scene.remove(mesh);
-            }
-        });
+        //     if (!mesh.parent && isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
+        //         scene.add(mesh);
+        //     } else if (mesh.parent && !isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
+        //         scene.remove(mesh);
+        //     }
+        // });
 
         // Repeat for cliffs and grounds clusters if needed
         this.cliffMeshes.forEach((mesh) => {
@@ -1353,22 +1336,7 @@ class Terrain {
         return new Terrain.Tree(tubeMesh, sphere);
     }
 
-    findClosestVertex(position, vertices) {
-        let closestIndex = -1;
-        let closestDistance = Infinity;
 
-        for (let i = 0; i < vertices.length / 3; i++) {
-            const vertexPosition = new THREE.Vector3(vertices[i * 3], vertices[i * 3 + 1], vertices[i * 3 + 2]);
-            const distance = position.distanceTo(vertexPosition);
-
-            if (distance < closestDistance) {
-                closestDistance = distance;
-                closestIndex = i;
-            }
-        }
-
-        return closestIndex;
-    }
 
     createGrassBlade(instancedMesh, triangle, bladePositions, i) {
 

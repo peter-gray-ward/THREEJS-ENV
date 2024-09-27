@@ -50,7 +50,7 @@ class Model {
         altitudeVariance: 10,
         width: 200,
         height: 200,
-        grassBladeDensity: 500,
+        grassBladeDensity: 300,
         v0: { x: center.x - 100, y: center.y, z: center.z + 100 },
         v1: { x: center.x + 100, y: center.y, z: center.z + 100 }, 
         v2: { x: center.x + 100, y: center.y, z: center.z - 100 }, 
