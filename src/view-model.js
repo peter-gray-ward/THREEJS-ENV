@@ -8,7 +8,6 @@ export default class ViewModel {
         this.map = null;
     }
     async init(username, view) {
-        debugger
         const model = await ipcRenderer.invoke('load-model', username);
         console.log("model loaded", model);
         this.user = model.user;
