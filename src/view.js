@@ -461,7 +461,7 @@ class Terrain {
         }
 
         const segmentSize = 1 / this.segments;
-        const groundColorMap = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(0));  // Initialize ground color map
+        this.groundColorMap = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(0));  // Initialize ground color map
 
         let perlinNoise = this.generateRollingPerlinNoise();
 
@@ -504,15 +504,19 @@ class Terrain {
             }
         }
 
-        var start = 1.0;
+        var start_i = 1.0;
+        var start_j = 1.0;
+        let grassTriangleMap = new Map();
         // Process triangles and apply grass in defined ranges
         for (let i = 0; i < this.segments; i++) {
-            if (new Number(i / this.segments).toFixed(1) != start) {
-                start = new Number((i + 1) / this.segments).toFixed(2);
-                console.log(start)
+            if (new Number(i / this.segments).toFixed(1) != start_i) {
+                start_i = new Number((i + 1) / this.segments).toFixed(2);
             }
             for (let j = 0; j < this.segments; j++) {
-                
+                if (new Number(j / this.segments).toFixed(1) != start_j) {
+                    start_j = new Number((j + 1) / this.segments).toFixed(2);
+                    console.log(start_i,start_j)
+                }
                 let a = i + j * (this.segments + 1);
                 let b = (i + 1) + j * (this.segments + 1);
                 let c = (i + 1) + (j + 1) * (this.segments + 1);
@@ -550,35 +554,23 @@ class Terrain {
                         //
                         // Grasses!
                         //
-
                         if (isNearGrassPatch) {
                             triangle.material.opacity = randomInRange(0.001, 0.5);
                             triangle.material.color.set(this.Grass[Math.floor(Math.random() * this.Grass.length)]);
 
-                            const grassResult = this.putGrassBladesOnTriangleCoords(
-                                triangle,
-                                50,
-                                randomInRange(0.05, 0.2),
-                                randomInRange(0.1, 0.5)
-                            );  // Apply grass to the triangle
-                            
-                    
-                            // Mark grass on groundColorMap to match patches
-                            grassResult.bladePositions.forEach((bladePosition) => {
-                                const closestVertexIndex = this.findClosestVertex(bladePosition, vertices);
-                                if (closestVertexIndex >= 0 && closestVertexIndex < vertices.length / 3) {
-                                    const x = Math.floor(closestVertexIndex / (this.segments + 1));
-                                    const y = closestVertexIndex % (this.segments + 1);
-                                    groundColorMap[x][y] += 1;  // Increment the grass density at the closest vertex
-                                }
-                            });
+                            const grassResult = this.createGrassPatch(indices, vertices, triangle);
 
-                            this.grasses = this.grasses.concat(grassResult);
+                            this.grasses.push(grassResult);
+
+                            grassTriangleMap.set(triangle.uuid, {
+                                triangle: triangle.triangle,
+                                neighbors: [],
+                                isPerimeter: false
+                            });
 
                             this.grassTriangles.push(triangle);
                            
                         }
-
                         //
                         // Trees!
                         //
@@ -596,6 +588,14 @@ class Terrain {
                             this.cliffs.push(triangle.triangle);
                         }
                     });
+
+                    this.fadePerimeterGrass(
+                        indices,
+                        vertices,
+                        this.determineGrassClusters(
+                            grassTriangleMap
+                        )
+                    );
                 }
             }
         }
@@ -604,11 +604,11 @@ class Terrain {
 
         // Now, let's apply the grass density in groundColorMap to color the vertices
         const colors = [];
-        const gridSize = groundColorMap.length;  // Assuming groundColorMap is a 2D array of the grid size
+        const gridSize = this.groundColorMap.length;  // Assuming groundColorMap is a 2D array of the grid size
 
         for (let i = 0; i < gridSize; i++) {
             for (let j = 0; j < gridSize; j++) {
-                const density = groundColorMap[i][j];
+                const density = this.groundColorMap[i][j];
 
                 // Ensure that color application and grass application use the same coordinates
                 const vertexIndex = i * (this.segments + 1) + j;  // Adjust based on segment count and grid
@@ -653,6 +653,166 @@ class Terrain {
         scene.add(this.mesh);
 
         return this;
+    }
+
+    findNeighborTriangles(triangle) {
+        const neighborIds = [];
+        const EPSILON = 0.0001; // Adjust this value based on your mesh scale
+    
+        const vertexClose = (v1, v2) => {
+            return Math.abs(v1.x - v2.x) < EPSILON &&
+                   Math.abs(v1.y - v2.y) < EPSILON &&
+                   Math.abs(v1.z - v2.z) < EPSILON;
+        };
+    
+        const shareEdge = (t1, t2) => {
+            let sharedVertices = 0;
+            if (vertexClose(t1.a, t2.a) || vertexClose(t1.a, t2.b) || vertexClose(t1.a, t2.c)) sharedVertices++;
+            if (vertexClose(t1.b, t2.a) || vertexClose(t1.b, t2.b) || vertexClose(t1.b, t2.c)) sharedVertices++;
+            if (vertexClose(t1.c, t2.a) || vertexClose(t1.c, t2.b) || vertexClose(t1.c, t2.c)) sharedVertices++;
+            return sharedVertices >= 2;
+        };
+    
+        // Iterate over grassTriangles
+        this.grassTriangles.forEach((mesh, index) => {
+            const otherTriangle = mesh.triangle;
+            if (triangle !== otherTriangle && shareEdge(triangle, otherTriangle)) {
+                neighborIds.push(index);
+            }
+        });
+    
+        return neighborIds;
+    }
+    
+    determineGrassClusters(grassTriangleMap) {
+        grassTriangleMap.forEach((data, id) => {
+            const neighborIds = this.findNeighborTriangles(data.triangle);
+            data.neighbors = neighborIds.filter(nId => grassTriangleMap.has(nId));
+            data.isPerimeter = data.neighbors.length < 3;
+            
+            if (data.isPerimeter) {
+                data.perimeterDirection = this.calculatePerimeterDirection(data.triangle, data.neighbors, grassTriangleMap);
+            } else {
+                grassTriangleMap.delete(id);
+            }
+        })
+        return grassTriangleMap;
+    }
+    
+    calculatePerimeterDirection(triangle, neighbors, grassTriangleMap) {
+        // Calculate center of the triangle
+        const center = new THREE.Vector3()
+            .add(triangle.a)
+            .add(triangle.b)
+            .add(triangle.c)
+            .divideScalar(3);
+    
+        if (neighbors.length === 0) {
+            console.warn('No neighbors for triangle:', triangle.id);
+            return new THREE.Vector3(0, 1, 0); // Default direction
+        }
+    
+        const clusterCenter = new THREE.Vector3();
+        let validNeighbors = 0;
+    
+        neighbors.forEach(nId => {
+            const neighborData = grassTriangleMap.get(nId);
+            if (neighborData && neighborData.triangle) {
+                const t = neighborData.triangle;
+                const neighborCenter = new THREE.Vector3()
+                    .add(t.a)
+                    .add(t.b)
+                    .add(t.c)
+                    .divideScalar(3);
+                
+                if (!isNaN(neighborCenter.x) && !isNaN(neighborCenter.y) && !isNaN(neighborCenter.z)) {
+                    clusterCenter.add(neighborCenter);
+                    validNeighbors++;
+                }
+            }
+        });
+    
+        if (validNeighbors === 0) {
+            console.warn('No valid neighbors for triangle:', triangle.id);
+            return new THREE.Vector3(0, 1, 0); // Default direction
+        }
+    
+        clusterCenter.divideScalar(validNeighbors);
+    
+        const direction = new THREE.Vector3().subVectors(center, clusterCenter);
+        
+        if (direction.lengthSq() > 0) {
+            return direction.normalize();
+        } else {
+            console.warn('Zero direction vector for triangle:', triangle.id);
+            return new THREE.Vector3(0, 1, 0); // Default direction
+        }
+    }
+
+    fadePerimeterGrass(indices, vertices, perimeterGrassTriangleMap) {
+        if (perimeterGrassTriangleMap.size === 0) return;
+    
+        const fadeDistance = randomInRange(0.3, 1);
+        const numPoints = 9; // You're using 9 instead of 10, which is fine
+    
+        perimeterGrassTriangleMap.forEach((data, id) => {
+            const triangle = data.triangle;
+            const direction = data.perimeterDirection;
+    
+            // Calculate triangle center
+            const center = new THREE.Vector3()
+                .add(triangle.a)
+                .add(triangle.b)
+                .add(triangle.c)
+                .divideScalar(3);
+    
+            const radius = (
+                center.distanceTo(triangle.a) +
+                center.distanceTo(triangle.b) +
+                center.distanceTo(triangle.c)
+            ) / 3;
+    
+            for (let i = 0; i < numPoints; i++) {
+                const randomAngle = randomInRange(0, Math.PI * 2); // Consider full circle
+                const randomDistance = randomInRange(radius, radius * 1.5);
+    
+                const randomPoint = new THREE.Vector3(
+                    center.x + Math.cos(randomAngle) * randomDistance * direction.x,
+                    center.y + Math.sin(randomAngle) * randomDistance * direction.y,
+                    center.z + randomDistance * direction.z
+                );
+    
+                var grassResult = this.createGrassPatch(indices, vertices, data, randomPoint);
+                if (grassResult) {
+                    this.grasses.push(grassResult);
+                }
+            }
+        });
+    
+        // Consider calling updateGroundMaterial if needed
+        // this.updateGroundMaterial();
+    }
+    
+    findClosestVertex(point, positionAttribute) {
+        let closestIndex = -1;
+        let closestDistance = Infinity;
+    
+        for (let i = 0; i < positionAttribute.count; i++) {
+            const vertex = new THREE.Vector3().fromBufferAttribute(positionAttribute, i);
+            const distance = point.distanceTo(vertex);
+    
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestIndex = i;
+            }
+        }
+    
+        return closestIndex;
+    }
+    
+    updateGroundMaterial() {
+        // Implement this method to update the ground material based on the new groundColorMap values
+        // This might involve updating a texture or shader parameter
     }
 
     setSun(sun) {
@@ -1148,19 +1308,33 @@ class Terrain {
         return closestIndex;
     }
 
-    putGrassBladesOnTriangleCoords(triangleMesh, bladeCount = 11, bladeHeight = 1, bladeWidth = 0.1) {
+    createGrassBlade(instancedMesh, triangle, bladePositions, i) {
+
+        const dummy = new THREE.Object3D();
+        const u = Math.random();
+        const v = Math.random() * (1 - u);
+        const posX = (1 - u - v) * triangle.a.x + u * triangle.b.x + v * triangle.c.x;
+        const posY = (1 - u - v) * triangle.a.y + u * triangle.b.y + v * triangle.c.y;
+        const posZ = (1 - u - v) * triangle.a.z + u * triangle.b.z + v * triangle.c.z;
+        bladePositions.push(new THREE.Vector3(posX, posY, posZ));
+        
+        dummy.position.set(posX, posY, posZ);
+        dummy.rotation.y = randomInRange(0, Math.PI * 2);
+        dummy.rotation.x += randomInRange(2, Math.PI)
+        dummy.scale.set(randomInRange(0.8, 1.2), randomInRange(0.8, 2.2),randomInRange(0.8, 1.2))
+        dummy.updateMatrix();
+
+        instancedMesh.setMatrixAt(i, dummy.matrix);
+
+        return [instancedMesh, bladePositions];
+    }
+
+    createGrassResult(indices, vertices, triangleMesh, bladeCount = 11, bladeHeight = 1, bladeWidth = 0.1) {
         var triangle = triangleMesh.triangle
-        // Create geometry for a single grass blade
+        
         const bladeGeometry = new THREE.PlaneGeometry(bladeWidth, bladeHeight, 1, 4);
-        // bladeGeometry.translate(0, bladeHeight / 2, 0);  // Set the blade's pivot at the bottom
         bladeGeometry.computeVertexNormals();
-        // const material = Math.random() < 0.5 ? new THREE.MeshBasicMaterial({
-        //     color: 0x00ff0f,
-        //     side: THREE.DoubleSide,
-        // }) : new THREE.MeshStandardMaterial({
-        //     color: 0x00ff0f,
-        //     side: THREE.DoubleSide,
-        // })
+        
         const material = new THREE.MeshStandardMaterial({
             color: new THREE.Color("lawngreen"),
             side: THREE.DoubleSide,
@@ -1169,26 +1343,11 @@ class Terrain {
         });
         
 
-        const instancedMesh = new THREE.InstancedMesh(bladeGeometry, material, bladeCount);
-        const bladePositions = [];
+        let instancedMesh = new THREE.InstancedMesh(bladeGeometry, material, bladeCount);
+        let bladePositions = [];
 
-        const dummy = new THREE.Object3D();
-
-        const randomRotation = Math.random() * Math.PI * 2;
         for (let i = 0; i < bladeCount; i++) {
-            const u = Math.random();
-            const v = Math.random() * (1 - u);
-            const posX = (1 - u - v) * triangle.a.x + u * triangle.b.x + v * triangle.c.x;
-            const posY = (1 - u - v) * triangle.a.y + u * triangle.b.y + v * triangle.c.y;
-            const posZ = (1 - u - v) * triangle.a.z + u * triangle.b.z + v * triangle.c.z;
-            bladePositions.push(new THREE.Vector3(posX, posY, posZ));
-            
-            dummy.position.set(posX, posY, posZ);
-            dummy.rotation.y = randomRotation;
-            dummy.rotation.x += randomInRange(2, Math.PI)
-            dummy.scale.set(randomInRange(0.8, 1.2), randomInRange(0.8, 2.2),randomInRange(0.8, 1.2))
-            dummy.updateMatrix();
-            instancedMesh.setMatrixAt(i, dummy.matrix);
+            [instancedMesh, bladePositions] = this.createGrassBlade(instancedMesh, triangle, bladePositions, i);
         }
 
         instancedMesh.castShadow = true;
@@ -1199,6 +1358,28 @@ class Terrain {
             triangleMesh,
             bladePositions: bladePositions 
         });
+    }
+
+    createGrassPatch(indices, vertices, triangle) {
+        const grassResult = this.createGrassResult(
+            indices, vertices,
+            triangle,
+            300,
+            randomInRange(0.05, 0.2),
+            randomInRange(0.1, 0.5)
+        );
+
+        // Mark grass on groundColorMap to match patches
+        grassResult.bladePositions.forEach((bladePosition) => {
+            const closestVertexIndex = this.findClosestVertex(bladePosition, vertices);
+            if (closestVertexIndex >= 0 && closestVertexIndex < vertices.length / 3) {
+                const x = Math.floor(closestVertexIndex / (this.segments + 1));
+                const y = closestVertexIndex % (this.segments + 1);
+                this.groundColorMap[x][y] += 1;  // Increment the grass density at the closest vertex
+            }
+        });
+
+        return grassResult;
     }
 
     setCamera(camera) {
@@ -1516,8 +1697,6 @@ class UserController {
 
 
 
-
-
 class View {
     constructor() {
         window.scene = new THREE.Scene();
@@ -1528,10 +1707,9 @@ class View {
         window.renderer.domElement.id = "view";
     }
 
-    async init(username) {
+    async init() {
         document.body.appendChild(window.renderer.domElement);
 
-        await VM.init(username);
 
         console.log(VM);
 
@@ -1587,5 +1765,5 @@ class View {
 
 }
 
-window.view = new View();
-await window.view.init("Peter");
+
+await VM.init("Peter", new View());

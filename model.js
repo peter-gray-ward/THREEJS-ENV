@@ -60,6 +60,7 @@ class Model {
 }
 
 ipcMain.handle('load-model', async (event, username) => {
+  console.log("loading model");
   let user = await new Promise((resolve) => {
     resolve({
       name: username,
@@ -67,7 +68,9 @@ ipcMain.handle('load-model', async (event, username) => {
       position: { x: 0, y: 0, z: 0 }
     });
   });
-  return new Model(user);
+  var model = new Model(user);
+  console.log("model loaded", model);
+  return model;
 });
 
 function createWindow() {
@@ -80,17 +83,22 @@ function createWindow() {
     },
   });
 
+  console.log("loading index.html");
+
   // Load the main HTML file
-  win.loadURL('app://./index.html');
+  win.loadFile('index.html');
+  win.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
-  // Register a custom protocol to handle app:// URLs
+  // Register a custom protocol to handle app:// URL
+  
   protocol.registerFileProtocol('app', (request, callback) => {
     const url = request.url.substr(6); // Strip 'app://' prefix
     let filePath = path.normalize(`${__dirname}/${url}`);
 
-    console.log(url, filePath)
+    console.log('Requested URL:', url);
+    console.log('Initial file path:', filePath);
 
     // Serve files based on the URL
     if (url === 'three') {
@@ -103,11 +111,15 @@ app.whenReady().then(() => {
       filePath = path.join(__dirname, url);
     }
 
+    console.log('Final file path:', filePath);
 
-    console.log('>>>>>', filePath);
-
-    // Return the file
-    callback(filePath);
+    // Check if the file exists
+    if (fs.existsSync(filePath)) {
+      callback(filePath);
+    } else {
+      console.error('File not found:', filePath);
+      callback(null);
+    }
   });
 
   createWindow();
