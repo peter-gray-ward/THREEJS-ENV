@@ -1,4 +1,8 @@
-import * as THREE from '/lib/Three.module.min.js';
+import * as THREE from '/lib/three.module.min.js';
+
+
+
+
 import ViewModel from "/src/view-model.js";
 
 
@@ -9,7 +13,6 @@ const LEVEL = [
     "Heart of the Woods"
 ];
 
-window.VM = new ViewModel();
 
 window.sliding = false
 
@@ -90,11 +93,13 @@ function TriangleMesh(vertices, a, b, c, terrainWidth, terrainHeight) {
     triangleGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));  // Add UVs
 
     const triangleMaterial = new THREE.MeshStandardMaterial({
-        transparent: true,
-        opacity: 0,
+        transparent: false,
+        wireframe: true,
+        color: 'red',
         side: THREE.DoubleSide
         // color: new THREE.Color(Math.random(), Math.random(), Math.random())
     });
+    
 
     const triangleMesh = new THREE.Mesh(triangleGeometry, triangleMaterial);
     triangleMesh.castShadow = true;
@@ -513,10 +518,6 @@ class Terrain {
                 start_i = new Number((i + 1) / this.segments).toFixed(2);
             }
             for (let j = 0; j < this.segments; j++) {
-                if (new Number(j / this.segments).toFixed(1) != start_j) {
-                    start_j = new Number((j + 1) / this.segments).toFixed(2);
-                    console.log(start_i,start_j)
-                }
                 let a = i + j * (this.segments + 1);
                 let b = (i + 1) + j * (this.segments + 1);
                 let c = (i + 1) + (j + 1) * (this.segments + 1);
@@ -531,6 +532,8 @@ class Terrain {
                     const t2 = TriangleMesh(vertices, b, c, d, this.width, this.height);
 
                     [t1, t2].forEach((triangle) => {
+                        this.grounds.push(triangle.triangle);
+
                         const normal = triangle.normal;
                         const slope = Math.atan2(normal.y, normal.x);
 
@@ -548,7 +551,6 @@ class Terrain {
                                                   (i < this.segments && j < this.segments && grassPatches[i + 1][j + 1])  // Check bottom-right diagonal
                         );
 
-
                         const isTree = Math.random() < 0.3 && !isNearGrassPatch;
                         
                         //
@@ -562,15 +564,6 @@ class Terrain {
 
                             this.grasses.push(grassResult);
 
-                            // grassTriangleMap.set(triangle.uuid, {
-                            //     triangle: triangle.triangle,
-                            //     neighbors: [],
-                            //     isPerimeter: false
-                            // });
-
-                            // triangle.material.transparent = true;
-                            // triangle.material.opacity = 0.1;
-                            // this.grassTriangles.push(triangle);
                         }
                         //
                         // Trees!
@@ -597,39 +590,19 @@ class Terrain {
 
         }
 
+        /*
+
         this.clusterCliffs();
 
-        var isBoundary =(i, j) => {
-            const directions = [
-                [-1, 0], [1, 0], [0, -1], [0, 1],
-                [-1, -1], [-1, 1], [1, -1], [1, 1]
-            ];
-            
-            const currentDensity = this.groundColorMap[i][j];
-            
-            for (const [di, dj] of directions) {
-                const ni = i + di;
-                const nj = j + dj;
-                
-                if (ni >= 0 && ni < this.groundColorMap.length &&
-                    nj >= 0 && nj < this.groundColorMap[0].length) {
-                    const neighborDensity = this.groundColorMap[ni][nj];
-                    
-                    // If one is grassy and the other isn't, it's a boundary
-                    if ((currentDensity > 0 && neighborDensity === 0) ||
-                        (currentDensity === 0 && neighborDensity > 0)) {
-                        return true;
-                    }
-                }
-            }
-            
-            return false;
-        }
+        */
+
+        alert('processing the ground color map');
 
         // Now, let's apply the grass density in groundColorMap to color the vertices
         const colors = [];
         const gridSize = this.groundColorMap.length;  // Assuming groundColorMap is a 2D array of the grid size
         const boundaryMarkers = [];
+        var blades = [];
 
         for (let i = 0; i < gridSize; i++) {
             for (let j = 0; j < gridSize; j++) {
@@ -642,17 +615,7 @@ class Terrain {
                     if (density > 0) {
                         // More grass means more green intensity
                         const greenIntensity = Math.min(1, density / 10);  // Scale density for grass intensity
-                        colors.push(randomInRange(0, 0.1), greenIntensity, randomInRange(0, 0.1));  // RGB color with green based on grass density
-                    
-                        // Check neighboring cells for boundaries
-                        if (isBoundary(i, j)) {
-                            const position = new THREE.Vector3(
-                                vertices[vertexIndex * 3],
-                                vertices[vertexIndex * 3 + 1],
-                                vertices[vertexIndex * 3 + 2]
-                            );
-                            boundaryMarkers.push(position);
-                        }
+                        colors.push(randomInRange(0, 0.1), greenIntensity, randomInRange(0, 0.1));  // RGB color with green based on grass density                      
                     } else {
                         // No grass means brown soil
                         colors.push(randomInRange(0.1, 0.3), randomInRange(0.11, 0.15), randomInRange(0, 0.08));  // RGB color for dark brown soil
@@ -661,15 +624,11 @@ class Terrain {
             }
         }
 
+        alert('1')
+
         // Create red spheres at boundary positions
         const sphereGeometry = new THREE.SphereGeometry(0.2, 8, 8);
         const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-
-        boundaryMarkers.forEach(position => {
-            const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-            sphere.position.copy(position);
-            scene.add(sphere);
-        });
 
         // ... rest of the existing code ...
 
@@ -702,7 +661,47 @@ class Terrain {
         this.mesh = mesh;
         scene.add(this.mesh);
 
+
+        alert('2');
+
         return this;
+    }
+
+    findYOnTerrain(x, z, vertices, segments) {
+        const cellSize = 1 / segments;
+        const gridX = Math.floor(x / cellSize);
+        const gridZ = Math.floor(z / cellSize);
+    
+        // Ensure we're within the grid bounds
+        if (gridX < 0 || gridX >= segments || gridZ < 0 || gridZ >= segments) {
+            return null;
+        }
+    
+        // Find the two triangles in this grid cell
+        const i1 = gridZ * (segments + 1) + gridX;
+        const i2 = i1 + 1;
+        const i3 = (gridZ + 1) * (segments + 1) + gridX;
+        const i4 = i3 + 1;
+    
+        const v1 = new THREE.Vector3(vertices[i1 * 3], vertices[i1 * 3 + 1], vertices[i1 * 3 + 2]);
+        const v2 = new THREE.Vector3(vertices[i2 * 3], vertices[i2 * 3 + 1], vertices[i2 * 3 + 2]);
+        const v3 = new THREE.Vector3(vertices[i3 * 3], vertices[i3 * 3 + 1], vertices[i3 * 3 + 2]);
+        const v4 = new THREE.Vector3(vertices[i4 * 3], vertices[i4 * 3 + 1], vertices[i4 * 3 + 2]);
+    
+        // Determine which triangle the point is in
+        const dx = (x - gridX * cellSize) / cellSize;
+        const dz = (z - gridZ * cellSize) / cellSize;
+    
+        let y;
+        if (dx + dz <= 1) {
+            // Lower triangle
+            y = v1.y + (v2.y - v1.y) * dx + (v3.y - v1.y) * dz;
+        } else {
+            // Upper triangle
+            y = v4.y + (v3.y - v4.y) * (1 - dx) + (v2.y - v4.y) * (1 - dz);
+        }
+    
+        return y;
     }
 
     findTriangleClusterIds(triangle) {
@@ -1390,6 +1389,8 @@ class Terrain {
         });
     }
 
+   
+
     createGrassPatch(indices, vertices, mesh) {
         const grassResult = this.createGrassResult(
             indices, 
@@ -1406,7 +1407,7 @@ class Terrain {
             if (closestVertexIndex >= 0 && closestVertexIndex < vertices.length / 3) {
                 const x = Math.floor(closestVertexIndex / (this.segments + 1));
                 const y = closestVertexIndex % (this.segments + 1);
-                this.groundColorMap[x][y] += 1;  // Increment the grass density at the closest vertex
+                this.groundColorMap[x][y] += .1;  // Increment the grass density at the closest vertex
             }
         });
 
@@ -1710,19 +1711,19 @@ class UserController {
 
     // Ensure the wireframe stays in sync with the bounding box
     updateBoundingBox() {
-        // Set the bounding box based on the this.camera's current position
-        this.cameraBoundingBox.setFromCenterAndSize(
-            this.camera.position,
-            new THREE.Vector3(1, 2, 1) // Adjust size if needed
-        );
+        // // Set the bounding box based on the this.camera's current position
+        // this.cameraBoundingBox.setFromCenterAndSize(
+        //     this.camera.position,
+        //     new THREE.Vector3(1, 2, 1) // Adjust size if needed
+        // );
         
-        // Update the wireframe box position and size to match the bounding box
-        const center = this.cameraBoundingBox.getCenter(new THREE.Vector3());
-        const size = this.cameraBoundingBox.getSize(new THREE.Vector3());
+        // // Update the wireframe box position and size to match the bounding box
+        // const center = this.cameraBoundingBox.getCenter(new THREE.Vector3());
+        // const size = this.cameraBoundingBox.getSize(new THREE.Vector3());
 
-        wireframeBox.position.copy(center);
-        wireframeBox.rotation.copy(this.camera.rotation);
-        wireframeBox.scale.set(size.x, size.y, size.z);
+        // wireframeBox.position.copy(center);
+        // wireframeBox.rotation.copy(this.camera.rotation);
+        // wireframeBox.scale.set(size.x, size.y, size.z);
     }
 }
 
@@ -1744,31 +1745,32 @@ class View {
         window.renderer.domElement.id = "view";
     }
 
-    async init() {
+    init() {
         document.body.appendChild(window.renderer.domElement);
 
 
         console.log(VM);
 
         window.terrain = new Terrain(VM);
+
+
+
+        alert('3')
+
         window.boundingVolumeHierarchy = new BoundingVolumeHierarchy();
         window.user = new UserController(terrain, boundingVolumeHierarchy);
         window.sky = new Sky(window.user);
         window.terrain.setSun(window.sky.sun);
         window.terrain.setCamera(window.user.camera);
 
-        
+    
 
-        switch (VM.map[VM.user.level]) {
-            case LEVEL[1]:
-                window.terrain.generate();
-                break;
-        }
 
 
         boundingVolumeHierarchy.init(window.terrain.grassTriangles);
         window.user.camera.position.set(...window.terrain.getRandomPositionArray());
-        this.addUser();
+        // window.addUser();
+
 
 
 
@@ -1781,6 +1783,8 @@ class View {
             window.renderer.render(window.scene, window.user.camera);
         };
 
+
+        alert('GO')
 
         Animate();
 
@@ -1803,4 +1807,7 @@ class View {
 }
 
 
-await VM.init("Peter", new View());
+window.VM = new ViewModel();
+window.view = new View();
+
+await VM.init("Peter", view);

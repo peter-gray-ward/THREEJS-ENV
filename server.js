@@ -4,87 +4,104 @@ const fs = require('fs');
 const path = require('path');
 const dir = (filename) => path.resolve(filename);
 
+const LEVEL = [
+    null,
+    "Heart of the Woods"
+];
+
+
+class User {
+  constructor(options) {
+    this.name = options.name;
+    this.level = options.level;
+    this.position = options.position;
+  }
+}
+
+class Model {
+  constructor(user) {
+    const center = { x: 0, y: 0, z: 0 };
+    this.map = {
+      [user.level]: {
+        center, 
+        quadrant: 100, 
+        noiseWidth: 200, 
+        noiseHeight: 100,
+        segments: 50,
+        sop: {
+            trees: 100 * 3,
+            grasses: 100 * .3
+        },
+        Grass: [
+            '#33462d', //
+            '#435c3a', //
+            '#4e5e3e', //
+            '#53634c', //
+            '#536c46', //
+            '#5d6847', //
+        ],
+        grassPatchPersistence: 0.03,
+        textures: {
+          barks: Array.from({ length: 7 }, (_, i) => `/images/trees/bark/bark-${i + 1}.jpg`),
+          branches: Array.from({ length: 4 }, (_, i) => `/images/trees/foliage/branches/tree-branch-${i + 1}.png`),
+          foliage: Array.from({ length: 7 }, (_, i) => `/images/trees/foliage/textures/foliage-${i + 1}.jpg`)
+        },
+        amplitude: 50,
+        persistence: 0.15,
+        altitudeVariance: 10,
+        width: 200,
+        height: 200,
+        grassBladeDensity: 500,
+        v0: { x: center.x - 100, y: center.y, z: center.z + 100 },
+        v1: { x: center.x + 100, y: center.y, z: center.z + 100 }, 
+        v2: { x: center.x + 100, y: center.y, z: center.z - 100 }, 
+        v3: { x: center.x - 100, y: center.y, z: center.z - 100 }
+      }
+    };
+    this.user = user;
+  }
+}
+
+
+
+
 var ii = 0
 app
   .use(express.json())
   .use(express.urlencoded({ extended: true }))
   .get('/', (req, res) => res.sendFile(dir('index.html')))
   .get('/three', (req, res) => {
-    var fp = path.join(__dirname, 'node_modules/three/build/three.module.js')
+    var fp = path.join(__dirname, 'node_modules/three/build/three.cjs')
+    res.type("text/javascript");
     res.sendFile(fp)
   })
-  .get('/water', (req, res) => {
-    var fp = path.join(__dirname, 'node_modules/three/examples/jsm/objects/Water.js')
-    res.sendFile(fp)
+ .get('/images/trees/:treepart/*', (req, res) => {
+    const { treepart } = req.params;
+    const restOfPath = req.params[0]; // The wildcard part (everything after :treepart)
+
+    // Construct the file path
+    const filePath = path.join(__dirname, 'images', 'trees', treepart, restOfPath);
+    res.sendFile(filePath);
   })
-  .get('/waternormals', (req, res) => {
-    var fp = path.join(__dirname, 'waternormals.jpg')
-    res.sendFile(fp)
+  .get('/load/:username', (req, res) => {
+    res.json(new Model({
+      name: req.params.username,
+      level: LEVEL[1],
+      position: { x: 0, y: 0, z: 0 }
+    }));
   })
-  .get('/sky', (req, res) => {
-    var fp = path.join(__dirname, 'node_modules/three/examples/jsm/objects/Sky.js')
-    res.sendFile(fp)
+  .get('/lib/:filename', (req, res) => {
+    const filePath = path.join(__dirname, 'lib', req.params.filename);
+    console.log("filePath", filePath);
+    res.type("text/javascript");
+    res.sendFile(filePath);
   })
-  .get('/perlin-noise', (req, res) => {
-    var fp = path.join(__dirname, 'node_modules/perlin-noise/index.js')
-    res.sendFile(fp)
+  .get('/src/:filename', (req, res) => {
+    const filePath = path.join(__dirname, 'src', req.params.filename);
+    console.log("filePath", filePath);
+    res.type("text/javascript");
+    res.sendFile(filePath);
   })
-  .get('/noise', (req, res) => {
-    var fp = path.join(__dirname, 'node_modules/simplex-noise/dist/esm/simplex-noise.js')
-    res.sendFile(fp)
-  })
-  .get('/housing', (req, res) => {
-    res.sendFile(path.join(__dirname, 'buildings.js'))
-  })
-  .get('/tree1/:file', (req, res) => {
-    res.writeHead(200, { 'Content-Type' : 'image/png'})
-    return res.end(path.join(__dirname, 'Tree1', req.params.file))
-  })
-  .get('/bark', (req, res) => {
-    res.writeHead(200, { 'Content-Type' : 'image/jpeg'})
-    return res.end(path.join(__dirname, 'Tree1', 'bark.jpg'))
-  })
-  .get('/rockwall', (req, res) => {
-    res.writeHead(200, { 'Content-Type' : 'image/jpeg'})
-    const fp = path.join(__dirname, 'rockwall.jpg')
-    return res.end(fs.readFileSync(fp));
-  })
-  .get('/oak-leaf', (req, res) => {
-    res.writeHead(200, { 'Content-Type' : 'image/png'})
-    const fp = path.join(__dirname, 'Tree1', 'oak-leaf.png')
-    return res.end(fs.readFileSync(fp));
-  })
-  .get('/cannon', (req, res) => {
-    return res.sendFile(path.join(__dirname, 'node_modules', 'cannon-es', 'dist', 'cannon-es.js'))
-  })
-  .get('/moss', (req, res) => {
-    res.writeHead(200, { 'Content-Type' : 'image/jpeg'})
-    const mossFilepath = path.join(__dirname, 'moss.jpg')
-    return res.end(fs.readFileSync(mossFilepath));
-  })
-  .get('/delaunator', (req, res) => {
-    res.sendFile(path.join(__dirname, 'node_modules/delaunator/index.js'))
-  })
-  .get('/robust-predicates', (req, res) => {
-    res.sendFile(path.join(__dirname, 'node_modules/robust-predicates/index.js'))
-  })
-  .get('/gltf-loader', (req, res) => {
-    return res.sendFile(path.join(__dirname, '/node_modules/three-gltf-loader'))
-  })
-  .get('/mtl-loader', (req, res) => {
-    return res.sendFile(path.join(__dirname, '/node_modules/three-mtl-loader'))
-  })
-  .get('/obj-loader', (req, res) => {
-    return res.sendFile(path.join(__dirname, '/node_modules/three-obj-loader'))
-  })
-  .get('/tds-loader', (req, res) => {
-    return res.sendFile(path.join(__dirname, '/node_modules/three/examples/jsm/loaders/TDSLoader.js'))
-  })
-  .get('/tree1', (req, res) => {
-    return res.sendFile(path.join(__dirname, '/Tree1/Tree1.3ds'))
-  })
- 
-  .get('/:filename', (req, res) => res.sendFile(dir(req.params.filename)))
   .post('/save', (req, res) => {
     var body = '';
     req.on('data', chunk => body += chunk);
