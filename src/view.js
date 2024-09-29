@@ -468,7 +468,7 @@ class Terrain {
         const segmentSize = 1 / this.segments;
         this.groundColorMap = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(0));  // Initialize ground color map
 
-        let perlinNoise = this.generateRollingPerlinNoise();
+        let perlinNoise = this.generateRandomWoodsTerrain();
 
         // Generate vertices and initial setup
         for (let i = 0; i <= this.segments; i++) {
@@ -961,6 +961,142 @@ class Terrain {
         }
         return noise;
     }
+
+    generateCellularNoise() {
+        const width = VM.map[VM.user.level].width;
+        const height = VM.map[VM.user.level].height;
+        const noise = new Array(width * height).fill(0);
+        
+        // Initialize with random cells
+        for (let i = 0; i < noise.length; i++) {
+            noise[i] = Math.random() < 0.45 ? 1 : 0;
+        }
+        
+        // Apply cellular automaton rules
+        const iterations = 4;
+        for (let iter = 0; iter < iterations; iter++) {
+            const newNoise = [...noise];
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const neighbors = this.countNeighbors(noise, x, y, width, height);
+                    const i = y * width + x;
+                    if (noise[i] === 1) {
+                        newNoise[i] = (neighbors < 2 || neighbors > 3) ? 0 : 1;
+                    } else {
+                        newNoise[i] = (neighbors === 3) ? 1 : 0;
+                    }
+                }
+            }
+            noise.splice(0, noise.length, ...newNoise);
+        }
+        
+        // Normalize to [0, 1] range
+        return noise.map(v => v * Math.random());
+    }
+    generateRandomWoodsTerrain() {
+        const width = VM.map[VM.user.level].width;
+        const height = VM.map[VM.user.level].height;
+        const terrain = new Array(width * height).fill(0);
+        
+        // Step 1: Initialize with random seeds for groves
+        const numSeeds = Math.floor(width * height * 0.005); // 0.5% of the area for fewer, larger groves
+        for (let i = 0; i < numSeeds; i++) {
+            const x = Math.floor(Math.random() * width);
+            const y = Math.floor(Math.random() * height);
+            terrain[y * width + x] = 1;
+        }
+        
+        // Step 2: Grow groves using cellular automata
+        const iterations = 6; // Increased iterations for larger groves
+        for (let iter = 0; iter < iterations; iter++) {
+            const newTerrain = [...terrain];
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const neighbors = this.countNeighbors(terrain, x, y, width, height);
+                    const i = y * width + x;
+                    if (terrain[i] === 0 && neighbors >= 1 && Math.random() < 0.6) {
+                        newTerrain[i] = 1;
+                    }
+                }
+            }
+            terrain.splice(0, terrain.length, ...newTerrain);
+        }
+        
+        // Step 3: Create distance field for smooth transitions
+        const distanceField = this.createDistanceField(terrain, width, height);
+        
+        // Step 4: Generate final terrain values with rolling hills
+        const maxDistance = Math.max(...distanceField);
+        return terrain.map((value, i) => {
+            const normalizedDistance = distanceField[i] / maxDistance;
+            
+            // Use a sine function to create rolling hills
+            const baseElevation = 0.3 + 0.4 * Math.sin(normalizedDistance * Math.PI);
+            
+            if (value === 1) {
+                // Grove: Higher elevation with some variation
+                return baseElevation + 0.2 + Math.random() * 0.1;
+            } else {
+                // Meadow: Lower elevation with gentle slopes
+                return baseElevation + Math.random() * 0.05;
+            }
+        });
+    }
+    
+    countNeighbors(grid, x, y, width, height) {
+        let count = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+                if (dx === 0 && dy === 0) continue;
+                const nx = (x + dx + width) % width;
+                const ny = (y + dy + height) % height;
+                count += grid[ny * width + nx];
+            }
+        }
+        return count;
+    }
+    
+    createDistanceField(terrain, width, height) {
+        const distanceField = new Array(width * height).fill(Infinity);
+        const queue = [];
+        
+        // Initialize distance field
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const i = y * width + x;
+                if (terrain[i] === 1) {
+                    distanceField[i] = 0;
+                    queue.push([x, y]);
+                }
+            }
+        }
+        
+        // Flood fill to calculate distances
+        while (queue.length > 0) {
+            const [x, y] = queue.shift();
+            const currentDist = distanceField[y * width + x];
+            
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const nx = (x + dx + width) % width;
+                    const ny = (y + dy + height) % height;
+                    const ni = ny * width + nx;
+                    const newDist = currentDist + Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (newDist < distanceField[ni]) {
+                        distanceField[ni] = newDist;
+                        queue.push([nx, ny]);
+                    }
+                }
+            }
+        }
+        
+        return distanceField;
+    }
+
+
+
 
     interpolate(x0, x1, alpha) {
         return x0 * (1 - alpha) + alpha * x1;

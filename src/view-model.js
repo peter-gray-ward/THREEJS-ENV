@@ -17,13 +17,13 @@ export default class ViewModel {
         await view.init();
         // var xhr = new XMLHttpRequest();
         // xhr.open("GET", `http://localhost:8080/load/${username}`, true);
-        // xhr.addEventListener('load', () => {
+        // xhr.addEventListener('load', async () => {
         //     const model = JSON.parse(xhr.response);
         //     console.log("model loaded", model);
         //     this.user = model.user;
         //     this.map = model.map;
 
-        //     callback();
+        //     await view.init();
             
         // });
         // xhr.send();
