@@ -17,19 +17,21 @@ class User {
   }
 }
 
+let t = 50
+
 class Model {
   constructor(user) {
     const center = { x: 0, y: 0, z: 0 };
     this.map = {
       [user.level]: {
         center, 
-        quadrant: 100, 
-        noiseWidth: 200, 
-        noiseHeight: 100,
-        segments: 50,
+        quadrant: t, 
+        noiseWidth: t * 2, 
+        noiseHeight: t,
+        segments: 25,
         sop: {
-            trees: 100 * 3,
-            grasses: 100 * .3
+            trees: t * 3,
+            grasses: t * .3
         },
         Grass: [
             '#33462d', //
@@ -39,8 +41,8 @@ class Model {
             '#536c46', //
             '#5d6847', //
         ],
-        treeCondition: `Math.random() < 0.35 && !isNearGrassPatch`,
-        grassPatchPersistence: 0.003,
+        treeCondition: `false && Math.random() < 0.05 && !isNearGrassPatch`,
+        grassPatchPersistence: 0,//0.03,
         textures: {
           barks: Array.from({ length: 7 }, (_, i) => `/images/trees/bark/bark-${i + 1}.jpg`),
           branches: Array.from({ length: 4 }, (_, i) => `/images/trees/foliage/branches/tree-branch-${i + 1}.png`),
@@ -49,13 +51,9 @@ class Model {
         amplitude: 50,
         persistence: 0.15,
         altitudeVariance: 10,
-        width: 200,
-        height: 200,
-        grassBladeDensity: 300,
-        v0: { x: center.x - 100, y: center.y, z: center.z + 100 },
-        v1: { x: center.x + 100, y: center.y, z: center.z + 100 }, 
-        v2: { x: center.x + 100, y: center.y, z: center.z - 100 }, 
-        v3: { x: center.x - 100, y: center.y, z: center.z - 100 }
+        width: t * 2,
+        height: t * 2,
+        grassBladeDensity: 300
       }
     };
     this.user = user;
@@ -85,6 +83,7 @@ function createWindow() {
 
   // Load the main HTML file
   win.loadURL('app://./index.html');
+  
 }
 
 app.whenReady().then(() => {

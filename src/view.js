@@ -439,6 +439,12 @@ class Terrain {
                 _textures[key] = _textures[key].map(t => new THREE.TextureLoader().load(t));
             }
             this.textures =  _textures;
+            this.vertices = new Map();
+            this.meshes = [];
+            this.markers = {};
+            this.surroundingCenters = [];
+            this.currentMesh = 0;
+            this.center = new THREE.Vector3(0, 0, 0);
             this.generate();
             break;
         default:
@@ -450,14 +456,29 @@ class Terrain {
         this.generate();
     }
 
-    generate() {
+    generate(centerX = 0, centerY = 0, centerZ = 0) {
+        const centerKey = `${centerX}_${centerZ}`;
+        for (var i = 0; i < this.meshes.length; i++) {
+            if (this.meshes[i].centerKey == centerKey) {
+                debugger
+            }
+        }
+        
         this.cliffs = [];
         this.grounds = [];
         this.grassTriangles = [];
         this.cliffMeshes = [];
-        this.groundMeshes = [];
         this.trees = [];
         this.grasses = [];
+
+        let t = VM.map[VM.user.level].quadrant;
+        let center = { x: centerX, y: centerY, z: centerZ }
+
+        let v0 = { x: center.x - t, y: center.y, z: center.z + t };
+        let v1 = { x: center.x + t, y: center.y, z: center.z + t }; 
+        let v2 = { x: center.x + t, y: center.y, z: center.z - t }; 
+        let v3 = { x: center.x - t, y: center.y, z: center.z - t };
+
         let vertices = [];
         let indices = [];
 
@@ -468,7 +489,7 @@ class Terrain {
         const segmentSize = 1 / this.segments;
         this.groundColorMap = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(0));  // Initialize ground color map
 
-        let perlinNoise = this.generateStructuredTerrain();
+        let perlinNoise = this.generatePerlinNoise(centerX, centerZ);
         // let woodTerrain = this.generateRandomWoodsTerrain();
 
         // Generate vertices and initial setup
@@ -478,9 +499,9 @@ class Terrain {
                 let y = j * segmentSize;
 
                 let v = new THREE.Vector3();
-                v.x = (1 - x) * (1 - y) * this.v0.x + x * (1 - y) * this.v1.x + x * y * this.v2.x + (1 - x) * y * this.v3.x;
-                v.y = (1 - x) * (1 - y) * this.v0.y + x * (1 - y) * this.v1.y + x * y * this.v2.y + (1 - x) * y * this.v3.y;
-                v.z = (1 - x) * (1 - y) * this.v0.z + x * (1 - y) * this.v1.z + x * y * this.v2.z + (1 - x) * y * this.v3.z;
+                v.x = (1 - x) * (1 - y) * v0.x + x * (1 - y) * v1.x + x * y * v2.x + (1 - x) * y * v3.x;
+                v.y = (1 - x) * (1 - y) * v0.y + x * (1 - y) * v1.y + x * y * v2.y + (1 - x) * y * v3.y;
+                v.z = (1 - x) * (1 - y) * v0.z + x * (1 - y) * v1.z + x * y * v2.z + (1 - x) * y * v3.z;
 
                 let noiseX = Math.floor(x * (this.noiseWidth - 1));
                 let noiseY = Math.floor(y * (this.noiseHeight - 1));
@@ -496,6 +517,7 @@ class Terrain {
             }
         }
 
+
         var grassPatches = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(false));  // Initialize an array to track grass patches
         
         for (let i = 0; i < this.segments; i++) {
@@ -505,7 +527,7 @@ class Terrain {
                 const c = j >= randomInRange(0, this.quadrant * 2);
                 const d = j <= randomInRange(10, this.quadrant * 2);
                 // Define the random range for grass patches
-                const isInGrassPatch = ((a && b) && (c && d)) || Math.random() < 0.1;
+                const isInGrassPatch = ((a && b) && (c && d));
 
                 // Store grass patch in grassPatches array
                 if (isInGrassPatch || Math.random() < VM.map[VM.user.level].grassPatchPersistence) {
@@ -595,14 +617,7 @@ class Terrain {
 
         }
 
-        /*
-
-        this.clusterCliffs();
-
-        */
-
-        alert('processing the ground color map');
-
+        
         // Now, let's apply the grass density in groundColorMap to color the vertices
         const colors = [];
         const gridSize = this.groundColorMap.length;  // Assuming groundColorMap is a 2D array of the grid size
@@ -633,7 +648,6 @@ class Terrain {
             }
         }
 
-        alert('1')
 
         // Create red spheres at boundary positions
         const sphereGeometry = new THREE.SphereGeometry(0.2, 8, 8);
@@ -666,81 +680,19 @@ class Terrain {
         const mesh = new THREE.Mesh(planeGeometry, material);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-
         this.mesh = mesh;
-        scene.add(this.mesh);
 
+        this.mesh.centerKey = centerKey;
 
-        alert('2');
+        scene.add(mesh);
+
+       
+        this.meshes.push(this.mesh);
 
         return this;
     }
 
-    findYOnTerrain(x, z, vertices, segments) {
-        const cellSize = 1 / segments;
-        const gridX = Math.floor(x / cellSize);
-        const gridZ = Math.floor(z / cellSize);
-    
-        // Ensure we're within the grid bounds
-        if (gridX < 0 || gridX >= segments || gridZ < 0 || gridZ >= segments) {
-            return null;
-        }
-    
-        // Find the two triangles in this grid cell
-        const i1 = gridZ * (segments + 1) + gridX;
-        const i2 = i1 + 1;
-        const i3 = (gridZ + 1) * (segments + 1) + gridX;
-        const i4 = i3 + 1;
-    
-        const v1 = new THREE.Vector3(vertices[i1 * 3], vertices[i1 * 3 + 1], vertices[i1 * 3 + 2]);
-        const v2 = new THREE.Vector3(vertices[i2 * 3], vertices[i2 * 3 + 1], vertices[i2 * 3 + 2]);
-        const v3 = new THREE.Vector3(vertices[i3 * 3], vertices[i3 * 3 + 1], vertices[i3 * 3 + 2]);
-        const v4 = new THREE.Vector3(vertices[i4 * 3], vertices[i4 * 3 + 1], vertices[i4 * 3 + 2]);
-    
-        // Determine which triangle the point is in
-        const dx = (x - gridX * cellSize) / cellSize;
-        const dz = (z - gridZ * cellSize) / cellSize;
-    
-        let y;
-        if (dx + dz <= 1) {
-            // Lower triangle
-            y = v1.y + (v2.y - v1.y) * dx + (v3.y - v1.y) * dz;
-        } else {
-            // Upper triangle
-            y = v4.y + (v3.y - v4.y) * (1 - dx) + (v2.y - v4.y) * (1 - dz);
-        }
-    
-        return y;
-    }
 
-    findTriangleClusterIds(triangle) {
-        const neighborIds = [];
-        const EPSILON = 0.0001; // Adjust this value based on your mesh scale
-    
-        const vertexClose = (v1, v2) => {
-            return Math.abs(v1.x - v2.x) < EPSILON &&
-                   Math.abs(v1.y - v2.y) < EPSILON &&
-                   Math.abs(v1.z - v2.z) < EPSILON;
-        };
-    
-        const shareEdge = (t1, t2) => {
-            let sharedVertices = 0;
-            if (vertexClose(t1.a, t2.a) || vertexClose(t1.a, t2.b) || vertexClose(t1.a, t2.c)) sharedVertices++;
-            if (vertexClose(t1.b, t2.a) || vertexClose(t1.b, t2.b) || vertexClose(t1.b, t2.c)) sharedVertices++;
-            if (vertexClose(t1.c, t2.a) || vertexClose(t1.c, t2.b) || vertexClose(t1.c, t2.c)) sharedVertices++;
-            return sharedVertices >= 2;
-        };
-    
-        // Iterate over grassTriangles
-        this.grassTriangles.forEach((mesh, index) => {
-            const otherTriangle = mesh.triangle;
-            if (mesh.triangle !== otherTriangle && shareEdge(mesh.triangle, otherTriangle)) {
-                neighborIds.push(index);
-            }
-        });
-    
-        return neighborIds;
-    }
     
     determineGrassClusters() {
         const clusters = [];
@@ -909,30 +861,93 @@ class Terrain {
         let octaveCount = options.octaveCount || 4;
         let amplitude = options.amplitude || 0.05;
         let persistence = options.persistence || 0.1;
-        let whiteNoise = this.generateWhiteNoise();
-
+        let direction = options.direction || null; // 'right', 'left', 'top', 'bottom'
+        let existingVertices = options.existingVertices || null;
+    
+        let width = map.width;
+        let height = map.height;
+        let offsetX = 0;
+        let offsetY = 0;
+    
+        // Adjust dimensions and offsets based on direction
+        if (direction && existingVertices) {
+            switch(direction) {
+                case 'right':
+                    offsetX = width;
+                    existingVertices = existingVertices.slice(-height);
+                    break;
+                case 'left':
+                    width *= 2;
+                    existingVertices = existingVertices.slice(0, height);
+                    break;
+                case 'bottom':
+                    offsetY = height;
+                    existingVertices = existingVertices.slice(-width);
+                    break;
+                case 'top':
+                    height *= 2;
+                    existingVertices = existingVertices.slice(0, width);
+                    break;
+            }
+        }
+    
+        let whiteNoise = this.generateWhiteNoise(width, height, offsetX, offsetY);
+    
         let smoothNoiseList = new Array(octaveCount);
         for (let i = 0; i < octaveCount; ++i) {
-            smoothNoiseList[i] = this.generateSmoothNoise(i, whiteNoise);
+            smoothNoiseList[i] = this.generateSmoothNoise(i, whiteNoise, width, height);
         }
-
-        let perlinNoise = new Array(map.width * map.height);
+    
+        let perlinNoise = new Array(width * height);
         let totalAmplitude = 0;
-
+    
         for (let i = octaveCount - 1; i >= 0; --i) {
             amplitude *= persistence;
             totalAmplitude += amplitude;
-
-            for (let j = 0; j < perlinNoise.length; ++j) {
-                perlinNoise[j] = perlinNoise[j] || 0;
-                perlinNoise[j] += smoothNoiseList[i][j] * amplitude;
+    
+            for (let y = 0; y < height; ++y) {
+                for (let x = 0; x < width; ++x) {
+                    let index = y * width + x;
+                    perlinNoise[index] = perlinNoise[index] || 0;
+                    perlinNoise[index] += smoothNoiseList[i][index] * amplitude;
+                }
             }
         }
-
+    
         for (let i = 0; i < perlinNoise.length; ++i) {
             perlinNoise[i] /= totalAmplitude;
         }
-
+    
+        // Blend with existing vertices if provided
+        if (existingVertices && direction) {
+            let blendWidth = Math.min(20, Math.floor(width / 4)); // Adjust blend width as needed
+            for (let i = 0; i < blendWidth; i++) {
+                let blendFactor = i / blendWidth;
+                for (let j = 0; j < (direction === 'left' || direction === 'right' ? height : width); j++) {
+                    let newIndex, oldIndex;
+                    switch(direction) {
+                        case 'right':
+                            newIndex = j * width + i;
+                            oldIndex = j;
+                            break;
+                        case 'left':
+                            newIndex = j * width + (width - 1 - i);
+                            oldIndex = j;
+                            break;
+                        case 'bottom':
+                            newIndex = i * width + j;
+                            oldIndex = j;
+                            break;
+                        case 'top':
+                            newIndex = (height - 1 - i) * width + j;
+                            oldIndex = j;
+                            break;
+                    }
+                    perlinNoise[newIndex] = perlinNoise[newIndex] * blendFactor + existingVertices[oldIndex] * (1 - blendFactor);
+                }
+            }
+        }
+    
         return perlinNoise;
     }
 
@@ -971,6 +986,10 @@ class Terrain {
         return noise;
     }
 
+    lerp(a, b, t) {
+        return a * (1 - t) + b * t;
+    }
+
     generateCellularNoise() {
         const width = VM.map[VM.user.level].width;
         const height = VM.map[VM.user.level].height;
@@ -1002,6 +1021,7 @@ class Terrain {
         // Normalize to [0, 1] range
         return noise.map(v => v * Math.random());
     }
+
     generateRandomWoodsTerrain() {
         const width = VM.map[VM.user.level].width;
         const height = VM.map[VM.user.level].height;
@@ -1051,7 +1071,8 @@ class Terrain {
             }
         });
     }
-    generateStructuredTerrain() {
+
+    generateStructuredTerrain(centerX = 0, centerZ = 0, edges = null) {
         const width = VM.map[VM.user.level].width;
         const height = VM.map[VM.user.level].height;
         const terrain = new Array(width * height);
@@ -1219,36 +1240,6 @@ class Terrain {
     interpolate(x0, x1, alpha) {
         return x0 * (1 - alpha) + alpha * x1;
     }
-
-    getRandomPosition() {
-        const positions = this.mesh.geometry.attributes.position.array;
-        const vertexCount = Math.floor(positions.length / 3); // Total number of vertices
-        const randomVertexIndex = Math.floor(Math.random() * vertexCount); // Random vertex index
-
-        // Calculate the correct array index for the x, y, z coordinates of the random vertex
-        const index = randomVertexIndex * 3;
-
-        return {
-            x: positions[index],        // x-coordinate
-            y: positions[index + 1] + 20,    // y-coordinate
-            z: positions[index + 2]     // z-coordinate
-        };
-    }
-
-    getRandomPositionArray() {
-        const positions = this.mesh.geometry.attributes.position.array;
-        const vertexCount = Math.floor(positions.length / 3); // Total number of vertices
-        const randomVertexIndex = Math.floor(Math.random() * vertexCount); // Random vertex index
-
-        // Calculate the correct array index for the x, y, z coordinates of the random vertex
-        const index = randomVertexIndex * 3;
-
-        return [
-            positions[index],        // x-coordinate
-            positions[index + 1] + 3,    // y-coordinate
-            positions[index + 2]     // z-coordinate
-        ];
-    }
     
     findClusters(triangles = []) {
         const clusters = [];
@@ -1387,21 +1378,78 @@ class Terrain {
         return [u, v, w];  // Return the barycentric weights for the three vertices
     }
   
-    updateTerrain(playerPosition) {
-        // Define the SOP as a center and a radius
-        const sopCenter = { x: playerPosition.x, y: playerPosition.y, z: playerPosition.z };
-
-        // Update visible triangles and clusters
-        this.updateVisibleTrianglesAndClusters(sopCenter);
-
-        // Update the terrain's current center
-        this.center = sopCenter;
+    updateTerrain() {
+        const sopCenter = { x: window.user.camera.position.x, y: window.user.camera.position.y, z: window.user.camera.position.z };
+    
         
-        // Update the terrain vertices (`v0`, `v1`, `v2`, `v3`) if necessary (depends on use case)
+        for (var center of this.surroundingCenters) {
+            var centerKey = `${center.center.x}_${center.center.z}`;
+            if (center.center.distanceTo(user.camera.position) < 75) {
+                center.pillar.material.color.set(0xff0000);
+                var terrainCreated = false;
+                for (var j = 0; j < this.meshes.length; j++) {
+                    if (this.meshes[j].centerKey == centerKey) {
+                        terrainCreated = true;
+                    }
+                }
+                if (!terrainCreated) {
+                    this.generate(center.center.x, center.center.y, center.center.z);
+                }
+            } else {
+                center.pillar.material.color.set(0xffffff);
+            }
+        }
+        
+        this.updateVisibleTrianglesAndClusters(sopCenter);
+    
+        // Update the terrain vertices
         this.v0 = { x: this.center.x - this.quadrant, y: this.center.y, z: this.center.z + this.quadrant };
         this.v1 = { x: this.center.x + this.quadrant, y: this.center.y, z: this.center.z + this.quadrant };
         this.v2 = { x: this.center.x + this.quadrant, y: this.center.y, z: this.center.z - this.quadrant };
         this.v3 = { x: this.center.x - this.quadrant, y: this.center.y, z: this.center.z - this.quadrant };
+    }
+    
+    findNearestTerrainCenters(position) {
+        const roundedX = Math.round(position.x / this.quadrant) * this.quadrant;
+        const roundedZ = Math.round(position.z / this.quadrant) * this.quadrant;
+        
+        // Calculate distances to the 4 nearest centers
+        const centers = [
+            {x: roundedX, y: 0, z: roundedZ},                           // Center
+            {x: roundedX - this.quadrant * 2, y: 0, z: roundedZ},       // Left
+            {x: roundedX + this.quadrant * 2, y: 0, z: roundedZ},       // Right
+            {x: roundedX, y: 0, z: roundedZ - this.quadrant * 2},       // Top
+            {x: roundedX, y: 0, z: roundedZ + this.quadrant * 2},       // Bottom
+            {x: roundedX - this.quadrant * 2, y: 0, z: roundedZ - this.quadrant * 2}, // Top-Left
+            {x: roundedX + this.quadrant * 2, y: 0, z: roundedZ - this.quadrant * 2}, // Top-Right
+            {x: roundedX - this.quadrant * 2, y: 0, z: roundedZ + this.quadrant * 2}, // Bottom-Left
+            {x: roundedX + this.quadrant * 2, y: 0, z: roundedZ + this.quadrant * 2}  // Bottom-Right
+        ];
+
+        for (var i = 0; i < centers.length; i++) {
+            var pillarGeometry = new THREE.CylinderGeometry(1, 1, 100, 32);
+            var pillarMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            var pillar = new THREE.Mesh(pillarGeometry, pillarMaterial);
+            pillar.position.set(centers[i].x, centers[i].y, centers[i].z);
+            centers[i] = { 
+                center: new THREE.Vector3(centers[i].x, centers[i].y, centers[i].z), 
+                pillar 
+            }
+            scene.add(pillar);
+           
+        }
+
+        this.surroundingCenters = centers;
+        
+        return centers;
+    }
+    
+    getDirectionFromCurrent(current, target) {
+        if (target.x > current.x) return 'right';
+        if (target.x < current.x) return 'left';
+        if (target.z > current.z) return 'top';
+        if (target.z < current.z) return 'bottom';
+        return 'none'; // Should never happen if current !== target
     }
 
     updateVisibleTrianglesAndClusters(sopCenter) {
@@ -1438,16 +1486,6 @@ class Terrain {
             }
         });
 
-        this.groundMeshes.forEach((mesh) => {
-            const meshCenter = this.getTriangleCenter(mesh.triangle);
-            if ((meshCenter.x < sopCenter.x - sopRadius || meshCenter.x > sopCenter.x + sopRadius ||
-                meshCenter.z < sopCenter.z - sopRadius || meshCenter.z > sopCenter.z + sopRadius)) {
-                scene.remove(mesh);
-            } else {
-                scene.add(mesh);
-            }
-        });
-
         // Remove triangles outside the SOP from the scene
         this.trees.forEach((tree) => {
             if (tree.foliage.parent && !isInSOP(tree.foliage.position, sopCenter, VM.map[VM.user.level].sop.trees)) {
@@ -1459,8 +1497,6 @@ class Terrain {
             }
         });
 
-
-        
         // Remove triangles outside the SOP from the scene
         this.grasses.forEach((grass) => {
             var mesh = grass.mesh
@@ -1697,6 +1733,7 @@ class UserController {
         this.rightShift = false;
         this.isJumping = false;
         this.jumpVelocity = 0;
+        this.centerKey = null;
         this.velocity = new THREE.Vector3(); // General velocity
         this.intersectsTerrain = [];
         this.time_held = {
@@ -1927,15 +1964,37 @@ class UserController {
 
         // Raycast to detect if we're hitting the ground
         const raycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
-        this.intersectsTerrain = raycaster.intersectObject(this.terrain.mesh, true);
+        let closestIntersection = null;
+        let minDistance = Infinity;
+        let intersectedTerrainKey = null;
 
-        if (this.intersectsTerrain.length > 0 && this.intersectsTerrain[0].distance < 1) { // Adjust distance as needed
-            const intersection = this.intersectsTerrain[0];
-            this.camera.position.y = intersection.point.y + 1; // Adjust for the height of the triangle surface
-            this.camera.velocity.y = 0; // Reset vertical velocity upon collision
-            this.isJumping = false;  // Ensure jumping is reset when grounded
+        // Check intersections with all terrain meshes
+        for (let mesh of this.terrain.meshes) {
+            const intersects = raycaster.intersectObject(mesh, true);
+            
+            if (intersects.length > 0) {
+                const intersection = intersects[0];
+                if (intersection.distance < minDistance) {
+                    closestIntersection = intersection;
+                    minDistance = intersection.distance;
+                    intersectedTerrainKey = mesh.centerKey;
+                }
+            }
         }
 
+        // Handle the closest intersection, if any
+        if (closestIntersection && minDistance < 1) { // Adjust distance as needed
+            this.camera.position.y = closestIntersection.point.y + 1; // Adjust for the height of the triangle surface
+            this.camera.velocity.y = 0; // Reset vertical velocity upon collision
+            this.isJumping = false;  // Ensure jumping is reset when grounded
+            if (this.centerKey !== intersectedTerrainKey) {
+                let center = intersectedTerrainKey.split("_").map(Number)
+                this.centerKey = intersectedTerrainKey;
+                this.terrain.center = new THREE.Vector3(center[0], 0, center[1]);
+                this.terrain.surroundingCenters = []
+                this.terrain.findNearestTerrainCenters(terrain.center);
+            }
+        }
     }
 
     applyGravity() {
@@ -1952,12 +2011,36 @@ class UserController {
 
             // Check for ground collision using raycasting
             const raycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
-            this.intersectsTerrain = raycaster.intersectObject(this.terrain.mesh, true);
+            let closestIntersection = null;
+            let minDistance = Infinity;
+            let intersectedTerrainKey = null;
 
-            if (this.intersectsTerrain.length > 0 && this.intersectsTerrain[0].distance < 1) { // Adjust distance as needed
-                const intersection = this.intersectsTerrain[0];
-                this.camera.position.y = intersection.point.y + 1; // Adjust for the height of the triangle surface
+            // Check intersections with all terrain meshes
+            for (let mesh of this.terrain.meshes) {
+                const intersects = raycaster.intersectObject(mesh, true);
+                
+                if (intersects.length > 0) {
+                    const intersection = intersects[0];
+                    if (intersection.distance < minDistance) {
+                        closestIntersection = intersection;
+                        minDistance = intersection.distance;
+                        intersectedTerrainKey = mesh.centerKey;
+                    }
+                }
+            }
+
+            // Handle the closest intersection, if any
+            if (closestIntersection && minDistance < 1) { // Adjust distance as needed
+                this.camera.position.y = closestIntersection.point.y + 1; // Adjust for the height of the triangle surface
                 this.camera.velocity.y = 0; // Reset vertical velocity upon collision
+                this.isJumping = false;  // Ensure jumping is reset when grounded
+                if (this.centerKey !== intersectedTerrainKey) {
+                    let center = intersectedTerrainKey.split("_").map(Number)
+                    this.centerKey = intersectedTerrainKey;
+                    this.terrain.center = new THREE.Vector3(center[0], 0, center[1]);
+                    this.terrain.surroundingCenters = []
+                    this.terrain.findNearestTerrainCenters(terrain.center);
+                }
             }
         }
     }
@@ -2008,9 +2091,6 @@ class View {
         window.terrain = new Terrain(VM);
 
 
-
-        alert('3')
-
         window.boundingVolumeHierarchy = new BoundingVolumeHierarchy();
         window.user = new UserController(terrain, boundingVolumeHierarchy);
         window.sky = new Sky(window.user);
@@ -2022,8 +2102,8 @@ class View {
 
 
         boundingVolumeHierarchy.init(window.terrain.grassTriangles);
-        window.user.camera.position.set(...window.terrain.getRandomPositionArray());
-        // window.addUser();
+        
+        this.addUser();
 
 
 
@@ -2033,12 +2113,21 @@ class View {
             window.requestAnimationFrame(Animate);
             window.sky.update();
             window.user.handleMovement();
-            window.terrain.updateTerrain(window.user.camera.position);
+            var newTerrain = window.terrain.updateTerrain(window.user.camera.position);
             window.renderer.render(window.scene, window.user.camera);
-        };
 
+            var terrainMesh = terrain.meshes[terrain.currentMesh];
+            devview.innerHTML = `
+ user position: ${window.user.camera.position.x}, ${window.user.camera.position.y}, ${window.user.camera.position.z}
+ terrain center: ${user.centerKey}
+ surrounding centers: ${
+    terrain.meshes.sort((a, b) => a.centerKey.localeCompare(b.centerKey))
+        .map(mesh => `${mesh.centerKey} - ${mesh.uuid}
+    `).join('\n')
+ }
+`
+        }
 
-        alert('GO')
 
         Animate();
 
@@ -2054,8 +2143,13 @@ class View {
         });
         window.wireframeBox = new THREE.Mesh(boxGeometry, wireframeMaterial);
 
+        window.terrain.findNearestTerrainCenters(terrain.center);
+
         // Add the wireframe to the scene
         window.scene.add(wireframeBox);
+
+        window.user.camera.position.set(0,25,0);
+        
     }
 
 }
@@ -2063,5 +2157,22 @@ class View {
 
 window.VM = new ViewModel();
 window.view = new View();
+
+window.devview = document.getElementById('dev-view');
+
+var style = {
+    position: 'absolute',
+    background: 'rgba(0,0,0,0.5)',
+    color: 'white',
+    top: '0px',
+    left: '0px',
+    width: '10vw',
+    height: '100vh',
+    padding: '0.5px'
+}
+
+for (var key in style) {
+    devview.style[key] = style[key];
+}
 
 await VM.init("Peter", view);
