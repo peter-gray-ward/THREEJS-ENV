@@ -468,7 +468,8 @@ class Terrain {
         const segmentSize = 1 / this.segments;
         this.groundColorMap = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(0));  // Initialize ground color map
 
-        let perlinNoise = this.generateRandomWoodsTerrain();
+        let perlinNoise = this.generateStructuredTerrain();
+        // let woodTerrain = this.generateRandomWoodsTerrain();
 
         // Generate vertices and initial setup
         for (let i = 0; i <= this.segments; i++) {
@@ -483,9 +484,10 @@ class Terrain {
 
                 let noiseX = Math.floor(x * (this.noiseWidth - 1));
                 let noiseY = Math.floor(y * (this.noiseHeight - 1));
-                let height = perlinNoise[noiseY * this.noiseWidth + noiseX] * this.altitudeVariance;
+                let variance = perlinNoise[noiseY * this.noiseWidth + noiseX] * this.altitudeVariance;
+                //let variance = woodTerrain[noiseY * this.noiseWidth + noiseX] * this.altitudeVariance;;
 
-                v.y += height;
+                v.y += variance;
 
                 if ([v.x, v.y, v.z].some(isNaN)) {
                     debugger
@@ -498,9 +500,12 @@ class Terrain {
         
         for (let i = 0; i < this.segments; i++) {
             for (let j = 0; j < this.segments; j++) {
+                var a = i >= randomInRange(0, this.quadrant * 2);
+                var b = i <= randomInRange(0, this.quadrant * 2);
+                const c = j >= randomInRange(0, this.quadrant * 2);
+                const d = j <= randomInRange(10, this.quadrant * 2);
                 // Define the random range for grass patches
-                const isInGrassPatch = (i >= randomInRange(0, this.quadrant * 2) && i <= randomInRange(0, this.quadrant * 2)) &&
-                                       (j >= randomInRange(0, this.quadrant * 2) && j <= randomInRange(10, this.quadrant * 2));
+                const isInGrassPatch = ((a && b) && (c && d)) || Math.random() < 0.1;
 
                 // Store grass patch in grassPatches array
                 if (isInGrassPatch || Math.random() < VM.map[VM.user.level].grassPatchPersistence) {
@@ -551,7 +556,7 @@ class Terrain {
                                                   (i < this.segments && j < this.segments && grassPatches[i + 1][j + 1])  // Check bottom-right diagonal
                         );
 
-                        const isTree = Math.random() < 0.3 && !isNearGrassPatch;
+                        const isTree = eval(this.treeCondition);
                         
                         //
                         // Grasses!
@@ -614,8 +619,12 @@ class Terrain {
                 if (vertexIndex < vertices.length / 3) {  // Ensure vertex index is within bounds
                     if (density > 0) {
                         // More grass means more green intensity
-                        const greenIntensity = Math.min(1, density / 10);  // Scale density for grass intensity
-                        colors.push(randomInRange(0, 0.1), greenIntensity, randomInRange(0, 0.1));  // RGB color with green based on grass density                      
+                        const greenIntensity = Math.min(0.8, Math.pow(density / 10, 0.7));  // Non-linear scaling for green intensity
+                        const red = randomInRange(0, 0.2);  // Slightly larger range for red
+                        const blue = randomInRange(0, 0.2);  // Slightly larger range for blue
+
+                        colors.push(red, greenIntensity, blue);  // Push RGB color with more balanced variation
+
                     } else {
                         // No grass means brown soil
                         colors.push(randomInRange(0.1, 0.3), randomInRange(0.11, 0.15), randomInRange(0, 0.08));  // RGB color for dark brown soil
@@ -1042,7 +1051,116 @@ class Terrain {
             }
         });
     }
+    generateStructuredTerrain() {
+        const width = VM.map[VM.user.level].width;
+        const height = VM.map[VM.user.level].height;
+        const terrain = new Array(width * height);
+        
+        // Step 1: Divide the terrain into regions
+        const regions = this.divideIntoRegions(width, height);
+        
+        // Step 2: Assign base elevations to regions
+        const baseElevations = {
+            'high': 0.7,
+            'medium': 0.5,
+            'low': 0.3
+        };
+        
+        // Step 3: Generate Perlin noise
+        const noise = this.generatePerlinNoise(width, height);
+        
+        // Step 4: Combine regions with Perlin noise
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const i = y * width + x;
+                const region = regions[y][x];
+                const baseElevation = baseElevations[region];
+                const noiseValue = noise[i];
+                
+                // Combine base elevation with noise
+                terrain[i] = baseElevation + noiseValue * 0.2; // Adjust 0.2 to control noise influence
+            }
+        }
+        
+        return terrain;
+    }
     
+    divideIntoRegions(width, height) {
+        const regions = Array(height).fill().map(() => Array(width).fill('medium'));
+        
+        // Simple division into three vertical strips
+        const thirdWidth = Math.floor(width / 3);
+        
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                if (x < thirdWidth) {
+                    regions[y][x] = 'low';
+                } else if (x >= 2 * thirdWidth) {
+                    regions[y][x] = 'high';
+                }
+            }
+        }
+        
+        return regions;
+    }
+    
+    generateValleyTerrain() {
+        const width = VM.map[VM.user.level].width;
+        const height = VM.map[VM.user.level].height;
+        const terrain = new Array(width * height).fill(0);
+        
+        // Step 1: Initialize with random seeds for groves
+        const numSeeds = Math.floor(width * height * 0.005); // 0.5% of the area for fewer, larger groves
+        for (let i = 0; i < numSeeds; i++) {
+            const x = Math.floor(Math.random() * width);
+            const y = Math.floor(Math.random() * height);
+            terrain[y * width + x] = 1;
+        }
+        
+        // Step 2: Grow groves using cellular automata
+        const iterations = 6;
+        for (let iter = 0; iter < iterations; iter++) {
+            const newTerrain = [...terrain];
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const neighbors = this.countNeighbors(terrain, x, y, width, height);
+                    const i = y * width + x;
+                    if (terrain[i] === 0 && neighbors >= 1 && Math.random() < 0.6) {
+                        newTerrain[i] = 1;
+                    }
+                }
+            }
+            terrain.splice(0, terrain.length, ...newTerrain);
+        }
+        
+        // Step 3: Create distance field for smooth transitions
+        const distanceField = this.createDistanceField(terrain, width, height);
+        
+        // Step 4: Generate final terrain values with rolling hills and valley incline
+        const maxDistance = Math.max(...distanceField);
+        return terrain.map((value, i) => {
+            const x = i % width;
+            const y = Math.floor(i / width);
+            const normalizedDistance = distanceField[i] / maxDistance;
+            
+            // Create valley incline using sine waves
+            const valleyIncline = Math.sin(x / width * Math.PI) * Math.sin(y / height * Math.PI);
+            
+            // Use a sine function to create rolling hills
+            const baseElevation = 0.3 + 0.4 * Math.sin(normalizedDistance * Math.PI);
+            
+            // Combine rolling hills with valley incline
+            const combinedElevation = baseElevation + 0.3 * valleyIncline;
+            
+            if (value === 1) {
+                // Grove: Higher elevation with some variation
+                return combinedElevation + 0.2 + Math.random() * 0.1;
+            } else {
+                // Meadow: Lower elevation with gentle slopes
+                return combinedElevation + Math.random() * 0.05;
+            }
+        });
+    }
     countNeighbors(grid, x, y, width, height) {
         let count = 0;
         for (let dy = -1; dy <= 1; dy++) {

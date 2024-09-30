@@ -39,7 +39,8 @@ class Model {
             '#536c46', //
             '#5d6847', //
         ],
-        grassPatchPersistence: 0.03,
+        treeCondition: `Math.random() < 0.35 && !isNearGrassPatch`,
+        grassPatchPersistence: 0.003,
         textures: {
           barks: Array.from({ length: 7 }, (_, i) => `/images/trees/bark/bark-${i + 1}.jpg`),
           branches: Array.from({ length: 4 }, (_, i) => `/images/trees/foliage/branches/tree-branch-${i + 1}.png`),
