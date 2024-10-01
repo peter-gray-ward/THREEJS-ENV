@@ -31,7 +31,7 @@ class Model {
         segments: 25,
         sop: {
             trees: t * 3,
-            grasses: t * .3
+            grasses: t
         },
         Grass: [
             '#33462d', //
@@ -41,8 +41,8 @@ class Model {
             '#536c46', //
             '#5d6847', //
         ],
-        treeCondition: `false && Math.random() < 0.05 && !isNearGrassPatch`,
-        grassPatchPersistence: 0,//0.03,
+        treeCondition: `false && Math.random() < 0.1 && !isNearGrassPatch`,
+        grassPatchPersistence: 0.001,//0.03,
         textures: {
           barks: Array.from({ length: 7 }, (_, i) => `/images/trees/bark/bark-${i + 1}.jpg`),
           branches: Array.from({ length: 4 }, (_, i) => `/images/trees/foliage/branches/tree-branch-${i + 1}.png`),
@@ -83,7 +83,7 @@ function createWindow() {
 
   // Load the main HTML file
   win.loadURL('app://./index.html');
-  
+  win.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {

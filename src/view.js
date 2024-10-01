@@ -17,7 +17,7 @@ const LEVEL = [
 window.sliding = false
 
 
-window.TERMINAL_VELOCITY = -1.1,
+window.TERMINAL_VELOCITY = -1,
 
 window.sunMaxDist = -Infinity;
 window.sunMinDist = Infinity
@@ -41,24 +41,6 @@ function randomInRange(from, to, startDistance = 0) {
    return val;
 }
 
-
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
-
-
-
-
-
-
-
-
-
-// var snapdragon = new THREE.TextureLoader().load("/images/snap-dragon.png")
-// var nasturtiums = new THREE.TextureLoader().load("/images/nasturtiums.jpg")
-
-
-
-// const TERMINAL_VELOCITY = -1.1 // lol
 
 class GrassPatch {
     constructor(initobject) {
@@ -489,7 +471,18 @@ class Terrain {
         const segmentSize = 1 / this.segments;
         this.groundColorMap = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(0));  // Initialize ground color map
 
-        let perlinNoise = this.generatePerlinNoise(centerX, centerZ);
+
+        const neighbors = this.meshes.filter(mesh => this.isNeighbor(mesh.centerKey, centerKey));
+
+        if (neighbors.length > 0) {
+            var generationRootSlices = this.getRootSlices(centerKey, neighbors);
+            for (var obj of generationRootSlices) {
+                this.renderNoiseSlice(obj, this.width, this.height, center); 
+            }
+            
+        }
+        let perlinNoise = this.generatePerlinNoise({ center, centerKey });
+
         // let woodTerrain = this.generateRandomWoodsTerrain();
 
         // Generate vertices and initial setup
@@ -682,6 +675,8 @@ class Terrain {
         mesh.receiveShadow = true;
         this.mesh = mesh;
 
+        this.mesh.noise = perlinNoise;
+
         this.mesh.centerKey = centerKey;
 
         scene.add(mesh);
@@ -692,7 +687,116 @@ class Terrain {
         return this;
     }
 
+    getRootSlices(centerKey, neighbors) {
+        let q = this.quadrant * 2;
+        const slices = [];
+        const [currentX, currentZ] = centerKey.split("_").map(Number);
+    
+        neighbors.forEach(neighbor => {
+            const neighborNoise = neighbor.noise; // Assuming noise is stored in a property
+            const [neighborX, neighborZ] = neighbor.centerKey.split("_").map(Number);
+            const width = q; 
+            const height = q;
+    
+            if (neighborX === currentX && neighborZ === currentZ - q) { // Neighbor is above
+                const slice = [];
+                for (let col = 0; col < width; col++) {
+                    slice.push(neighborNoise[col]); // Top row of neighbor
+                }
+                slices.push({ slice, direction: new THREE.Vector3(0, 0, 1) }); // Direction from neighbor to center
+            } else if (neighborX === currentX && neighborZ === currentZ + q) { // Neighbor is below
+                const slice = [];
+                for (let col = 0; col < width; col++) {
+                    slice.push(neighborNoise[(height - 1) * width + col]); // Bottom row of neighbor
+                }
+                slices.push({ slice, direction: new THREE.Vector3(0, 0, -1) }); // Direction from neighbor to center
+            } else if (neighborX === currentX + q && neighborZ === currentZ) { // Neighbor is to the left
+                const slice = [];
+                for (let row = 0; row < height; row++) {
+                    slice.push(neighborNoise[row * width]); // Left column of neighbor
+                }
+                slices.push({ slice, direction: new THREE.Vector3(1, 0, 0) }); // Direction from neighbor to center
+            } else if (neighborX === currentX - q && neighborZ === currentZ) { // Neighbor is to the right
+                const slice = [];
+                for (let row = 0; row < height; row++) {
+                    slice.push(neighborNoise[row * width + (width - 1)]); // Right column of neighbor
+                }
+                slices.push({ slice, direction: new THREE.Vector3(-1, 0, 0) }); // Direction from neighbor to center
+            }
+        });
+    
+        return slices;
+    }
+ 
 
+    renderNoiseSlice({ slice, direction }, width, height, center) {
+        const segmentSize = 1; // Adjust based on your grid spacing
+        const centerX = center.x;
+        const centerZ = center.z;
+    
+        if (direction.equals(new THREE.Vector3(0, 0, -1))) { // Neighbor is below
+            for (let col = 0; col < width; col++) {
+                const noiseValue = slice[col];
+                const x = (centerX * width + col - this.quadrant) * segmentSize;
+                const y = noiseValue * this.altitudeVariance; // Assuming noiseValue represents height
+                const z = centerZ + this.quadrant; // Top row
+    
+                const sphere = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.1, 32, 32),
+                    new THREE.MeshBasicMaterial({ color: 0xff0000 })
+                );
+                console.log('neighbor below', x, y, z);
+                sphere.position.set(x, y, z);
+                scene.add(sphere);
+            }
+        } else if (direction.equals(new THREE.Vector3(0, 0, 1))) { // Neighbor is above
+            for (let col = 0; col < width; col++) {
+                const noiseValue = slice[col];
+                const x = (centerX * width + col - this.quadrant) * segmentSize;
+                const y = noiseValue * this.altitudeVariance; // Assuming noiseValue represents height
+                const z = centerZ - this.quadrant; // Bottom row
+    
+                const sphere = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.1, 32, 32),
+                    new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+                );
+    
+                console.log('neighbor above', x, y, z);
+                sphere.position.set(x, y, z);
+                scene.add(sphere);
+            }
+        } else if (direction.equals(new THREE.Vector3(1, 0, 0))) { // Neighbor is to the left
+            for (let row = 0; row < height; row++) {
+                const noiseValue = slice[row];
+                const x = (centerX + this.quadrant) * segmentSize;
+                const y = noiseValue * this.altitudeVariance; // Assuming noiseValue represents height
+                const z = (centerZ * height + row - this.quadrant) * segmentSize;
+    
+                const sphere = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.1, 32, 32),
+                    new THREE.MeshBasicMaterial({ color: 0x0000ff })
+                );
+                console.log('neighbor left', x, y, z);
+                sphere.position.set(x, y, z);
+                scene.add(sphere);
+            }
+        } else if (direction.equals(new THREE.Vector3(-1, 0, 0))) { // Neighbor is to the right
+            for (let row = 0; row < height; row++) {
+                const noiseValue = slice[row];
+                const x = (centerX - this.quadrant) * segmentSize;
+                const y = noiseValue * this.altitudeVariance; // Assuming noiseValue represents height
+                const z = (centerZ * height + row - this.quadrant) * segmentSize;
+    
+                const sphere = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.1, 32, 32),
+                    new THREE.MeshBasicMaterial({ color: 0xffff00 })
+                );
+                console.log('neighbor right', x, y, z);
+                sphere.position.set(x, y, z);
+                scene.add(sphere);
+            }
+        }
+    }
     
     determineGrassClusters() {
         const clusters = [];
@@ -856,44 +960,19 @@ class Terrain {
         return perlinNoise;
     }
 
-    generatePerlinNoise(options = {}) {
+    generatePerlinNoiseV1(options = {}) {
         const map = VM.map[VM.user.level];
+
         let octaveCount = options.octaveCount || 4;
         let amplitude = options.amplitude || 0.05;
         let persistence = options.persistence || 0.1;
-        let direction = options.direction || null; // 'right', 'left', 'top', 'bottom'
-        let existingVertices = options.existingVertices || null;
-    
         let width = map.width;
         let height = map.height;
         let offsetX = 0;
         let offsetY = 0;
-    
-        // Adjust dimensions and offsets based on direction
-        if (direction && existingVertices) {
-            switch(direction) {
-                case 'right':
-                    offsetX = width;
-                    existingVertices = existingVertices.slice(-height);
-                    break;
-                case 'left':
-                    width *= 2;
-                    existingVertices = existingVertices.slice(0, height);
-                    break;
-                case 'bottom':
-                    offsetY = height;
-                    existingVertices = existingVertices.slice(-width);
-                    break;
-                case 'top':
-                    height *= 2;
-                    existingVertices = existingVertices.slice(0, width);
-                    break;
-            }
-        }
-    
         let whiteNoise = this.generateWhiteNoise(width, height, offsetX, offsetY);
-    
         let smoothNoiseList = new Array(octaveCount);
+
         for (let i = 0; i < octaveCount; ++i) {
             smoothNoiseList[i] = this.generateSmoothNoise(i, whiteNoise, width, height);
         }
@@ -918,34 +997,48 @@ class Terrain {
             perlinNoise[i] /= totalAmplitude;
         }
     
-        // Blend with existing vertices if provided
-        if (existingVertices && direction) {
-            let blendWidth = Math.min(20, Math.floor(width / 4)); // Adjust blend width as needed
-            for (let i = 0; i < blendWidth; i++) {
-                let blendFactor = i / blendWidth;
-                for (let j = 0; j < (direction === 'left' || direction === 'right' ? height : width); j++) {
-                    let newIndex, oldIndex;
-                    switch(direction) {
-                        case 'right':
-                            newIndex = j * width + i;
-                            oldIndex = j;
-                            break;
-                        case 'left':
-                            newIndex = j * width + (width - 1 - i);
-                            oldIndex = j;
-                            break;
-                        case 'bottom':
-                            newIndex = i * width + j;
-                            oldIndex = j;
-                            break;
-                        case 'top':
-                            newIndex = (height - 1 - i) * width + j;
-                            oldIndex = j;
-                            break;
-                    }
-                    perlinNoise[newIndex] = perlinNoise[newIndex] * blendFactor + existingVertices[oldIndex] * (1 - blendFactor);
-                }
+        return perlinNoise;
+    }
+
+    isNeighbor(centerKey1, centerKey2) {
+        var q = this.quadrant * 2;
+        const [x1, y1] = centerKey1.split("_").map(Number);
+        const [x2, y2] = centerKey2.split("_").map(Number);
+        return Math.abs(x1 - x2) <= q && Math.abs(y1 - y2) <= q;
+    }
+
+    generatePerlinNoise(options) {
+        const map = VM.map[VM.user.level];
+        let octaveCount = options.octaveCount || 4;
+        let amplitude = options.amplitude || 0.05;
+        let persistence = options.persistence || 0.1;
+        let whiteNoise = this.generateWhiteNoise();
+    
+        let smoothNoiseList = new Array(octaveCount);
+        for (let i = 0; i < octaveCount; ++i) {
+            smoothNoiseList[i] = this.generateSmoothNoise(i, whiteNoise);
+        }
+    
+        const width = map.width;
+        const height = map.height;
+        let perlinNoise = new Array(width * height).fill(0); // Initialize with zeros
+        let totalAmplitude = 0;
+    
+
+        // Generate new noise if there are no neighbors
+        for (let i = octaveCount - 1; i >= 0; --i) {
+            amplitude *= persistence;
+            totalAmplitude += amplitude;
+
+            for (let j = 0; j < perlinNoise.length; ++j) {
+                // Generate noise based on the smooth noise list and current amplitude
+                perlinNoise[j] += smoothNoiseList[i][j] * amplitude;
             }
+        }
+
+        // Normalize the perlinNoise values
+        for (let j = 0; j < perlinNoise.length; ++j) {
+            perlinNoise[j] /= totalAmplitude || 1; // Prevent division by zero
         }
     
         return perlinNoise;
@@ -1816,6 +1909,7 @@ class UserController {
             this.camera.position,
             new THREE.Vector3(1, 1, 1) // Adjust size if needed
         );
+        this.camera.rotation.y = Math.PI;
     }
 
     handleMovement() {
@@ -2105,9 +2199,68 @@ class View {
         
         this.addUser();
 
+        function createRandomBezierCurve(heightLimit = 10) {
+            // Calculate the bounding box of all meshes
+            const boundingBox = new THREE.Box3();
+            terrain.meshes.forEach(mesh => boundingBox.expandByObject(mesh));
+        
+            // Get the bounds of the bounding box
+            const min = boundingBox.min;
+            const max = boundingBox.max;
+        
+            // Function to generate a random point within the bounding box and height limit
+            function randomPoint() {
+                return new THREE.Vector3(
+                    THREE.MathUtils.randFloat(min.x, max.x),
+                    THREE.MathUtils.randFloat(min.y, max.y + heightLimit),
+                    THREE.MathUtils.randFloat(min.z, max.z)
+                );
+            }
+        
+            // Create control points for the Bezier curve
+            const p0 = randomPoint();
+            const p1 = randomPoint();
+            const p2 = randomPoint();
+            const p3 = randomPoint();
+        
+            return new THREE.CubicBezierCurve3(p0, p1, p2, p3);
+        }
+
+        // Function to create a point light with a helper
+        function createPointLight(color, intensity, distance) {
+            const pointLight = new THREE.PointLight(color, intensity, distance);
+            const pointLightHelper = new THREE.PointLightHelper(pointLight);
+            return { pointLight, pointLightHelper };
+        }
+
+        function movePointLights(pointLights, curves, time) {
+            pointLights.forEach((light, index) => {
+                const t = (time % 1) * 0.1; // Slow down the movement
+                const position = curves[index].getPoint(t);
+                light.pointLight.position.copy(position);
+            });
+        }
+
+        // Create point lights
+        const pointLights = [
+            createPointLight(0xffffff, 1, 100),
+            createPointLight(0xffffff, 1, 100)
+        ];
+
+        // Add point lights and helpers to the scene
+        pointLights.forEach(({ pointLight, pointLightHelper }) => {
+            scene.add(pointLight);
+            scene.add(pointLightHelper);
+        });
+
+        // Create random Bezier curves for the point lights
+        const curves = [
+            createRandomBezierCurve(50),
+            createRandomBezierCurve(50)
+        ];
 
 
-
+        let time = 0;
         // // [Timeline("Start")]
         window.Animate = function() {
             window.requestAnimationFrame(Animate);
@@ -2116,7 +2269,11 @@ class View {
             var newTerrain = window.terrain.updateTerrain(window.user.camera.position);
             window.renderer.render(window.scene, window.user.camera);
 
-            var terrainMesh = terrain.meshes[terrain.currentMesh];
+            // todo - add faeries like those from The Faerie Queene by Edmund Spenser
+            // simulating an infinite mythical environment
+            // movePointLights(pointLights, curves, time);
+            // time += 0.01; // Increment time to move the lights
+
             devview.innerHTML = `
  user position: ${window.user.camera.position.x}, ${window.user.camera.position.y}, ${window.user.camera.position.z}
  terrain center: ${user.centerKey}
