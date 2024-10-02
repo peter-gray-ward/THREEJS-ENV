@@ -687,6 +687,35 @@ class Terrain {
         return this;
     }
 
+    updateTerrain() {
+        for (var center of this.surroundingCenters) {
+            var centerKey = `${center.center.x}_${center.center.z}`;
+            if (center.center.distanceTo(user.camera.position) < 75) {
+                center.pillar.material.color.set(0xff0000);
+                var terrainCreated = false;
+                for (var j = 0; j < this.meshes.length; j++) {
+                    if (this.meshes[j].centerKey == centerKey) {
+                        terrainCreated = true;
+                    }
+                }
+                if (!terrainCreated) {
+                    this.generate(center.center.x, center.center.y, center.center.z);
+                }
+            } else {
+                center.pillar.material.color.set(0xffffff);
+            }
+        }
+        
+        this.updateVisibleTrianglesAndClusters(window.user.camera.position);
+    
+        // Update the terrain vertices
+        this.v0 = { x: this.center.x - this.quadrant, y: this.center.y, z: this.center.z + this.quadrant };
+        this.v1 = { x: this.center.x + this.quadrant, y: this.center.y, z: this.center.z + this.quadrant };
+        this.v2 = { x: this.center.x + this.quadrant, y: this.center.y, z: this.center.z - this.quadrant };
+        this.v3 = { x: this.center.x - this.quadrant, y: this.center.y, z: this.center.z - this.quadrant };
+    }
+    
+
     getRootSlices(centerKey, neighbors) {
         let q = this.quadrant * 2;
         const slices = [];
@@ -1471,37 +1500,7 @@ class Terrain {
         return [u, v, w];  // Return the barycentric weights for the three vertices
     }
   
-    updateTerrain() {
-        const sopCenter = { x: window.user.camera.position.x, y: window.user.camera.position.y, z: window.user.camera.position.z };
-    
-        
-        for (var center of this.surroundingCenters) {
-            var centerKey = `${center.center.x}_${center.center.z}`;
-            if (center.center.distanceTo(user.camera.position) < 75) {
-                center.pillar.material.color.set(0xff0000);
-                var terrainCreated = false;
-                for (var j = 0; j < this.meshes.length; j++) {
-                    if (this.meshes[j].centerKey == centerKey) {
-                        terrainCreated = true;
-                    }
-                }
-                if (!terrainCreated) {
-                    this.generate(center.center.x, center.center.y, center.center.z);
-                }
-            } else {
-                center.pillar.material.color.set(0xffffff);
-            }
-        }
-        
-        this.updateVisibleTrianglesAndClusters(sopCenter);
-    
-        // Update the terrain vertices
-        this.v0 = { x: this.center.x - this.quadrant, y: this.center.y, z: this.center.z + this.quadrant };
-        this.v1 = { x: this.center.x + this.quadrant, y: this.center.y, z: this.center.z + this.quadrant };
-        this.v2 = { x: this.center.x + this.quadrant, y: this.center.y, z: this.center.z - this.quadrant };
-        this.v3 = { x: this.center.x - this.quadrant, y: this.center.y, z: this.center.z - this.quadrant };
-    }
-    
+
     findNearestTerrainCenters(position) {
         const roundedX = Math.round(position.x / this.quadrant) * this.quadrant;
         const roundedZ = Math.round(position.z / this.quadrant) * this.quadrant;
@@ -2259,8 +2258,11 @@ class View {
             createRandomBezierCurve(50)
         ];
 
-
+        var mapQuadrant = +getComputedStyle(devview.children[0]).width.split('px')[0];
+        var centerTile = devview.children[12];
+        var mapCenter = (+getComputedStyle(centerTile).height.split('px')[0] / 2) + centerTile.offsetTop;
         let time = 0;
+
         // // [Timeline("Start")]
         window.Animate = function() {
             window.requestAnimationFrame(Animate);
@@ -2274,15 +2276,34 @@ class View {
             // movePointLights(pointLights, curves, time);
             // time += 0.01; // Increment time to move the lights
 
-            devview.innerHTML = `
- user position: ${window.user.camera.position.x}, ${window.user.camera.position.y}, ${window.user.camera.position.z}
- terrain center: ${user.centerKey}
- surrounding centers: ${
-    terrain.meshes.sort((a, b) => a.centerKey.localeCompare(b.centerKey))
-        .map(mesh => `${mesh.centerKey} - ${mesh.uuid}
-    `).join('\n')
- }
-`
+           
+            
+            // Calculate user position on the 5x5 grid
+            let userPosition = window.user.camera.position;
+            let posIncX = userPosition.x / terrain.quadrant / 2;
+            let posIncZ = userPosition.z / terrain.quadrant / 2;
+
+            if (Number.isNaN(posIncX)) {
+                posIncX = 0;
+            }
+            if (Number.isNaN(posIncZ)) {
+                posIncZ = 0;
+            }
+
+            // Calculate the pixel position relative to the center of the grid
+            var pointerX = -posIncX * mapQuadrant + mapCenter;
+            var pointerY = -posIncZ * mapQuadrant + mapCenter;
+
+            // Position the pointer
+            pointer.style.left = `${pointerX}px`;
+            pointer.style.top = `${pointerY}px`;
+
+            // Debugging
+            console.log('User position:', userPosition);
+            console.log('Pointer position:', { pointerX, pointerY });
+
+            
+
         }
 
 
@@ -2315,21 +2336,6 @@ class View {
 window.VM = new ViewModel();
 window.view = new View();
 
-window.devview = document.getElementById('dev-view');
-
-var style = {
-    position: 'absolute',
-    background: 'rgba(0,0,0,0.5)',
-    color: 'white',
-    top: '0px',
-    left: '0px',
-    width: '10vw',
-    height: '100vh',
-    padding: '0.5px'
-}
-
-for (var key in style) {
-    devview.style[key] = style[key];
-}
+window.devview = document.getElementById('map');
 
 await VM.init("Peter", view);

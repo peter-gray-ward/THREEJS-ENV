@@ -21,10 +21,71 @@
 			overflow: hidden;
 		}
 
+		#map {
+			position: absolute;
+			left: 5px;
+			top: 5px;
+			width: 15vw;
+			height: 15vw;
+			display: flex;
+			flex-wrap: wrap;
+			box-sizing: border-box;
+		}
+
+		.quadrant {
+			width: calc(15vw / 5);
+			height: calc(15vw / 5);
+			border: 1px dotted white;
+			box-sizing: border-box;
+			display: flex;
+			font-size: 1rem;
+			align-items: center;
+			justify-content: center;
+			color: white;
+		}
+
+		#pointer {
+			color: white;
+			text-decoration: none;
+			font-style: none;
+			position: absolute;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+
+
 		</style>
 </head>
 <body>
-	<pre id="dev-view"></pre>
+	<i id="pointer">•</i>
+	<div id="map">
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+		<div class="quadrant"></div>
+	</div>
 	<script src="/src/view.js" type="module"></script>
 </body>
 </html>
