@@ -38,10 +38,19 @@
 			border: 1px dotted white;
 			box-sizing: border-box;
 			display: flex;
-			font-size: 1rem;
+			font-size: 0.4rem;
 			align-items: center;
 			justify-content: center;
 			color: white;
+			opacity: 0.8;
+		}
+
+		.quadrant.built {
+			background: teal;
+		}
+
+		.quadrant.on {
+			border: 2px dotted red;
 		}
 
 		#pointer {
@@ -50,6 +59,7 @@
 			font-style: none;
 			position: absolute;
 			display: flex;
+			font-size: 1rem;
 			align-items: center;
 			justify-content: center;
 		}
@@ -60,31 +70,7 @@
 <body>
 	<i id="pointer">•</i>
 	<div id="map">
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
-		<div class="quadrant"></div>
+		
 	</div>
 	<script src="/src/view.js" type="module"></script>
 </body>

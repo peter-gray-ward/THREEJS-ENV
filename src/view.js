@@ -1037,40 +1037,80 @@ class Terrain {
     }
 
     generatePerlinNoise(options) {
+        // Get the map for the user's level from the VM (some kind of virtual machine or game state)
         const map = VM.map[VM.user.level];
-        let octaveCount = options.octaveCount || 4;
+
+        // Define the number of octaves, which is basically how many layers of detail we'll add to the noise.
+        // Each octave adds more fine detail to the noise, like going from big waves to little ripples.
+        // If no value is passed in, it defaults to 4.
+        let octaveCount = options.octaveCount || 5;
+
+        // Define the initial amplitude. This controls how strong each layer (octave) of noise is.
+        // The higher the amplitude, the more pronounced that layer will be.
         let amplitude = options.amplitude || 0.05;
+
+        // Define persistence. This tells us how much the amplitude should decrease with each octave.
+        // So each layer (octave) will have less and less influence as we add finer details.
         let persistence = options.persistence || 0.1;
+
+        // Generate a "white noise" array. White noise is random, and it will be the base for all the smooth noise we generate later.
+        // Think of it as the starting randomness, like rolling a dice for each pixel in the map.
         let whiteNoise = this.generateWhiteNoise();
-    
+
+        // Create an empty array to store the "smooth noise" layers.
+        // We'll generate `octaveCount` smooth noise layers, which get finer and finer as the octaves go up.
         let smoothNoiseList = new Array(octaveCount);
+
+        // Loop through each octave (from 0 to octaveCount-1) to generate and store smooth noise.
         for (let i = 0; i < octaveCount; ++i) {
+            // Generate a smooth version of the white noise for this octave and store it.
+            // Smooth noise is like white noise, but with gentler, less sharp changes between points.
             smoothNoiseList[i] = this.generateSmoothNoise(i, whiteNoise);
         }
-    
+
+        // Get the width and height of the map.
+        // This is important because we need to generate noise that fits exactly into this map size.
         const width = map.width;
         const height = map.height;
-        let perlinNoise = new Array(width * height).fill(0); // Initialize with zeros
-        let totalAmplitude = 0;
-    
 
-        // Generate new noise if there are no neighbors
+        // Create an array to hold the final Perlin noise for the entire map.
+        // We initialize it with zeros. We'll add noise from all octaves to this array.
+        let perlinNoise = new Array(width * height).fill(0); // Initialize with zeros
+
+        // This will track the total amplitude we've added across all octaves.
+        // We'll use this later to normalize the noise so it's not too strong.
+        let totalAmplitude = 0;
+
+        // Now we loop through each octave in reverse order (from high to low detail).
         for (let i = octaveCount - 1; i >= 0; --i) {
+            // Reduce the amplitude for this octave by multiplying by persistence.
+            // This makes each finer octave contribute less to the final noise.
             amplitude *= persistence;
+
+            // Add this octave's amplitude to the totalAmplitude, so we can normalize it later.
             totalAmplitude += amplitude;
 
+            // Now we add this octave's smooth noise to the Perlin noise.
+            // For every point in the map (represented by perlinNoise[j]), we add smooth noise from this octave.
             for (let j = 0; j < perlinNoise.length; ++j) {
-                // Generate noise based on the smooth noise list and current amplitude
+                // Multiply the smooth noise value by the amplitude and add it to the Perlin noise array.
+                // This makes higher octaves (bigger details) have more influence, and lower octaves (finer details) have less.
                 perlinNoise[j] += smoothNoiseList[i][j] * amplitude;
             }
         }
 
-        // Normalize the perlinNoise values
+        // After combining all the octaves, the noise values may be too large or small.
+        // So, we normalize the Perlin noise by dividing by the totalAmplitude.
+        // This ensures the noise stays within a reasonable range (like between 0 and 1).
         for (let j = 0; j < perlinNoise.length; ++j) {
+            // Divide each point in the Perlin noise by the total amplitude, so that everything sums up nicely.
+            // We also make sure we don't divide by zero, by falling back to 1 if totalAmplitude is 0 (which is unlikely).
             perlinNoise[j] /= totalAmplitude || 1; // Prevent division by zero
         }
-    
+
+        // Finally, we return the Perlin noise, which can be used to generate terrain, textures, or other visual patterns.
         return perlinNoise;
+
     }
 
     generateWhiteNoise() {
@@ -1304,6 +1344,7 @@ class Terrain {
             }
         });
     }
+
     countNeighbors(grid, x, y, width, height) {
         let count = 0;
         for (let dy = -1; dy <= 1; dy++) {
@@ -1355,9 +1396,6 @@ class Terrain {
         
         return distanceField;
     }
-
-
-
 
     interpolate(x0, x1, alpha) {
         return x0 * (1 - alpha) + alpha * x1;
@@ -1498,8 +1536,7 @@ class Terrain {
         const u = 1.0 - v - w;
 
         return [u, v, w];  // Return the barycentric weights for the three vertices
-    }
-  
+    }  
 
     findNearestTerrainCenters(position) {
         const roundedX = Math.round(position.x / this.quadrant) * this.quadrant;
@@ -1717,8 +1754,6 @@ class Terrain {
         return new Terrain.Tree(tubeMesh, sphere);
     }
 
-
-
     createGrassBlade(instancedMesh, triangle, bladePositions, i) {
 
         const dummy = new THREE.Object3D();
@@ -1770,8 +1805,6 @@ class Terrain {
             bladePositions: bladePositions 
         });
     }
-
-   
 
     createGrassPatch(indices, vertices, mesh) {
         const grassResult = this.createGrassResult(
@@ -1908,7 +1941,6 @@ class UserController {
             this.camera.position,
             new THREE.Vector3(1, 1, 1) // Adjust size if needed
         );
-        this.camera.rotation.y = Math.PI;
     }
 
     handleMovement() {
@@ -2191,6 +2223,53 @@ class View {
         window.terrain.setCamera(window.user.camera);
 
     
+        // Set up the axis object to define colors for positive and negative directions
+        var axis = {
+            x: {
+                neg: 'blue',  // Negative X direction (left)
+                pos: 'red'    // Positive X direction (right)
+            },
+            z: {
+                neg: 'green',  // Negative Z direction (backward)
+                pos: 'yellow'  // Positive Z direction (forward)
+            }
+        };
+
+        var clinderLength = 200;
+
+        // Loop through each axis (x and z) and each polarity (positive and negative)
+        for (var xyz in axis) {
+            for (var polarity in axis[xyz]) {
+                // Create the cylinder geometry for each axis and polarity
+                var cylinderHelperGeometry = new THREE.CylinderGeometry(0.15, 0.5, clinderLength, 32); // Radius 0.5, length 20 (horizontal)
+
+                // Create the material with the appropriate color
+                var cylinderMaterial = new THREE.MeshBasicMaterial({ color: axis[xyz][polarity] });
+
+                // Create the cylinder mesh
+                var cylinder = new THREE.Mesh(cylinderHelperGeometry, cylinderMaterial);
+
+                // Position the cylinder based on the axis and polarity
+                if (xyz === 'x') {
+                    // For the X-axis, move the cylinder along the X-axis and rotate it to be horizontal
+                    cylinder.position.x = polarity === 'pos' ? clinderLength / 2 : -clinderLength / 2; // Positive or negative X
+                    cylinder.position.z = 0; // Keep it centered on the Z-axis
+                    cylinder.rotation.z = Math.PI / 2; // Rotate to lie horizontally along X
+                } else if (xyz === 'z') {
+                    // For the Z-axis, move the cylinder along the Z-axis and rotate it to be horizontal
+                    cylinder.position.z = polarity === 'pos' ? clinderLength / 2 : -clinderLength / 2; // Positive or negative Z
+                    cylinder.position.x = 0; // Keep it centered on the X-axis
+                    cylinder.rotation.x = Math.PI / 2; // Rotate to lie horizontally along Z
+                }
+
+                // Set the Y-position to an appropriate height (like a grid on the roof)
+                cylinder.position.y = 15;
+
+                // Add the cylinder to the scene
+                scene.add(cylinder);
+            }
+        }
+
 
 
 
@@ -2291,18 +2370,23 @@ class View {
             }
 
             // Calculate the pixel position relative to the center of the grid
-            var pointerX = -posIncX * mapQuadrant + mapCenter;
-            var pointerY = -posIncZ * mapQuadrant + mapCenter;
+            var pointerX = posIncX * mapQuadrant + mapCenter;
+            var pointerY = posIncZ * mapQuadrant + mapCenter;
 
             // Position the pointer
             pointer.style.left = `${pointerX}px`;
             pointer.style.top = `${pointerY}px`;
 
             // Debugging
-            console.log('User position:', userPosition);
-            console.log('Pointer position:', { pointerX, pointerY });
 
-            
+            var centerKey = `${Math.round(userPosition.x / 100) * 100}_${Math.round(userPosition.z / 100) * 100}`;
+            document.querySelectorAll('.quadrant').forEach(q => {
+                for (var i = 0; i < terrain.meshes.length; i++) {
+                    document.getElementById(terrain.meshes[i].centerKey).classList.add('built');
+                }
+                q.classList.remove("on")
+            });
+            document.getElementById(centerKey).classList.add('on');
 
         }
 
@@ -2331,6 +2415,15 @@ class View {
     }
 
 }
+
+
+document.getElementById('map').innerHTML = new Array(25).fill(``).map((html, index) => {
+    const x = ((index % 5) - 2) * 100; // -2, -1, 0, 1, 2 based on column
+    const z = (Math.floor(index / 5) - 2) * 100; // -2, -1, 0, 1, 2 based on row
+
+    // Return the HTML for each div, including the id in the format x_z
+    return `<div class="quadrant" id="${x}_${z}">${x}_${z}</div>`;
+}).join('');
 
 
 window.VM = new ViewModel();
