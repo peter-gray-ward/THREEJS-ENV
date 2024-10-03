@@ -17,7 +17,7 @@ class User {
   }
 }
 
-let t = 50
+let t = 64
 
 class Model {
   constructor(user) {
@@ -28,11 +28,13 @@ class Model {
         quadrant: t, 
         noiseWidth: t * 2, 
         noiseHeight: t,
-        segments: 25,
+        segments: 32,
         sop: {
             trees: t * 3,
-            grasses: t
+            grasses: t * .8
         },
+        grasses: [],
+        trees: [],
         Grass: [
             '#33462d', //
             '#435c3a', //
@@ -41,8 +43,8 @@ class Model {
             '#536c46', //
             '#5d6847', //
         ],
-        treeCondition: `false && Math.random() < 0.1 && !isNearGrassPatch`,
-        grassPatchPersistence: 0.001,//0.03,
+        treeCondition: `true && (Math.random() < 0.031 || (Math.random() < 0.3 && !isNearGrassPatch))`,
+        grassPatchPersistence: 0.01,//0.03,
         textures: {
           barks: Array.from({ length: 7 }, (_, i) => `/images/trees/bark/bark-${i + 1}.jpg`),
           branches: Array.from({ length: 4 }, (_, i) => `/images/trees/foliage/branches/tree-branch-${i + 1}.png`),

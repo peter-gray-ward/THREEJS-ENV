@@ -440,6 +440,7 @@ class Terrain {
 
     generate(centerX = 0, centerY = 0, centerZ = 0) {
         const centerKey = `${centerX}_${centerZ}`;
+        this.terrainType = ['sparse', 'dense', 'half'][Math.floor(Math.random() * 3)];
         for (var i = 0; i < this.meshes.length; i++) {
             if (this.meshes[i].centerKey == centerKey) {
                 debugger
@@ -450,8 +451,6 @@ class Terrain {
         this.grounds = [];
         this.grassTriangles = [];
         this.cliffMeshes = [];
-        this.trees = [];
-        this.grasses = [];
 
         let t = VM.map[VM.user.level].quadrant;
         let center = { x: centerX, y: centerY, z: centerZ }
@@ -513,29 +512,45 @@ class Terrain {
 
         var grassPatches = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(false));  // Initialize an array to track grass patches
         
-        for (let i = 0; i < this.segments; i++) {
-            for (let j = 0; j < this.segments; j++) {
-                var a = i >= randomInRange(0, this.quadrant * 2);
-                var b = i <= randomInRange(0, this.quadrant * 2);
-                const c = j >= randomInRange(0, this.quadrant * 2);
-                const d = j <= randomInRange(10, this.quadrant * 2);
-                // Define the random range for grass patches
-                const isInGrassPatch = ((a && b) && (c && d));
-
-                // Store grass patch in grassPatches array
-                if (isInGrassPatch || Math.random() < VM.map[VM.user.level].grassPatchPersistence) {
-                    grassPatches[i][j] = true;  // Mark this cell as part of a grass patch
+        
+        switch (this.terrainType) {
+            case 'dense':
+                for (let i = 0; i < this.segments; i++) {
+                    for (let j = 0; j < this.segments; j++) {
+                        for (var k = 0; k < 3; k++) {
+                            grassPatches[i][j] = Math.random() < 0.2;
+                        }
+                    }
                 }
-            }
+                break;
+            case 'sparse':
+                for (let i = 0; i < this.segments; i++) {
+                    for (let j = 0; j < this.segments; j++) {
+                        for (var k = 0; k < 3; k++) {
+                            grassPatches[i][j] = Math.random() < 0.009;
+                        }
+                    }
+                }
+                break;
+            case 'half':
+                for (let i = 0; i < this.segments; i++) {
+                    for (let j = 0; j < this.segments; j++) {
+                        for (var k = 0; k < 3; k++) {
+                            grassPatches[i][j] = Math.random() < 0.05;
+                        }
+                    }
+                }
+                break;
+                        
         }
+        
 
         var start_i = 1.0;
-        var start_j = 1.0;
-        let grassTriangleMap = new Map();
         // Process triangles and apply grass in defined ranges
         for (let i = 0; i < this.segments; i++) {
             if (new Number(i / this.segments).toFixed(1) != start_i) {
                 start_i = new Number((i + 1) / this.segments).toFixed(2);
+                console.log(start_i)
             }
             for (let j = 0; j < this.segments; j++) {
                 let a = i + j * (this.segments + 1);
@@ -582,7 +597,7 @@ class Terrain {
 
                             const grassResult = this.createGrassPatch(indices, vertices, triangle);
 
-                            this.grasses.push(grassResult);
+                            VM.map[VM.user.level].grasses.push(grassResult);
 
                         }
                         //
@@ -591,7 +606,7 @@ class Terrain {
 
                         if (isTree) {
                             var tree = this.createTree(triangle.triangle.a.x, triangle.triangle.a.y, triangle.triangle.a.z, 1);
-                            this.trees.push(tree);
+                            VM.map[VM.user.level].trees.push(tree);
                         }
 
                         //
@@ -614,8 +629,6 @@ class Terrain {
         // Now, let's apply the grass density in groundColorMap to color the vertices
         const colors = [];
         const gridSize = this.groundColorMap.length;  // Assuming groundColorMap is a 2D array of the grid size
-        const boundaryMarkers = [];
-        var blades = [];
 
         for (let i = 0; i < gridSize; i++) {
             for (let j = 0; j < gridSize; j++) {
@@ -1556,7 +1569,7 @@ class Terrain {
         ];
 
         for (var i = 0; i < centers.length; i++) {
-            var pillarGeometry = new THREE.CylinderGeometry(1, 1, 100, 32);
+            var pillarGeometry = new THREE.CylinderGeometry(1, 1, 32, 32);
             var pillarMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
             var pillar = new THREE.Mesh(pillarGeometry, pillarMaterial);
             pillar.position.set(centers[i].x, centers[i].y, centers[i].z);
@@ -1616,7 +1629,7 @@ class Terrain {
         });
 
         // Remove triangles outside the SOP from the scene
-        this.trees.forEach((tree) => {
+        VM.map[VM.user.level].trees.forEach((tree) => {
             if (tree.foliage.parent && !isInSOP(tree.foliage.position, sopCenter, VM.map[VM.user.level].sop.trees)) {
                 scene.remove(tree.trunk);
                 scene.remove(tree.foliage);
@@ -1627,7 +1640,7 @@ class Terrain {
         });
 
         // Remove triangles outside the SOP from the scene
-        this.grasses.forEach((grass) => {
+        VM.map[VM.user.level].grasses.forEach((grass) => {
             var mesh = grass.mesh
             var pos = getInstancePosition(mesh, 0);
 
@@ -1843,10 +1856,10 @@ class UserController {
         this.a = false;
         this.s = false;
         this.d = false;
-        this.wS = .3
-        this.aS = .3
-        this.sS = .3
-        this.dS = .3
+        this.wS = .2
+        this.aS = .2
+        this.sS = .2
+        this.dS = .2
         this.tS = .1
         this.shift = false
         this.space = false;
@@ -2235,13 +2248,13 @@ class View {
             }
         };
 
-        var clinderLength = 200;
+        var cylinderLength = VM.map[VM.user.level].quadrant * 2;
 
         // Loop through each axis (x and z) and each polarity (positive and negative)
         for (var xyz in axis) {
             for (var polarity in axis[xyz]) {
                 // Create the cylinder geometry for each axis and polarity
-                var cylinderHelperGeometry = new THREE.CylinderGeometry(0.15, 0.5, clinderLength, 32); // Radius 0.5, length 20 (horizontal)
+                var cylinderHelperGeometry = new THREE.CylinderGeometry(0.15, 0.5, cylinderLength, 32); // Radius 0.5, length 20 (horizontal)
 
                 // Create the material with the appropriate color
                 var cylinderMaterial = new THREE.MeshBasicMaterial({ color: axis[xyz][polarity] });
@@ -2252,12 +2265,12 @@ class View {
                 // Position the cylinder based on the axis and polarity
                 if (xyz === 'x') {
                     // For the X-axis, move the cylinder along the X-axis and rotate it to be horizontal
-                    cylinder.position.x = polarity === 'pos' ? clinderLength / 2 : -clinderLength / 2; // Positive or negative X
+                    cylinder.position.x = polarity === 'pos' ? cylinderLength / 2 : -cylinderLength / 2; // Positive or negative X
                     cylinder.position.z = 0; // Keep it centered on the Z-axis
                     cylinder.rotation.z = Math.PI / 2; // Rotate to lie horizontally along X
                 } else if (xyz === 'z') {
                     // For the Z-axis, move the cylinder along the Z-axis and rotate it to be horizontal
-                    cylinder.position.z = polarity === 'pos' ? clinderLength / 2 : -clinderLength / 2; // Positive or negative Z
+                    cylinder.position.z = polarity === 'pos' ? cylinderLength / 2 : -cylinderLength / 2; // Positive or negative Z
                     cylinder.position.x = 0; // Keep it centered on the X-axis
                     cylinder.rotation.x = Math.PI / 2; // Rotate to lie horizontally along Z
                 }
@@ -2379,7 +2392,7 @@ class View {
 
             // Debugging
 
-            var centerKey = `${Math.round(userPosition.x / 100) * 100}_${Math.round(userPosition.z / 100) * 100}`;
+            var centerKey = `${Math.round(userPosition.x / 128) * 128}_${Math.round(userPosition.z / 128) * 128}`;
             document.querySelectorAll('.quadrant').forEach(q => {
                 for (var i = 0; i < terrain.meshes.length; i++) {
                     document.getElementById(terrain.meshes[i].centerKey).classList.add('built');
@@ -2418,8 +2431,8 @@ class View {
 
 
 document.getElementById('map').innerHTML = new Array(25).fill(``).map((html, index) => {
-    const x = ((index % 5) - 2) * 100; // -2, -1, 0, 1, 2 based on column
-    const z = (Math.floor(index / 5) - 2) * 100; // -2, -1, 0, 1, 2 based on row
+    const x = ((index % 5) - 2) * 128; // -2, -1, 0, 1, 2 based on column
+    const z = (Math.floor(index / 5) - 2) * 128; // -2, -1, 0, 1, 2 based on row
 
     // Return the HTML for each div, including the id in the format x_z
     return `<div class="quadrant" id="${x}_${z}">${x}_${z}</div>`;
