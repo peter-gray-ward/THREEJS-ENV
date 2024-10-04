@@ -513,13 +513,17 @@ class Terrain {
         for (var m of this.meshes) {
             for (var x1 = 0; x1 < m.geometry.attributes.position.array.length; x1 += 3) { 
                 for (var x2 = 0; x2 < vertices.length; x2 += 3) {
-                    if (m.geometry.attributes.position.array[x1] == vertices[x2]
-                        && m.geometry.attributes.position.array[x1 + 2] == vertices[x2 + 2]) {
+                    var sameX = m.geometry.attributes.position.array[x1] == vertices[x2];
+                    var sameZ = m.geometry.attributes.position.array[x1 + 2] == vertices[x2 + 2];
+                    var differentY = m.geometry.attributes.position.array[x1 + 1] == vertices[x2 + 1]
+
+                    if (sameX && sameZ && differentY) {
                         vertices[x2 + 1] = m.geometry.attributes.position.array[x1 + 1];
-                    } else if (m.geometry.attributes.position.array[x1] == vertices[x2]
-                        && Math.abs(m.geometry.attributes.position.array[x1 + 2] - vertices[x2 + 2]) < 2) {
+
+                    } 
+                    else if (sameX && Math.abs(m.geometry.attributes.position.array[x1 + 2] - vertices[x2 + 2]) < 2) {
                         vertices[x2 + 1] = m.geometry.attributes.position.array[x1 + 1];
-                    } else if (Math.abs(m.geometry.attributes.position.array[x1 + 2] - vertices[x2 + 2]) < 2) {
+                    } else if (sameZ && Math.abs(m.geometry.attributes.position.array[x1] - vertices[x2]) < 2) {
                         vertices[x2 + 1] = m.geometry.attributes.position.array[x1 + 1];
                     }
                 }
@@ -592,7 +596,7 @@ class Terrain {
                         const isCliff = slope > 0.5 || slope < -0.5;
 
                         //  // Check if VM triangle is either in a grass patch or adjacent to one
-                        const isNearGrassPatch = (grassPatches[i][j] || 
+                        const isNearGrassPatch = false/*(grassPatches[i][j] || 
                                                   (i > 0 && grassPatches[i - 1][j]) ||  // Check left
                                                   (i < this.segments && grassPatches[i + 1][j]) ||  // Check right
                                                   (j > 0 && grassPatches[i][j - 1]) ||  // Check above
@@ -601,7 +605,7 @@ class Terrain {
                                                   (i < this.segments && j > 0 && grassPatches[i + 1][j - 1]) ||  // Check top-right diagonal
                                                   (i > 0 && j < this.segments && grassPatches[i - 1][j + 1]) ||  // Check bottom-left diagonal
                                                   (i < this.segments && j < this.segments && grassPatches[i + 1][j + 1])  // Check bottom-right diagonal
-                        );
+                        );*/
 
                         const isTree = eval(this.treeCondition);
                         
