@@ -510,6 +510,23 @@ class Terrain {
         }
 
 
+        for (var m of this.meshes) {
+            for (var x1 = 0; x1 < m.geometry.attributes.position.array.length; x1 += 3) { 
+                for (var x2 = 0; x2 < vertices.length; x2 += 3) {
+                    if (m.geometry.attributes.position.array[x1] == vertices[x2]
+                        && m.geometry.attributes.position.array[x1 + 2] == vertices[x2 + 2]) {
+                        vertices[x2 + 1] = m.geometry.attributes.position.array[x1 + 1];
+                    } else if (m.geometry.attributes.position.array[x1] == vertices[x2]
+                        && Math.abs(m.geometry.attributes.position.array[x1 + 2] - vertices[x2 + 2]) < 2) {
+                        vertices[x2 + 1] = m.geometry.attributes.position.array[x1 + 1];
+                    } else if (Math.abs(m.geometry.attributes.position.array[x1 + 2] - vertices[x2 + 2]) < 2) {
+                        vertices[x2 + 1] = m.geometry.attributes.position.array[x1 + 1];
+                    }
+                }
+            }
+        }
+
+
         var grassPatches = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(false));  // Initialize an array to track grass patches
         
         
@@ -696,6 +713,9 @@ class Terrain {
 
        
         this.meshes.push(this.mesh);
+
+
+
 
         return this;
     }
