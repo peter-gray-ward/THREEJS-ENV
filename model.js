@@ -43,7 +43,7 @@ class Model {
             '#536c46', //
             '#5d6847', //
         ],
-        treeCondition: `true && (Math.random() < 0.031 || (Math.random() < 0.3 && !isNearGrassPatch))`,
+        treeCondition: `!inCastle && (Math.random() < 0.031 || (Math.random() < 0.3 && !isNearGrassPatch))`,
         grassPatchPersistence: 0.01,//0.03,
         textures: {
           barks: Array.from({ length: 7 }, (_, i) => `/images/trees/bark/bark-${i + 1}.jpg`),

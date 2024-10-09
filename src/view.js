@@ -1,9 +1,9 @@
 import * as THREE from '/lib/three.module.min.js';
-
-
-
-
+import { SUBTRACTION, Brush, Evaluator } from '/lib/three-bvh-csg.js';
 import ViewModel from "/src/view-model.js";
+
+const evaluator = new Evaluator();
+
 
 
 window.THREE = THREE;
@@ -376,8 +376,8 @@ class Sky {
             intensity = Math.max(0, Math.min(1, intensity));
 
             // Define the colors for the gradient (white for close, dark blue for far)
-            var colorNear = new THREE.Color('#4287f5');
-            var colorFar = new THREE.Color('darkblue');
+            var colorNear = new THREE.Color('#78aafa'); // '#4287f5'
+            var colorFar = new THREE.Color('#4d90fa');
 
             // Optionally, adjust opacity further to smooth the transition
 
@@ -399,6 +399,155 @@ class Sky {
         }
     }
 }
+
+class Castle {
+    constructor(centerPoint) {
+        this.centerPoint = centerPoint
+        this.houseDim = [70, 50]; // Width and Length of the house
+        this.parts = [];
+        this.wallHeight = 5;
+
+        // Create the foundation
+        this.foundationHeight = 3;
+        const foundation = new THREE.Mesh(
+            new THREE.BoxGeometry(this.houseDim[0], this.foundationHeight, this.houseDim[1]),
+            new THREE.MeshStandardMaterial({
+                color: 'gray',
+                map: new THREE.TextureLoader().load("/images/concrete")
+            })
+        );
+        foundation.castShadow = true;
+        foundation.receiveShadow = true;
+        foundation.position.set(0, this.centerPoint.y, 0); // Position the foundation
+        this.parts.push(foundation);
+        scene.add(foundation);
+
+        var escalationCooridorDim = this.houseDim[0] * .05; // Size of the cut-out squares
+
+        // Create floors with cut-outs
+        for (var i = 1, j = 0; i < 13; i++, j++) {
+            let width = this.houseDim[0];
+            let length = this.houseDim[1];
+            var floorGroup = new THREE.Group();
+
+            // Create the first large part of the floor (remaining part after cut-out)
+            const floorPart1 = new THREE.Mesh(
+                new THREE.BoxGeometry(width - escalationCooridorDim, this.foundationHeight, length),
+                new THREE.MeshStandardMaterial({
+                    color: 'gray',
+                    map: new THREE.TextureLoader().load("/images/concrete")
+                })
+            );
+            floorPart1.position.set(-escalationCooridorDim / 2, this.centerPoint.y, 0); // Shift to the left
+            floorGroup.add(floorPart1);
+
+            // Create the second large part of the floor (remaining part after cut-out)
+            const floorPart2 = new THREE.Mesh(
+                new THREE.BoxGeometry(width, this.foundationHeight, length - escalationCooridorDim),
+                new THREE.MeshStandardMaterial({
+                    color: 'gray',
+                    map: new THREE.TextureLoader().load("/images/concrete")
+                })
+            );
+            floorPart2.position.set(0, this.centerPoint.y, -escalationCooridorDim / 2); // Shift downward
+            floorGroup.add(floorPart2);
+
+            // Position the whole floor group for each level
+            floorGroup.position.set(0, this.centerPoint.y + (this.wallHeight * 3 * i), 0);
+
+            // Cast and receive shadows
+            floorPart1.castShadow = true;
+            floorPart1.receiveShadow = true;
+            floorPart2.castShadow = true;
+            floorPart2.receiveShadow = true;
+
+            this.parts.push(floorGroup);
+            scene.add(floorGroup);
+        }
+
+
+        // Elevator floor
+        var eFloor = new THREE.Mesh(
+            new THREE.BoxGeometry(escalationCooridorDim, 0.2, escalationCooridorDim),
+            new THREE.MeshStandardMaterial({ color: 'maroon' })
+        );
+        eFloor.position.set(
+            this.houseDim[0] / 2 - escalationCooridorDim / 2, // X position (bottom-right corner)
+            this.centerPoint.y + 1.5, // Y position (same as floor)
+            this.houseDim[1] / 2 - escalationCooridorDim / 2  // Z position (bottom-right corner)
+        );
+        scene.add(eFloor);
+        this.parts.push(eFloor)
+
+        // Elevator ceiling
+        var eCeiling = new THREE.Mesh(
+            new THREE.BoxGeometry(escalationCooridorDim, 0.2, escalationCooridorDim),
+            new THREE.MeshStandardMaterial({ color: 'maroon' })
+        );
+        eCeiling.position.set(
+            this.houseDim[0] / 2 - escalationCooridorDim / 2, 
+            this.centerPoint.y + this.wallHeight + 1.5,  // Y position (at ceiling height)
+            this.houseDim[1] / 2 - escalationCooridorDim / 2
+        );
+        scene.add(eCeiling);
+        this.parts.push(eCeiling)
+
+        // Elevator walls (4 walls)
+        let texture = new THREE.TextureLoader().load('/images/wall12.jpg')
+        for (var i = 0; i < 4; i++) {
+            var eWall = new THREE.Mesh(
+                new THREE.BoxGeometry(escalationCooridorDim, this.wallHeight, 0.2),
+                new THREE.MeshStandardMaterial({ map: texture, transparent: true, opacity: i == 3 || i == 0 ? 0.2 : 1 })
+            );
+            
+            // Position each wall based on index
+            if (i == 0) {
+                eWall.position.set(eFloor.position.x, this.centerPoint.y + this.wallHeight / 2 + 1.5, eFloor.position.z + escalationCooridorDim / 2); // Front wall
+            }
+            if (i == 1) {
+                // eWall.position.set(eFloor.position.x, this.centerPoint.y + this.wallHeight / 2 + 1.5, eFloor.position.z - escalationCooridorDim / 2); // Back wall
+                // var door = new THREE.Mesh(
+                //     new THREE.BoxGeometry(1.25, 2, .2),
+                // );
+                // eWall = evaluator.evaluate( eWall, door, SUBTRACTION );
+                const wallGeometry = new THREE.BoxGeometry(escalationCooridorDim, this.wallHeight, 0.2);
+                const wallBrush = new Brush(wallGeometry);
+                wallBrush.position.set(eFloor.position.x, this.centerPoint.y + this.wallHeight / 2 + 1.5, eFloor.position.z - escalationCooridorDim / 2);
+                wallBrush.updateMatrixWorld();
+
+                // Create the door as a Brush
+                const doorGeometry = new THREE.BoxGeometry(1.25, 2, 0.2); // Door size
+                const doorBrush = new Brush(doorGeometry);
+                doorBrush.position.set(eFloor.position.x, this.centerPoint.y + this.wallHeight / 2, eFloor.position.z - escalationCooridorDim / 2);
+                doorBrush.updateMatrixWorld();
+
+                // Perform the CSG subtraction to create a door in the wall
+                const evaluator = new Evaluator();
+                const finalWallGeometry = evaluator.evaluate(wallBrush, doorBrush, SUBTRACTION);
+
+                // Convert the result back into a Mesh
+                eWall = new THREE.Mesh(finalWallGeometry.geometry, new THREE.MeshStandardMaterial({ map: texture }));
+                
+            }
+            if (i == 2) {
+                eWall.position.set(eFloor.position.x - escalationCooridorDim / 2, this.centerPoint.y + this.wallHeight / 2 + 1.5, eFloor.position.z); // Left wall
+                eWall.rotation.y = Math.PI / 2; // Rotate left wall by 90 degrees
+            }
+            if (i == 3) {
+                eWall.position.set(eFloor.position.x + escalationCooridorDim / 2, this.centerPoint.y + this.wallHeight / 2 + 1.5, eFloor.position.z); // Right wall
+                eWall.rotation.y = Math.PI / 2; // Rotate right wall by 90 degrees
+            }
+
+            scene.add(eWall);
+            this.parts.push(eWall);
+        }
+
+
+
+    }
+
+}
+
 
 
 class Terrain {
@@ -440,7 +589,7 @@ class Terrain {
 
     generate(centerX = 0, centerY = 0, centerZ = 0) {
         const centerKey = `${centerX}_${centerZ}`;
-        this.terrainType = ['sparse', 'dense', 'half'][Math.floor(Math.random() * 3)];
+        this.terrainType = 'dense'//['sparse', 'dense', 'half'][Math.floor(Math.random() * 3)];
         for (var i = 0; i < this.meshes.length; i++) {
             if (this.meshes[i].centerKey == centerKey) {
                 debugger
@@ -502,6 +651,11 @@ class Terrain {
 
                 v.y += variance;
 
+                var inCastle = v.x > -45 && v.x < 45 && v.z > -30 && v.z < 30
+                if (inCastle) {
+                    v.y = 0
+                }
+
                 if ([v.x, v.y, v.z].some(isNaN)) {
                     debugger
                 }
@@ -539,7 +693,7 @@ class Terrain {
                 for (let i = 0; i < this.segments; i++) {
                     for (let j = 0; j < this.segments; j++) {
                         for (var k = 0; k < 3; k++) {
-                            grassPatches[i][j] = Math.random() < 0.2;
+                            grassPatches[i][j] = Math.random() < 0.09;
                         }
                     }
                 }
@@ -564,7 +718,7 @@ class Terrain {
                 break;
                         
         }
-        
+
 
         var start_i = 1.0;
         // Process triangles and apply grass in defined ranges
@@ -578,6 +732,29 @@ class Terrain {
                 let b = (i + 1) + j * (this.segments + 1);
                 let c = (i + 1) + (j + 1) * (this.segments + 1);
                 let d = i + (j + 1) * (this.segments + 1);
+                let x = i * segmentSize;
+                let y = j * segmentSize;
+
+                let v = new THREE.Vector3();
+                v.x = (1 - x) * (1 - y) * v0.x + x * (1 - y) * v1.x + x * y * v2.x + (1 - x) * y * v3.x;
+                v.y = (1 - x) * (1 - y) * v0.y + x * (1 - y) * v1.y + x * y * v2.y + (1 - x) * y * v3.y;
+                v.z = (1 - x) * (1 - y) * v0.z + x * (1 - y) * v1.z + x * y * v2.z + (1 - x) * y * v3.z;
+
+                var inCastle = v.x > -50 && v.x < 50 && v.z > -35 && v.z < 35
+
+                var isNearGrassPatch = false/*(grassPatches[i][j] || 
+                                          (i > 0 && grassPatches[i - 1][j]) ||  // Check left
+                                          (i < this.segments && grassPatches[i + 1][j]) ||  // Check right
+                                          (j > 0 && grassPatches[i][j - 1]) ||  // Check above
+                                          (j < this.segments && grassPatches[i][j + 1]) ||  // Check below
+                                          (i > 0 && j > 0 && grassPatches[i - 1][j - 1]) ||  // Check top-left diagonal
+                                          (i < this.segments && j > 0 && grassPatches[i + 1][j - 1]) ||  // Check top-right diagonal
+                                          (i > 0 && j < this.segments && grassPatches[i - 1][j + 1]) ||  // Check bottom-left diagonal
+                                          (i < this.segments && j < this.segments && grassPatches[i + 1][j + 1])  // Check bottom-right diagonal
+                );*/
+
+
+                const isTree = false//eval(this.treeCondition);
 
                 if (a >= 0 && b >= 0 && c >= 0 && d >= 0 && a < vertices.length / 3 && b < vertices.length / 3 && c < vertices.length / 3 && d < vertices.length / 3) {
                     indices.push(a, b, d);
@@ -594,20 +771,6 @@ class Terrain {
                         const slope = Math.atan2(normal.y, normal.x);
 
                         const isCliff = slope > 0.5 || slope < -0.5;
-
-                        //  // Check if VM triangle is either in a grass patch or adjacent to one
-                        const isNearGrassPatch = false/*(grassPatches[i][j] || 
-                                                  (i > 0 && grassPatches[i - 1][j]) ||  // Check left
-                                                  (i < this.segments && grassPatches[i + 1][j]) ||  // Check right
-                                                  (j > 0 && grassPatches[i][j - 1]) ||  // Check above
-                                                  (j < this.segments && grassPatches[i][j + 1]) ||  // Check below
-                                                  (i > 0 && j > 0 && grassPatches[i - 1][j - 1]) ||  // Check top-left diagonal
-                                                  (i < this.segments && j > 0 && grassPatches[i + 1][j - 1]) ||  // Check top-right diagonal
-                                                  (i > 0 && j < this.segments && grassPatches[i - 1][j + 1]) ||  // Check bottom-left diagonal
-                                                  (i < this.segments && j < this.segments && grassPatches[i + 1][j + 1])  // Check bottom-right diagonal
-                        );*/
-
-                        const isTree = eval(this.treeCondition);
                         
                         //
                         // Grasses!
@@ -700,8 +863,9 @@ class Terrain {
         const material = new THREE.MeshStandardMaterial({
             vertexColors: true,  // Enable vertex colors
             side: THREE.DoubleSide,
+            wireframe: true,
             transparent: false,
-            opacity: 0.1
+            opacity: 1
         });
 
         const mesh = new THREE.Mesh(planeGeometry, material);
@@ -2068,8 +2232,172 @@ class UserController {
         this.updateBoundingBox();
     }
 
+    // handleCollision() {
+    //     // Define the directions to check for collision (forward, backward, left, right, up, down)
+    //     const directions = [
+    //         new THREE.Vector3(1, 0, 0),    // Right
+    //         new THREE.Vector3(-1, 0, 0),   // Left
+    //         new THREE.Vector3(0, 0, 1),    // Forward
+    //         new THREE.Vector3(0, 0, -1),   // Backward
+    //         new THREE.Vector3(0, 1, 0),    // Up
+    //         new THREE.Vector3(0, -1, 0)    // Down
+    //     ];
+
+    //     const collisionDistance = .5; // Adjust the distance threshold for tree collisions
+    //     let collisionResponseForce = 0.3; // Adjust the response force for the collision
+
+    //     // Loop through each direction to cast rays and detect collisions
+    //     var i = 0;
+    //     for (let dir of directions) {
+    //         if (i++ == 2) {
+    //             collisionResponseForce = 0.5;
+    //         }
+    //         // Create a raycaster for the current direction
+    //         const raycaster = new THREE.Raycaster(this.camera.position, dir.normalize());
+
+    //         // Check for intersections with tree trunks and foliage
+    //         const intersectsTrees = raycaster.intersectObjects(this.terrain.trees.flatMap(tree => [tree.trunk, tree.foliage]), true);
+
+
+    //         if (intersectsTrees.length > 0 && intersectsTrees[0].distance < collisionDistance) {
+    //             // Collision detected with a tree trunk or foliage
+    //             const intersection = intersectsTrees[0];
+
+    //             // Calculate the direction to move the camera away from the tree
+    //             const responseDirection = this.camera.position.clone().sub(intersection.point).normalize();
+
+    //             // Apply the collision response
+    //             this.camera.position.add(responseDirection.multiplyScalar(collisionResponseForce));
+
+    //             // Additional handling for upward and downward collisions
+    //             if (dir.equals(new THREE.Vector3(0, -1, 0))) {
+    //                 // If the camera is moving downward, stop falling (standing on tree)
+    //                 this.camera.velocity.y = 0;
+    //                 this.camera.position.y = intersection.point.y + 1; // Adjust based on tree height
+    //             } else if (dir.equals(new THREE.Vector3(0, 1, 0))) {
+    //                 // If the camera is moving upwards, prevent further upward movement
+    //                 this.camera.velocity.y = Math.min(this.camera.velocity.y, 0);
+    //             }
+    //         }
+
+    //         const intersectsCastle = raycaster.intersectObjects(window.castle.parts, true);
+    //         if (intersectsCastle.length && intersectsCastle.some(i => i.distance < 0.2)) {
+    //             // Collision detected with a tree trunk or foliage
+    //             const intersection = intersectsCastle[0];
+
+    //             // Calculate the direction to move the camera away from the tree
+    //             const responseDirection = this.camera.position.clone().sub(intersection.point).normalize();
+
+    //             // Apply the collision response
+    //             this.camera.position.add(responseDirection.multiplyScalar(collisionResponseForce));
+
+    //             // Additional handling for upward and downward collisions
+    //             if (dir.equals(new THREE.Vector3(0, -1, 0))) {
+    //                 // If the camera is moving downward, stop falling (standing on tree)
+    //                 this.camera.velocity.y = 0;
+    //                 this.camera.position.y = intersection.point.y + 1; // Adjust based on tree height
+    //             } else if (dir.equals(new THREE.Vector3(0, 1, 0))) {
+    //                 // If the camera is moving upwards, prevent further upward movement
+    //                 this.camera.velocity.y = Math.min(this.camera.velocity.y, 0);
+    //             }
+    //         }
+    //     }
+    // }
+
+    // handleJumping() {
+    //     // Adjust the camera's position using jump velocity
+    //     this.camera.position.y += this.jumpVelocity;
+
+    //     // Apply gravity to reduce the jump velocity
+    //     this.jumpVelocity -= 0.03 * 0.8; // Adjust gravity effect
+
+    //     // Raycast to detect if we're hitting the ground
+    //     const raycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
+    //     let closestIntersection = null;
+    //     let minDistance = Infinity;
+    //     let intersectedTerrainKey = null;
+
+    //     // Check intersections with all terrain meshes
+    //     for (let mesh of this.terrain.meshes) {
+    //         const intersects = raycaster.intersectObject(mesh, true);
+            
+    //         if (intersects.length > 0) {
+    //             const intersection = intersects[0];
+    //             if (intersection.distance < minDistance) {
+    //                 closestIntersection = intersection;
+    //                 minDistance = intersection.distance;
+    //                 intersectedTerrainKey = mesh.centerKey;
+    //             }
+    //         }
+    //     }
+
+    //     // Handle the closest intersection, if any
+    //     if (closestIntersection && minDistance < 1) { // Adjust distance as needed
+    //         this.camera.position.y = closestIntersection.point.y + 1; // Adjust for the height of the triangle surface
+    //         this.camera.velocity.y = 0; // Reset vertical velocity upon collision
+    //         this.isJumping = false;  // Ensure jumping is reset when grounded
+    //         if (this.centerKey !== intersectedTerrainKey) {
+    //             let center = intersectedTerrainKey.split("_").map(Number)
+    //             this.centerKey = intersectedTerrainKey;
+    //             this.terrain.center = new THREE.Vector3(center[0], 0, center[1]);
+    //             this.terrain.surroundingCenters = []
+    //             this.terrain.findNearestTerrainCenters(terrain.center);
+    //         }
+    //     }
+    // }
+
+    // applyGravity() {
+    //     // Apply gravity only if not jumping
+    //     if (!this.isJumping) {
+    //         this.camera.velocity.y += -0.05; // Increase gravity effect (from -0.02 to -0.05)
+
+    //         // Limit falling speed to terminal velocity
+    //         if (this.camera.velocity.y < TERMINAL_VELOCITY) {
+    //             this.camera.velocity.y = TERMINAL_VELOCITY;
+    //         }
+
+    //         this.camera.position.y += this.camera.velocity.y;
+
+    //         // Check for ground collision using raycasting
+    //         const raycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
+    //         let closestIntersection = null;
+    //         let minDistance = Infinity;
+    //         let intersectedTerrainKey = null;
+
+    //         // Check intersections with all terrain meshes
+    //         for (let mesh of this.terrain.meshes) {
+    //             const intersects = raycaster.intersectObject(mesh, true);
+                
+    //             if (intersects.length > 0) {
+    //                 const intersection = intersects[0];
+    //                 if (intersection.distance < minDistance) {
+    //                     closestIntersection = intersection;
+    //                     minDistance = intersection.distance;
+    //                     intersectedTerrainKey = mesh.centerKey;
+    //                 }
+    //             }
+    //         }
+
+    //         // Handle the closest intersection, if any
+    //         if (closestIntersection && minDistance < 1) { // Adjust distance as needed
+    //             this.camera.position.y = closestIntersection.point.y + 1; // Adjust for the height of the triangle surface
+    //             this.camera.velocity.y = 0; // Reset vertical velocity upon collision
+    //             this.isJumping = false;  // Ensure jumping is reset when grounded
+    //             if (this.centerKey !== intersectedTerrainKey) {
+    //                 let center = intersectedTerrainKey.split("_").map(Number)
+    //                 this.centerKey = intersectedTerrainKey;
+    //                 this.terrain.center = new THREE.Vector3(center[0], 0, center[1]);
+    //                 this.terrain.surroundingCenters = []
+    //                 this.terrain.findNearestTerrainCenters(terrain.center);
+    //             }
+    //         }
+    //     }
+    // }
+    // Helper function to determine if the intersection is vertical (ground-like)
+
+
+    // Main collision handler
     handleCollision() {
-        // Define the directions to check for collision (forward, backward, left, right, up, down)
         const directions = [
             new THREE.Vector3(1, 0, 0),    // Right
             new THREE.Vector3(-1, 0, 0),   // Left
@@ -2079,133 +2407,141 @@ class UserController {
             new THREE.Vector3(0, -1, 0)    // Down
         ];
 
-        const collisionDistance = .5; // Adjust the distance threshold for tree collisions
-        let collisionResponseForce = 0.3; // Adjust the response force for the collision
+        const collisionDistance = 0.5; 
+        let collisionResponseForce = 0.3; 
 
-        // Loop through each direction to cast rays and detect collisions
-        var i = 0;
-        for (let dir of directions) {
-            if (i++ == 2) {
+        for (let i = 0; i < directions.length; i++) {
+            let dir = directions[i];
+            if (i === 2) {  // Forward collision is stronger
                 collisionResponseForce = 0.5;
             }
-            // Create a raycaster for the current direction
+
+            // Create a raycaster
             const raycaster = new THREE.Raycaster(this.camera.position, dir.normalize());
 
-            // Check for intersections with tree trunks and foliage
+            // Check for intersections with trees
             const intersectsTrees = raycaster.intersectObjects(this.terrain.trees.flatMap(tree => [tree.trunk, tree.foliage]), true);
-
             if (intersectsTrees.length > 0 && intersectsTrees[0].distance < collisionDistance) {
-                // Collision detected with a tree trunk or foliage
-                const intersection = intersectsTrees[0];
-
-                // Calculate the direction to move the camera away from the tree
-                const responseDirection = this.camera.position.clone().sub(intersection.point).normalize();
-
-                // Apply the collision response
-                this.camera.position.add(responseDirection.multiplyScalar(collisionResponseForce));
-
-                // Additional handling for upward and downward collisions
-                if (dir.equals(new THREE.Vector3(0, -1, 0))) {
-                    // If the camera is moving downward, stop falling (standing on tree)
-                    this.camera.velocity.y = 0;
-                    this.camera.position.y = intersection.point.y + 1; // Adjust based on tree height
-                } else if (dir.equals(new THREE.Vector3(0, 1, 0))) {
-                    // If the camera is moving upwards, prevent further upward movement
-                    this.camera.velocity.y = Math.min(this.camera.velocity.y, 0);
-                }
+                this.handleTreeCollision(intersectsTrees[0], dir, collisionResponseForce);
             }
+
+            // Check for intersections with castle parts
+            const intersectsCastle = raycaster.intersectObjects(window.castle.parts, true);
+            if (intersectsCastle.length > 0 && intersectsCastle.some(i => i.distance < 0.2)) {
+                this.handleCastleCollision(intersectsCastle[0], dir, collisionResponseForce);
+            }
+        }
+    }
+
+    // Handle tree collision
+    handleTreeCollision(intersection, direction, responseForce) {
+        const responseDirection = this.camera.position.clone().sub(intersection.point).normalize();
+        this.camera.position.add(responseDirection.multiplyScalar(responseForce));
+
+        if (direction.equals(new THREE.Vector3(0, -1, 0))) {
+            this.camera.velocity.y = 0;
+            this.camera.position.y = intersection.point.y + 1;
+        } else if (direction.equals(new THREE.Vector3(0, 1, 0))) {
+            this.camera.velocity.y = Math.min(this.camera.velocity.y, 0);
+        }
+    }
+
+    // Handle castle part collision
+    handleCastleCollision(intersection, direction, responseForce) {
+        const responseDirection = this.camera.position.clone().sub(intersection.point).normalize();
+
+        // If it's a vertical intersection (like standing on a foundation)
+        if (isVerticalIntersection(intersection.face.normal)) {
+            this.camera.velocity.y = 0;
+            this.camera.position.y = intersection.point.y + 1;  // Adjust height for foundation
+
+            // Optionally, you can "stop" here or adjust new terrain logic
+            // this.terrain.createNewTerrain(); // Create new terrain logic, if necessary
+        } else {
+            // Horizontal collision with walls, push the player away
+            this.camera.position.add(responseDirection.multiplyScalar(responseForce));
         }
     }
 
     handleJumping() {
-        // Adjust the camera's position using jump velocity
         this.camera.position.y += this.jumpVelocity;
+        this.jumpVelocity -= 0.03 * 0.8; 
 
-        // Apply gravity to reduce the jump velocity
-        this.jumpVelocity -= 0.03 * 0.8; // Adjust gravity effect
-
-        // Raycast to detect if we're hitting the ground
         const raycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
-        let closestIntersection = null;
-        let minDistance = Infinity;
-        let intersectedTerrainKey = null;
+        const intersection = this.findClosestIntersection(raycaster);
 
-        // Check intersections with all terrain meshes
-        for (let mesh of this.terrain.meshes) {
-            const intersects = raycaster.intersectObject(mesh, true);
+        if (intersection && intersection.distance < 1) {
+            console.log("jumping intersection")
             
-            if (intersects.length > 0) {
-                const intersection = intersects[0];
-                if (intersection.distance < minDistance) {
-                    closestIntersection = intersection;
-                    minDistance = intersection.distance;
-                    intersectedTerrainKey = mesh.centerKey;
-                }
-            }
-        }
+            this.camera.position.y = intersection.point.y + 1;
+            this.camera.velocity.y = 0;
+            this.isJumping = false;
 
-        // Handle the closest intersection, if any
-        if (closestIntersection && minDistance < 1) { // Adjust distance as needed
-            this.camera.position.y = closestIntersection.point.y + 1; // Adjust for the height of the triangle surface
-            this.camera.velocity.y = 0; // Reset vertical velocity upon collision
-            this.isJumping = false;  // Ensure jumping is reset when grounded
-            if (this.centerKey !== intersectedTerrainKey) {
-                let center = intersectedTerrainKey.split("_").map(Number)
-                this.centerKey = intersectedTerrainKey;
-                this.terrain.center = new THREE.Vector3(center[0], 0, center[1]);
-                this.terrain.surroundingCenters = []
-                this.terrain.findNearestTerrainCenters(terrain.center);
-            }
+            this.updateTerrain(intersection);
         }
     }
 
     applyGravity() {
-        // Apply gravity only if not jumping
         if (!this.isJumping) {
-            this.camera.velocity.y += -0.05; // Increase gravity effect (from -0.02 to -0.05)
-
-            // Limit falling speed to terminal velocity
+            this.camera.velocity.y += -0.05; 
             if (this.camera.velocity.y < TERMINAL_VELOCITY) {
                 this.camera.velocity.y = TERMINAL_VELOCITY;
             }
-
             this.camera.position.y += this.camera.velocity.y;
 
-            // Check for ground collision using raycasting
             const raycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
-            let closestIntersection = null;
-            let minDistance = Infinity;
-            let intersectedTerrainKey = null;
+            const intersection = this.findClosestIntersection(raycaster);
 
-            // Check intersections with all terrain meshes
-            for (let mesh of this.terrain.meshes) {
-                const intersects = raycaster.intersectObject(mesh, true);
-                
-                if (intersects.length > 0) {
-                    const intersection = intersects[0];
-                    if (intersection.distance < minDistance) {
-                        closestIntersection = intersection;
-                        minDistance = intersection.distance;
-                        intersectedTerrainKey = mesh.centerKey;
-                    }
-                }
-            }
+            if (intersection && intersection.distance < 1) {
+                this.camera.position.y = intersection.point.y + 1;
+                this.camera.velocity.y = 0;
+                this.isJumping = false;
 
-            // Handle the closest intersection, if any
-            if (closestIntersection && minDistance < 1) { // Adjust distance as needed
-                this.camera.position.y = closestIntersection.point.y + 1; // Adjust for the height of the triangle surface
-                this.camera.velocity.y = 0; // Reset vertical velocity upon collision
-                this.isJumping = false;  // Ensure jumping is reset when grounded
-                if (this.centerKey !== intersectedTerrainKey) {
-                    let center = intersectedTerrainKey.split("_").map(Number)
-                    this.centerKey = intersectedTerrainKey;
-                    this.terrain.center = new THREE.Vector3(center[0], 0, center[1]);
-                    this.terrain.surroundingCenters = []
-                    this.terrain.findNearestTerrainCenters(terrain.center);
-                }
+                this.updateTerrain(intersection);
             }
         }
     }
+
+    // Helper function to find the closest intersection with terrain
+    findClosestIntersection(raycaster) {
+        let closestIntersection = null;
+        let minDistance = Infinity;
+
+        // Check intersections with terrain meshes
+        for (let mesh of this.terrain.meshes) {
+            const intersects = raycaster.intersectObject(mesh, true);
+            if (intersects.length > 0 && intersects[0].distance < minDistance) {
+                closestIntersection = intersects[0];
+                minDistance = intersects[0].distance;
+            }
+        }
+
+        // Check intersections with castle parts
+        for (let part of window.castle.parts) {
+            const intersects = raycaster.intersectObject(part, true);
+            if (intersects.length > 0 && intersects[0].distance < minDistance) {
+                closestIntersection = intersects[0];
+                minDistance = intersects[0].distance;
+            }
+        }
+
+        return closestIntersection;
+    }
+
+
+    // Update terrain after collision or landing
+    updateTerrain(intersection) {
+        const terrainKey = intersection.object.centerKey; // Assuming each terrain mesh has a centerKey
+
+        if (terrainKey && this.centerKey !== terrainKey) {
+            let center = terrainKey.split("_").map(Number);
+            this.centerKey = terrainKey;
+            this.terrain.center = new THREE.Vector3(center[0], 0, center[1]);
+            this.terrain.surroundingCenters = [];
+            this.terrain.findNearestTerrainCenters(this.terrain.center);
+        }
+    }
+
 
 
     // Ensure the wireframe stays in sync with the bounding box
@@ -2229,7 +2565,10 @@ class UserController {
 
 
 
-
+function isVerticalIntersection(normal) {
+    // If the normal of the intersected object is pointing mostly upward or downward, it's vertical
+    return Math.abs(normal.y) > 0.7; // Adjust threshold as necessary
+}
 
 
 
@@ -2447,10 +2786,54 @@ class View {
         // Add the wireframe to the scene
         window.scene.add(wireframeBox);
 
-        window.user.camera.position.set(0,25,0);
+        var mesh = terrain.meshes[0];
+
+        //var [x, y, z] = [mesh.geometry.attributes.position.array[333], mesh.geometry.attributes.position.array[334] + 1, mesh.geometry.attributes.position.array[335]];
+        let x, y, z;
+        for (var i = 0; i < mesh.geometry.attributes.position.array.length; i += 3) {
+            var _x = Math.abs(mesh.geometry.attributes.position.array[i] - 20);
+            var _z = Math.abs(mesh.geometry.attributes.position.array[i + 2] - 20);
+
+            if (_x < 2 && _z < 2) {
+                x = mesh.geometry.attributes.position.array[i]
+                y = mesh.geometry.attributes.position.array[i + 1] + 1
+                z = mesh.geometry.attributes.position.array[i + 2]
+                break;
+            }
+        }
+
+        window.user.camera.position.set(x, y, z);
+
+        var centerPoint = getCenterOfGeometry(mesh.geometry);
+        centerPoint.y -= 4.5
+
+        window.castle = new Castle(centerPoint);
         
     }
 
+}
+
+function getCenterOfGeometry(geometry) {
+    // Get the position attribute of the geometry (which contains all the vertices)
+    const position = geometry.attributes.position;
+
+    // Variables to hold the sum of all x, y, and z values
+    let xSum = 0, ySum = 0, zSum = 0;
+
+    // Loop over all the vertices in the geometry
+    for (let i = 0; i < position.count; i++) {
+        xSum += position.getX(i);
+        ySum += position.getY(i);
+        zSum += position.getZ(i);
+    }
+
+    // Compute the average for x, y, and z to get the center
+    const centerX = xSum / position.count;
+    const centerY = ySum / position.count;
+    const centerZ = zSum / position.count;
+
+    // Return the center point as a Three.js Vector3
+    return new THREE.Vector3(centerX, centerY, centerZ);
 }
 
 
