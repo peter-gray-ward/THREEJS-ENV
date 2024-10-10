@@ -403,6 +403,9 @@ class Sky {
 class Castle {
     constructor(centerPoint) {
         this.centerPoint = centerPoint
+        if (this.centerPoint.y < 0) {
+            this.centerPoint.y = .01
+        }
         this.houseDim = [70, 50]; // Width and Length of the house
         this.parts = [];
         this.elevator = []
@@ -478,6 +481,9 @@ class Castle {
             this.centerPoint.y + 1.5, // Y position (same as floor)
             this.houseDim[1] / 2 - escalationCooridorDim / 2  // Z position (bottom-right corner)
         );
+        eFloor.floorZero = this.centerPoint.y + 1.5
+        eFloor.interval = this.wallHeight * 3
+        eFloor.name = "elevator-floor"
         this.elevator.push(eFloor)
         scene.add(eFloor);
         this.parts.push(eFloor)
@@ -564,6 +570,7 @@ class Castle {
         buttonPlate.position.set(eFloor.position.x - escalationCooridorDim / 2 + .19, this.centerPoint.y + 2.5, eFloor.position.z)
         buttonPlate.rotation.y = Math.PI / 2;
 
+        this.elevator.push(buttonPlate);
         scene.add(buttonPlate);
 
         var elevatorPointLight = new THREE.PointLight(0xffffff, 25, 5);
@@ -589,8 +596,8 @@ class Castle {
         var plateCenterY = buttonPlate.position.y;  // Center of the plate along y-axis
 
         var activeButtonLight = new THREE.PointLight(0xffffff, .05, 5);
+        activeButtonLight.name = 'active-button-light'
         this.elevator.push(activeButtonLight)
-        this.id = 'active-button-light'
 
         for (var i = 0; i < 13; i++) {
             var button = new THREE.Mesh(
@@ -608,6 +615,7 @@ class Castle {
                 plateCenterY - plateHeight / 2 + i * buttonSpacing,  // y position, spacing the buttons evenly
                 this.houseDim[1] / 2 - escalationCooridorDim / 2      // z position
             );
+            button.floorZero = plateCenterY - plateHeight / 2 + i * buttonSpacing
             button.rotation.y = Math.PI / 2
             if (!i) {
                 activeButtonLight.position.copy(button.position);
@@ -815,7 +823,7 @@ class Terrain {
 
                 var inCastle = v.x > -50 && v.x < 50 && v.z > -35 && v.z < 35
 
-                var isNearGrassPatch = false/*(grassPatches[i][j] || 
+                var isNearGrassPatch = (grassPatches[i][j] || 
                                           (i > 0 && grassPatches[i - 1][j]) ||  // Check left
                                           (i < this.segments && grassPatches[i + 1][j]) ||  // Check right
                                           (j > 0 && grassPatches[i][j - 1]) ||  // Check above
@@ -824,10 +832,10 @@ class Terrain {
                                           (i < this.segments && j > 0 && grassPatches[i + 1][j - 1]) ||  // Check top-right diagonal
                                           (i > 0 && j < this.segments && grassPatches[i - 1][j + 1]) ||  // Check bottom-left diagonal
                                           (i < this.segments && j < this.segments && grassPatches[i + 1][j + 1])  // Check bottom-right diagonal
-                );*/
+                );
 
 
-                const isTree = false//eval(this.treeCondition);
+                const isTree = eval(this.treeCondition);
 
                 if (a >= 0 && b >= 0 && c >= 0 && d >= 0 && a < vertices.length / 3 && b < vertices.length / 3 && c < vertices.length / 3 && d < vertices.length / 3) {
                     indices.push(a, b, d);
@@ -936,7 +944,7 @@ class Terrain {
         const material = new THREE.MeshStandardMaterial({
             vertexColors: true,  // Enable vertex colors
             side: THREE.DoubleSide,
-            wireframe: true,
+            wireframe: false,
             transparent: false,
             opacity: 1
         });
@@ -2219,6 +2227,43 @@ class UserController {
                     switch (intersects[i].object.name) {
                     case 'elevator-button':
                         console.log('moving to floor', intersects[i].object.floor);
+                        intersects[i].object.material.color.set('white')
+                        intersects[i].object.selected = true;
+                        var interval = undefined
+                        var eFloor = castle.elevator.find(m => m.name == 'elevator-floor');
+                        var up = eFloor.interval * intersects[i].object.floor > eFloor.position.y;
+                        var arrived = false
+                        var targetFloor = intersects[i].object.floor
+                        function riseElevator() {
+                            if (arrived) return
+                            castle.elevator.forEach(m => {
+                                if (up) {
+                                    m.position.y += 0.1
+                                } else {
+                                    m.position.y -= 0.1
+                                }
+                                var targetHeight = eFloor.interval * targetFloor + 1.5;
+                                var current_floor = Math.floor(eFloor.position.y / eFloor.interval)
+
+                                if (m.name == 'elevator-button') {
+                                    if (m.floor == current_floor) {
+                                        m.material.color.set('white')
+                                        m.selected = false
+                                        castle.elevator.filter(m => m.name == 'active-button-light').forEach(l => l.position.y = m.position.y)
+                                    } else if (!m.selected) {
+                                        m.material.color.set('gray')
+                                    }
+                                } else if (m.name == 'elevator-floor' && (up ? m.position.y >= targetHeight : m.position.y <= targetHeight)) {
+                                    m.position.y = targetHeight;
+                                    arrived = true
+                                }
+                            });
+                            if (arrived) {
+                                clearInterval(interval);
+                            }
+                        }
+                        interval = riseElevator;
+                        setInterval(interval, 1)
                         break;
                     default:
                         break;
@@ -2329,170 +2374,6 @@ class UserController {
         this.updateBoundingBox();
     }
 
-    // handleCollision() {
-    //     // Define the directions to check for collision (forward, backward, left, right, up, down)
-    //     const directions = [
-    //         new THREE.Vector3(1, 0, 0),    // Right
-    //         new THREE.Vector3(-1, 0, 0),   // Left
-    //         new THREE.Vector3(0, 0, 1),    // Forward
-    //         new THREE.Vector3(0, 0, -1),   // Backward
-    //         new THREE.Vector3(0, 1, 0),    // Up
-    //         new THREE.Vector3(0, -1, 0)    // Down
-    //     ];
-
-    //     const collisionDistance = .5; // Adjust the distance threshold for tree collisions
-    //     let collisionResponseForce = 0.3; // Adjust the response force for the collision
-
-    //     // Loop through each direction to cast rays and detect collisions
-    //     var i = 0;
-    //     for (let dir of directions) {
-    //         if (i++ == 2) {
-    //             collisionResponseForce = 0.5;
-    //         }
-    //         // Create a raycaster for the current direction
-    //         const raycaster = new THREE.Raycaster(this.camera.position, dir.normalize());
-
-    //         // Check for intersections with tree trunks and foliage
-    //         const intersectsTrees = raycaster.intersectObjects(this.terrain.trees.flatMap(tree => [tree.trunk, tree.foliage]), true);
-
-
-    //         if (intersectsTrees.length > 0 && intersectsTrees[0].distance < collisionDistance) {
-    //             // Collision detected with a tree trunk or foliage
-    //             const intersection = intersectsTrees[0];
-
-    //             // Calculate the direction to move the camera away from the tree
-    //             const responseDirection = this.camera.position.clone().sub(intersection.point).normalize();
-
-    //             // Apply the collision response
-    //             this.camera.position.add(responseDirection.multiplyScalar(collisionResponseForce));
-
-    //             // Additional handling for upward and downward collisions
-    //             if (dir.equals(new THREE.Vector3(0, -1, 0))) {
-    //                 // If the camera is moving downward, stop falling (standing on tree)
-    //                 this.camera.velocity.y = 0;
-    //                 this.camera.position.y = intersection.point.y + 1; // Adjust based on tree height
-    //             } else if (dir.equals(new THREE.Vector3(0, 1, 0))) {
-    //                 // If the camera is moving upwards, prevent further upward movement
-    //                 this.camera.velocity.y = Math.min(this.camera.velocity.y, 0);
-    //             }
-    //         }
-
-    //         const intersectsCastle = raycaster.intersectObjects(window.castle.parts, true);
-    //         if (intersectsCastle.length && intersectsCastle.some(i => i.distance < 0.2)) {
-    //             // Collision detected with a tree trunk or foliage
-    //             const intersection = intersectsCastle[0];
-
-    //             // Calculate the direction to move the camera away from the tree
-    //             const responseDirection = this.camera.position.clone().sub(intersection.point).normalize();
-
-    //             // Apply the collision response
-    //             this.camera.position.add(responseDirection.multiplyScalar(collisionResponseForce));
-
-    //             // Additional handling for upward and downward collisions
-    //             if (dir.equals(new THREE.Vector3(0, -1, 0))) {
-    //                 // If the camera is moving downward, stop falling (standing on tree)
-    //                 this.camera.velocity.y = 0;
-    //                 this.camera.position.y = intersection.point.y + 1; // Adjust based on tree height
-    //             } else if (dir.equals(new THREE.Vector3(0, 1, 0))) {
-    //                 // If the camera is moving upwards, prevent further upward movement
-    //                 this.camera.velocity.y = Math.min(this.camera.velocity.y, 0);
-    //             }
-    //         }
-    //     }
-    // }
-
-    // handleJumping() {
-    //     // Adjust the camera's position using jump velocity
-    //     this.camera.position.y += this.jumpVelocity;
-
-    //     // Apply gravity to reduce the jump velocity
-    //     this.jumpVelocity -= 0.03 * 0.8; // Adjust gravity effect
-
-    //     // Raycast to detect if we're hitting the ground
-    //     const raycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
-    //     let closestIntersection = null;
-    //     let minDistance = Infinity;
-    //     let intersectedTerrainKey = null;
-
-    //     // Check intersections with all terrain meshes
-    //     for (let mesh of this.terrain.meshes) {
-    //         const intersects = raycaster.intersectObject(mesh, true);
-            
-    //         if (intersects.length > 0) {
-    //             const intersection = intersects[0];
-    //             if (intersection.distance < minDistance) {
-    //                 closestIntersection = intersection;
-    //                 minDistance = intersection.distance;
-    //                 intersectedTerrainKey = mesh.centerKey;
-    //             }
-    //         }
-    //     }
-
-    //     // Handle the closest intersection, if any
-    //     if (closestIntersection && minDistance < 1) { // Adjust distance as needed
-    //         this.camera.position.y = closestIntersection.point.y + 1; // Adjust for the height of the triangle surface
-    //         this.camera.velocity.y = 0; // Reset vertical velocity upon collision
-    //         this.isJumping = false;  // Ensure jumping is reset when grounded
-    //         if (this.centerKey !== intersectedTerrainKey) {
-    //             let center = intersectedTerrainKey.split("_").map(Number)
-    //             this.centerKey = intersectedTerrainKey;
-    //             this.terrain.center = new THREE.Vector3(center[0], 0, center[1]);
-    //             this.terrain.surroundingCenters = []
-    //             this.terrain.findNearestTerrainCenters(terrain.center);
-    //         }
-    //     }
-    // }
-
-    // applyGravity() {
-    //     // Apply gravity only if not jumping
-    //     if (!this.isJumping) {
-    //         this.camera.velocity.y += -0.05; // Increase gravity effect (from -0.02 to -0.05)
-
-    //         // Limit falling speed to terminal velocity
-    //         if (this.camera.velocity.y < TERMINAL_VELOCITY) {
-    //             this.camera.velocity.y = TERMINAL_VELOCITY;
-    //         }
-
-    //         this.camera.position.y += this.camera.velocity.y;
-
-    //         // Check for ground collision using raycasting
-    //         const raycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
-    //         let closestIntersection = null;
-    //         let minDistance = Infinity;
-    //         let intersectedTerrainKey = null;
-
-    //         // Check intersections with all terrain meshes
-    //         for (let mesh of this.terrain.meshes) {
-    //             const intersects = raycaster.intersectObject(mesh, true);
-                
-    //             if (intersects.length > 0) {
-    //                 const intersection = intersects[0];
-    //                 if (intersection.distance < minDistance) {
-    //                     closestIntersection = intersection;
-    //                     minDistance = intersection.distance;
-    //                     intersectedTerrainKey = mesh.centerKey;
-    //                 }
-    //             }
-    //         }
-
-    //         // Handle the closest intersection, if any
-    //         if (closestIntersection && minDistance < 1) { // Adjust distance as needed
-    //             this.camera.position.y = closestIntersection.point.y + 1; // Adjust for the height of the triangle surface
-    //             this.camera.velocity.y = 0; // Reset vertical velocity upon collision
-    //             this.isJumping = false;  // Ensure jumping is reset when grounded
-    //             if (this.centerKey !== intersectedTerrainKey) {
-    //                 let center = intersectedTerrainKey.split("_").map(Number)
-    //                 this.centerKey = intersectedTerrainKey;
-    //                 this.terrain.center = new THREE.Vector3(center[0], 0, center[1]);
-    //                 this.terrain.surroundingCenters = []
-    //                 this.terrain.findNearestTerrainCenters(terrain.center);
-    //             }
-    //         }
-    //     }
-    // }
-    // Helper function to determine if the intersection is vertical (ground-like)
-
-
     // Main collision handler
     handleCollision() {
         const directions = [
@@ -2561,22 +2442,49 @@ class UserController {
     }
 
     handleJumping() {
+        // Update camera position based on the jump velocity
         this.camera.position.y += this.jumpVelocity;
-        this.jumpVelocity -= 0.03 * 0.8; 
+        this.jumpVelocity -= 0.03 * 0.8; // Simulate gravity by decreasing velocity
 
-        const raycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
-        const intersection = this.findClosestIntersection(raycaster);
+        // Cast a ray from the camera downwards to detect the ground
+        const downRaycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
+        const downIntersection = this.findClosestIntersection(downRaycaster);
 
-        if (intersection && intersection.distance < 1) {
-            console.log("jumping intersection")
-            
-            this.camera.position.y = intersection.point.y + 1;
+        // Cast a ray upwards to detect ceilings
+        const upRaycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, 1, 0));
+        const upIntersection = this.findClosestIntersection(upRaycaster);
+
+        // Ground collision detection
+        if (downIntersection && downIntersection.distance < 1) {
+            console.log("Camera is above the ground, landing");
+
+            // Adjust the camera position to the surface plus a small offset to simulate landing
+            this.camera.position.y = downIntersection.point.y + 1;
             this.camera.velocity.y = 0;
             this.isJumping = false;
 
-            this.updateTerrain(intersection);
+            this.updateTerrain(downIntersection);
+        }
+
+        // Ceiling collision detection
+        if (upIntersection && upIntersection.distance < .5) {
+            console.log("Camera hit the ceiling");
+
+            // Prevent the camera from going through the ceiling
+            this.camera.position.y = upIntersection.point.y - .5; // Adjust based on how close you want to stop
+            this.camera.velocity.y = 0;
+            this.isJumping = false;
+
+            // Optional: handle additional ceiling collision logic here
+        }
+
+        // If neither intersection is detected, continue falling
+        if (!downIntersection && !upIntersection) {
+            console.log("No intersection detected, camera still in the air");
         }
     }
+
+
 
     applyGravity() {
         if (!this.isJumping) {
@@ -2899,7 +2807,9 @@ class View {
             }
         }
 
-        window.user.camera.position.set(x, y, z);
+        window.user.camera.position.set(33.953909365281795, 2.610000001490116, 23.053098469337314);
+        window.user.camera.rotation.set(0, 1.533185307179759, 0)
+
 
         var centerPoint = getCenterOfGeometry(mesh.geometry);
         centerPoint.y -= 4.5
