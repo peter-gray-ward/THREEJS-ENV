@@ -405,7 +405,9 @@ class Castle {
         this.centerPoint = centerPoint
         this.houseDim = [70, 50]; // Width and Length of the house
         this.parts = [];
+        this.elevator = []
         this.wallHeight = 5;
+        var elevatorHeight = 3
 
         // Create the foundation
         this.foundationHeight = 3;
@@ -476,6 +478,7 @@ class Castle {
             this.centerPoint.y + 1.5, // Y position (same as floor)
             this.houseDim[1] / 2 - escalationCooridorDim / 2  // Z position (bottom-right corner)
         );
+        this.elevator.push(eFloor)
         scene.add(eFloor);
         this.parts.push(eFloor)
 
@@ -486,33 +489,37 @@ class Castle {
         );
         eCeiling.position.set(
             this.houseDim[0] / 2 - escalationCooridorDim / 2, 
-            this.centerPoint.y + this.wallHeight + 1.5,  // Y position (at ceiling height)
+            this.centerPoint.y + elevatorHeight + 1.5,  // Y position (at ceiling height)
             this.houseDim[1] / 2 - escalationCooridorDim / 2
         );
+        this.elevator.push(eCeiling)
         scene.add(eCeiling);
         this.parts.push(eCeiling)
 
         // Elevator walls (4 walls)
         let texture = new THREE.TextureLoader().load('/images/wall12.jpg')
         for (var i = 0; i < 4; i++) {
+            var meshOptions = {}
+            if (i == 3 || i == 0) {
+                meshOptions.transparent = true;
+                meshOptions.opacity = 0.35
+            } else {
+                meshOptions.map = texture;
+                
+            } 
             var eWall = new THREE.Mesh(
-                new THREE.BoxGeometry(escalationCooridorDim, this.wallHeight, 0.2),
-                new THREE.MeshStandardMaterial({ map: texture, transparent: true, opacity: i == 3 || i == 0 ? 0.2 : 1 })
+                new THREE.BoxGeometry(escalationCooridorDim, elevatorHeight, 0.2),
+                new THREE.MeshStandardMaterial(meshOptions)
             );
             
             // Position each wall based on index
             if (i == 0) {
-                eWall.position.set(eFloor.position.x, this.centerPoint.y + this.wallHeight / 2 + 1.5, eFloor.position.z + escalationCooridorDim / 2); // Front wall
+                eWall.position.set(eFloor.position.x, this.centerPoint.y + elevatorHeight / 2 + 1.5, eFloor.position.z + escalationCooridorDim / 2); // Front wall
             }
             if (i == 1) {
-                // eWall.position.set(eFloor.position.x, this.centerPoint.y + this.wallHeight / 2 + 1.5, eFloor.position.z - escalationCooridorDim / 2); // Back wall
-                // var door = new THREE.Mesh(
-                //     new THREE.BoxGeometry(1.25, 2, .2),
-                // );
-                // eWall = evaluator.evaluate( eWall, door, SUBTRACTION );
-                const wallGeometry = new THREE.BoxGeometry(escalationCooridorDim, this.wallHeight, 0.2);
+                const wallGeometry = new THREE.BoxGeometry(escalationCooridorDim, elevatorHeight, 0.2);
                 const wallBrush = new Brush(wallGeometry);
-                wallBrush.position.set(eFloor.position.x, this.centerPoint.y + this.wallHeight / 2 + 1.5, eFloor.position.z - escalationCooridorDim / 2);
+                wallBrush.position.set(eFloor.position.x, this.centerPoint.y + elevatorHeight / 2 + 1.5, eFloor.position.z - escalationCooridorDim / 2);
                 wallBrush.updateMatrixWorld();
 
                 // Create the door as a Brush
@@ -528,22 +535,88 @@ class Castle {
                 // Convert the result back into a Mesh
                 eWall = new THREE.Mesh(finalWallGeometry.geometry, new THREE.MeshStandardMaterial({ map: texture }));
                 
+                
             }
             if (i == 2) {
-                eWall.position.set(eFloor.position.x - escalationCooridorDim / 2, this.centerPoint.y + this.wallHeight / 2 + 1.5, eFloor.position.z); // Left wall
+                eWall.position.set(eFloor.position.x - escalationCooridorDim / 2, this.centerPoint.y + elevatorHeight / 2 + 1.5, eFloor.position.z); // Left wall
                 eWall.rotation.y = Math.PI / 2; // Rotate left wall by 90 degrees
             }
             if (i == 3) {
-                eWall.position.set(eFloor.position.x + escalationCooridorDim / 2, this.centerPoint.y + this.wallHeight / 2 + 1.5, eFloor.position.z); // Right wall
+                eWall.position.set(eFloor.position.x + escalationCooridorDim / 2, this.centerPoint.y + elevatorHeight / 2 + 1.5, eFloor.position.z); // Right wall
                 eWall.rotation.y = Math.PI / 2; // Rotate right wall by 90 degrees
             }
+
+            this.elevator.push(eWall)
 
             scene.add(eWall);
             this.parts.push(eWall);
         }
 
+        var buttonPlate = new THREE.Mesh(
+            new THREE.PlaneGeometry(.3, .8),
+            new THREE.MeshStandardMaterial({
+                color: 'gold',
+                metalness: 1,
+                side: THREE.DoubleSide
+            })
+        );
 
+        buttonPlate.position.set(eFloor.position.x - escalationCooridorDim / 2 + .19, this.centerPoint.y + 2.5, eFloor.position.z)
+        buttonPlate.rotation.y = Math.PI / 2;
 
+        scene.add(buttonPlate);
+
+        var elevatorPointLight = new THREE.PointLight(0xffffff, 25, 5);
+        this.elevator.push(elevatorPointLight)
+        elevatorPointLight.position.set(
+            this.houseDim[0] / 2 - escalationCooridorDim / 2, 
+            this.centerPoint.y + elevatorHeight + 1,  // Y position (at ceiling height)
+            this.houseDim[1] / 2 - escalationCooridorDim / 2
+        )
+        scene.add(elevatorPointLight)
+        var elevatorLightViz = new THREE.Mesh(
+            new THREE.SphereGeometry(.3, 10, 10),
+            new THREE.MeshBasicMaterial({
+                color: 0xffffff
+            })
+        );
+        this.elevator.push(elevatorLightViz)
+        elevatorLightViz.position.copy(elevatorPointLight.position)
+        scene.add(elevatorLightViz)
+
+        var plateHeight = 0.7;
+        var buttonSpacing = plateHeight / 12;  // Distance between each button
+        var plateCenterY = buttonPlate.position.y;  // Center of the plate along y-axis
+
+        var activeButtonLight = new THREE.PointLight(0xffffff, .05, 5);
+        this.elevator.push(activeButtonLight)
+        this.id = 'active-button-light'
+
+        for (var i = 0; i < 13; i++) {
+            var button = new THREE.Mesh(
+                new THREE.CircleGeometry(.025, 20, 20),
+                new THREE.MeshStandardMaterial({
+                    color: 'gray',
+                    transparent: true,
+                    opacity: 0.7
+                })
+            );
+            button.name = 'elevator-button';
+            button.floor = i;
+            button.position.set(
+                buttonPlate.position.x + .01,  // x position, you can adjust it if needed
+                plateCenterY - plateHeight / 2 + i * buttonSpacing,  // y position, spacing the buttons evenly
+                this.houseDim[1] / 2 - escalationCooridorDim / 2      // z position
+            );
+            button.rotation.y = Math.PI / 2
+            if (!i) {
+                activeButtonLight.position.copy(button.position);
+                scene.add(activeButtonLight)
+                button.material.color.set('white')
+            }
+            this.elevator.push(button)
+            scene.add(button);
+        }
     }
 
 }
@@ -2044,11 +2117,11 @@ class UserController {
         this.a = false;
         this.s = false;
         this.d = false;
-        this.wS = .2
-        this.aS = .2
-        this.sS = .2
-        this.dS = .2
-        this.tS = .1
+        this.wS = .1
+        this.aS = .1
+        this.sS = .1
+        this.dS = .1
+        this.tS = .05
         this.shift = false
         this.space = false;
         this.ArrowUp = false;
@@ -2129,6 +2202,30 @@ class UserController {
                 this.rightShift = false;
             }
         });
+
+        var raycaster = new THREE.Raycaster();
+        var mouse = new THREE.Vector2();
+
+        window.addEventListener('click', (e) => {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, window.user.camera);
+
+            var intersects = raycaster.intersectObjects(scene.children);
+
+            if (intersects.length > 0) {
+                for (var i = 0; i < intersects.length; i++) {
+                    switch (intersects[i].object.name) {
+                    case 'elevator-button':
+                        console.log('moving to floor', intersects[i].object.floor);
+                        break;
+                    default:
+                        break;
+                    }
+                }
+            }
+        }, false);
     }
 
     init() {
