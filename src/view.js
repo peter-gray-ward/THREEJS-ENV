@@ -403,6 +403,9 @@ class Sky {
 class Castle {
     offsetY = 1.5
     elevatorSpeed = 0.2
+    processing = {
+        elevator: false
+    }
 
     constructor(centerPoint) {
         this.centerPoint = centerPoint
@@ -1079,7 +1082,7 @@ class Terrain {
                         //
                         // Grasses!
                         //
-                        if (false && isNearGrassPatch) {
+                        if (isNearGrassPatch) {
                             triangle.material.opacity = randomInRange(0.001, 0.5);
                             triangle.material.color.set(this.Grass[Math.floor(Math.random() * this.Grass.length)]);
 
@@ -1195,7 +1198,7 @@ class Terrain {
     updateTerrain() {
         for (var center of this.surroundingCenters) {
             var centerKey = `${center.center.x}_${center.center.z}`;
-            if (center.center.distanceTo(user.camera.position) < 75) {
+            if (center.center.distanceTo(user.camera.position) < this.quadrant * 1.17) {
                 center.pillar.material.color.set(0xff0000);
                 var terrainCreated = false;
                 for (var j = 0; j < this.meshes.length; j++) {
@@ -2348,6 +2351,8 @@ class UserController {
         this.a = false;
         this.s = false;
         this.d = false;
+        this.inFlight = .1
+        this.inSprint = .5
         this.wS = .15
         this.aS = .1
         this.sS = .1
@@ -2359,19 +2364,12 @@ class UserController {
         this.ArrowRight = false;
         this.ArrowDown = false;
         this.ArrowLeft = false;
-        this.leftShift = false;
-        this.rightShift = false;
+        this.shift = false;
         this.isJumping = false;
         this.jumpVelocity = 0;
         this.centerKey = null;
         this.velocity = new THREE.Vector3(); // General velocity
         this.intersectsTerrain = [];
-        this.time_held = {
-            w: 0,
-            a: 0,
-            s: 0,
-            d: 0
-        }
         this.addEventListener();
         this.init();
     }
@@ -2381,7 +2379,6 @@ class UserController {
             const key = e.key.toUpperCase();
             if (key == 'W') {
                 this.w = true;
-                this.time_held.w = new Date().getTime();
             } else if (key == 'A') {
                 this.a = true;
             } else if (key == 'S') {
@@ -2389,8 +2386,9 @@ class UserController {
             } else if (key == 'D') {
                 this.d = true;
             } else if (key == ' ') {
+                if (this.isJumping) return
                 this.isJumping = true;
-                this.jumpVelocity = 0.4;
+                this.jumpVelocity = 0.4
             } else if (key == 'ARROWUP') {
                 this.ArrowUp = true;
             } else if (key == 'ARROWDOWN') {
@@ -2399,18 +2397,20 @@ class UserController {
                 this.ArrowLeft = true;
             } else if (key == 'ARROWRIGHT') {
                 this.ArrowRight = true;
-            } else if (key === 'ShiftLeft') {
-                this.leftShift = true;
-            } else if (key === 'ShiftRight') {
-                this.rightShift = true;
+            } else if (key === 'SHIFT') {
+                this.wS = this.inSprint
+                this.aS = this.inSprint
+                this.dS = this.inSprint
+                this.sS = this.inSprint
+                this.shift = true;
             }
         })
         
         window.addEventListener('keyup', (e) => {
             const key = e.key.toUpperCase();
+
             if (key == 'W') {
                 user.w = false;
-                this.time_held.w = 0;
             } else if (key == 'A') {
                 this.a = false;
             } else if (key == 'S') {
@@ -2427,10 +2427,12 @@ class UserController {
                 this.ArrowLeft = false;
             } else if (key == 'ARROWRIGHT') {
                 this.ArrowRight = false;
-            } else if (key === 'ShiftLeft') {
-                this.leftShift = false;
-            } else if (key === 'ShiftRight') {
-                this.rightShift = false;
+            } else if (key === 'SHIFT') {
+                this.wS = .15
+                this.aS = .1
+                this.dS = .1
+                this.sS = .1
+                this.shift = false;
             }
         });
 
@@ -2450,6 +2452,8 @@ class UserController {
                     switch (intersects[i].object.name) {
                     case 'elevator-call-button':
                     case 'elevator-button':
+                        if (castle.elevator.processing) return;
+                        castle.elevator.processing = true;
                         intersects[i].object.material.color.set('white')
                         intersects[i].object.selected = true;
                         var interval = undefined
@@ -2484,6 +2488,7 @@ class UserController {
                                     m.position.y = targetHeight;
                                     console.log('reaching targetHeight', m.position.y)
                                     arrived = true
+                                    castle.elevator.processing = false;
                                 }
                             });
                             if (arrived) {
@@ -2535,37 +2540,29 @@ class UserController {
             var rightMovement = new THREE.Vector3();
 
             if (this.w) {
-                var time_held = performance.now() - this.time_held.w;
-                this.time_held.w = performance.now();
-                var MOVE_FORWARD = this.wS;
-
-                if (time_held > 500) {
-                    MOVE_FORWARD *= 11
-                }
-
                 this.camera.getWorldDirection(direction);
-                // Ignore the y component to keep movement on the horizontal plane
                 direction.y = 0;
-                direction.normalize();  // Normalize to ensure the vector length stays consistent
-                forwardMovement.add(direction.multiplyScalar(MOVE_FORWARD));
+                direction.normalize();
+                console.log(this.wS, window.user.wS)
+                forwardMovement.add(direction.multiplyScalar(this.wS));
             }
             if (this.s) {
                 this.camera.getWorldDirection(direction);
                 // Ignore the y component to keep movement on the horizontal plane
                 direction.y = 0;
                 direction.normalize();
-                forwardMovement.add(direction.multiplyScalar(this.isJumping ? -this.sS * 0.5 : -this.sS));
+                forwardMovement.add(direction.multiplyScalar(-this.sS));
             }
 
             if (this.a) {
                 this.camera.getWorldDirection(direction);
                 right.crossVectors(this.camera.up, direction).normalize();
-                rightMovement.add(right.multiplyScalar(this.isJumping ? this.aS * 0.5 : this.aS));
+                rightMovement.add(right.multiplyScalar(this.aS));
             }
             if (this.d) {
                 this.camera.getWorldDirection(direction);
                 right.crossVectors(this.camera.up, direction).normalize();
-                rightMovement.add(right.multiplyScalar(this.isJumping ? -this.dS * 0.5 : -this.dS));
+                rightMovement.add(right.multiplyScalar(-this.dS));
             }
 
             combinedMovement.add(forwardMovement).add(rightMovement);
@@ -2694,6 +2691,13 @@ class UserController {
             this.camera.velocity.y = 0;
             this.isJumping = false;
 
+            if (!this.shift) {
+                this.wS = .15
+                this.aS = .1
+                this.sS = .1
+                this.dS = .1
+            }
+
             this.updateTerrain(downIntersection);
         }
 
@@ -2705,6 +2709,14 @@ class UserController {
             this.camera.position.y = upIntersection.point.y - .5; // Adjust based on how close you want to stop
             this.camera.velocity.y = 0;
             this.isJumping = false;
+
+
+            if (!this.shift) {
+                this.wS = .15
+                this.aS = .1
+                this.sS = .1
+                this.dS = .1
+            }
 
             // Optional: handle additional ceiling collision logic here
         }
@@ -2732,6 +2744,14 @@ class UserController {
                 this.camera.position.y = intersection.point.y + 1;
                 this.camera.velocity.y = 0;
                 this.isJumping = false;
+
+
+                if (!this.shift) {
+                    this.wS = .15
+                    this.aS = .1
+                    this.sS = .1
+                    this.dS = .1
+                }
 
                 this.updateTerrain(intersection);
             }
@@ -2889,119 +2909,6 @@ class View {
         
         this.addUser();
 
-        function createRandomBezierCurve(heightLimit = 10) {
-            // Calculate the bounding box of all meshes
-            const boundingBox = new THREE.Box3();
-            terrain.meshes.forEach(mesh => boundingBox.expandByObject(mesh));
-        
-            // Get the bounds of the bounding box
-            const min = boundingBox.min;
-            const max = boundingBox.max;
-        
-            // Function to generate a random point within the bounding box and height limit
-            function randomPoint() {
-                return new THREE.Vector3(
-                    THREE.MathUtils.randFloat(min.x, max.x),
-                    THREE.MathUtils.randFloat(min.y, max.y + heightLimit),
-                    THREE.MathUtils.randFloat(min.z, max.z)
-                );
-            }
-        
-            // Create control points for the Bezier curve
-            const p0 = randomPoint();
-            const p1 = randomPoint();
-            const p2 = randomPoint();
-            const p3 = randomPoint();
-        
-            return new THREE.CubicBezierCurve3(p0, p1, p2, p3);
-        }
-
-        // Function to create a point light with a helper
-        function createPointLight(color, intensity, distance) {
-            const pointLight = new THREE.PointLight(color, intensity, distance);
-            const pointLightHelper = new THREE.PointLightHelper(pointLight);
-            return { pointLight, pointLightHelper };
-        }
-
-        function movePointLights(pointLights, curves, time) {
-            pointLights.forEach((light, index) => {
-                const t = (time % 1) * 0.1; // Slow down the movement
-                const position = curves[index].getPoint(t);
-                light.pointLight.position.copy(position);
-            });
-        }
-
-        // Create point lights
-        const pointLights = [
-            createPointLight(0xffffff, 1, 100),
-            createPointLight(0xffffff, 1, 100)
-        ];
-
-        // Add point lights and helpers to the scene
-        pointLights.forEach(({ pointLight, pointLightHelper }) => {
-            scene.add(pointLight);
-            scene.add(pointLightHelper);
-        });
-
-        // Create random Bezier curves for the point lights
-        const curves = [
-            createRandomBezierCurve(50),
-            createRandomBezierCurve(50)
-        ];
-
-        var mapQuadrant = +getComputedStyle(devview.children[0]).width.split('px')[0];
-        var centerTile = devview.children[12];
-        var mapCenter = (+getComputedStyle(centerTile).height.split('px')[0] / 2) + centerTile.offsetTop;
-        let time = 0;
-
-        // // [Timeline("Start")]
-        window.Animate = function() {
-            window.requestAnimationFrame(Animate);
-            window.sky.update();
-            window.user.handleMovement();
-            var newTerrain = window.terrain.updateTerrain(window.user.camera.position);
-            window.renderer.render(window.scene, window.user.camera);
-
-            // todo - add faeries like those from The Faerie Queene by Edmund Spenser
-            // simulating an infinite mythical environment
-            // movePointLights(pointLights, curves, time);
-            // time += 0.01; // Increment time to move the lights
-
-           
-            
-            // Calculate user position on the 5x5 grid
-            let userPosition = window.user.camera.position;
-            let posIncX = userPosition.x / terrain.quadrant / 2;
-            let posIncZ = userPosition.z / terrain.quadrant / 2;
-
-            if (Number.isNaN(posIncX)) {
-                posIncX = 0;
-            }
-            if (Number.isNaN(posIncZ)) {
-                posIncZ = 0;
-            }
-
-            // Calculate the pixel position relative to the center of the grid
-            var pointerX = posIncX * mapQuadrant + mapCenter;
-            var pointerY = posIncZ * mapQuadrant + mapCenter;
-
-            // Position the pointer
-            pointer.style.left = `${pointerX}px`;
-            pointer.style.top = `${pointerY}px`;
-
-            // Debugging
-
-            var centerKey = `${Math.round(userPosition.x / 128) * 128}_${Math.round(userPosition.z / 128) * 128}`;
-            document.querySelectorAll('.quadrant').forEach(q => {
-                for (var i = 0; i < terrain.meshes.length; i++) {
-                    document.getElementById(terrain.meshes[i].centerKey).classList.add('built');
-                }
-                q.classList.remove("on")
-            });
-            document.getElementById(centerKey).classList.add('on');
-
-        }
-
 
         Animate();
 
@@ -3076,8 +2983,8 @@ function getCenterOfGeometry(geometry) {
 
 
 document.getElementById('map').innerHTML = new Array(25).fill(``).map((html, index) => {
-    const x = ((index % 5) - 2) * 128; // -2, -1, 0, 1, 2 based on column
-    const z = (Math.floor(index / 5) - 2) * 128; // -2, -1, 0, 1, 2 based on row
+    const x = ((index % 5) - 2) * 200; // -2, -1, 0, 1, 2 based on column
+    const z = (Math.floor(index / 5) - 2) * 200; // -2, -1, 0, 1, 2 based on row
 
     // Return the HTML for each div, including the id in the format x_z
     return `<div class="quadrant" id="${x}_${z}">${x}_${z}</div>`;
@@ -3088,5 +2995,58 @@ window.VM = new ViewModel();
 window.view = new View();
 
 window.devview = document.getElementById('map');
+
+var mapQuadrant = +getComputedStyle(devview.children[0]).width.split('px')[0];
+var centerTile = devview.children[12];
+var mapCenter = (+getComputedStyle(centerTile).height.split('px')[0] / 2) + centerTile.offsetTop;
+let time = 0;
+
+// // [Timeline("Start")]
+window.Animate = () => {
+    window.requestAnimationFrame(Animate);
+    window.sky.update();
+    window.user.handleMovement();
+    var newTerrain = window.terrain.updateTerrain(window.user.camera.position);
+    window.renderer.render(window.scene, window.user.camera);
+
+    // todo - add faeries like those from The Faerie Queene by Edmund Spenser
+    // simulating an infinite mythical environment
+    // movePointLights(pointLights, curves, time);
+    // time += 0.01; // Increment time to move the lights
+
+   
+    
+    // Calculate user position on the 5x5 grid
+    let userPosition = window.user.camera.position;
+    let posIncX = userPosition.x / terrain.quadrant / 2;
+    let posIncZ = userPosition.z / terrain.quadrant / 2;
+
+    if (Number.isNaN(posIncX)) {
+        posIncX = 0;
+    }
+    if (Number.isNaN(posIncZ)) {
+        posIncZ = 0;
+    }
+
+    // Calculate the pixel position relative to the center of the grid
+    var pointerX = posIncX * mapQuadrant + mapCenter;
+    var pointerY = posIncZ * mapQuadrant + mapCenter;
+
+    // Position the pointer
+    pointer.style.left = `${pointerX}px`;
+    pointer.style.top = `${pointerY}px`;
+
+    // Debugging
+
+    var centerKey = `${Math.round(userPosition.x / 200) * 200}_${Math.round(userPosition.z / 200) * 200}`;
+    document.querySelectorAll('.quadrant').forEach(q => {
+        for (var i = 0; i < terrain.meshes.length; i++) {
+            document.getElementById(terrain.meshes[i].centerKey).classList.add('built');
+        }
+        q.classList.remove("on")
+    });
+    document.getElementById(centerKey).classList.add('on');
+
+}
 
 await VM.init("Peter", view);
