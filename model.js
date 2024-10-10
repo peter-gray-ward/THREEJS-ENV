@@ -17,7 +17,7 @@ class User {
   }
 }
 
-let t = 64
+let t = 100
 
 class Model {
   constructor(user) {
