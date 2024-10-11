@@ -2448,6 +2448,7 @@ class UserController {
             var intersects = raycaster.intersectObjects(scene.children);
 
             if (intersects.length > 0) {
+                console.log(scene.children.indexOf(intersects[0].object))
                 for (var i = 0; i < intersects.length; i++) {
                     switch (intersects[i].object.name) {
                     case 'elevator-call-button':
