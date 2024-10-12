@@ -19,7 +19,7 @@ export default class ViewModel {
 
         this.map[this.user.level].grassBladeDensity = 390
 
-
+        
 
         await view.init();
         // var xhr = new XMLHttpRequest();

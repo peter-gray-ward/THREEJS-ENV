@@ -17,7 +17,7 @@ class User {
   }
 }
 
-let t = 100
+let t = 500
 
 class Model {
   constructor(user) {
@@ -31,8 +31,8 @@ class Model {
         noiseHeight: t,
         segments: 32,
         sop: {
-            trees: t * 3,
-            grasses: t * .1
+            trees: t / 3,
+            grasses: t * .36
         },
         grasses: [],
         grass_triangles: [],
@@ -46,9 +46,9 @@ class Model {
             '#536c46', //
             '#5d6847', //
         ],
-        treeCondition: `!inCastle && (Math.random() < 0.0031)`,
+        treeCondition: `!inCastle && (Math.random() < 0.81)`,
         grassPatchPersistence: 0.01,//0.03,
-        grassBladeDensity: 640,
+        grassBladeDensity: 500,
         textures: {
           barks: Array.from({ length: 7 }, (_, i) => `/images/trees/bark/bark-${i + 1}.jpg`),
           branches: Array.from({ length: 4 }, (_, i) => `/images/trees/foliage/branches/tree-branch-${i + 1}.png`),
@@ -109,6 +109,8 @@ app.whenReady().then(() => {
       filePath = path.join(__dirname, 'src', url.replace('src/', ''));
     } else if (url.startsWith('images/')) {
       filePath = path.join(__dirname, 'images', url.replace('images/', ''));
+    } else if (url.startsWith('audio/')) {
+      filePath = path.join(__dirname, 'audio', url.replace('audio/', ''));
     } else if (/^random/.test(url)) {
       var imgs = fs.readdirSync('./images')
       filePath = path.join(__dirname, 'images', imgs[Math.floor(Math.random() * imgs.length)])
