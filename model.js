@@ -1,4 +1,3 @@
-// main.js (Electron main process)
 const { app, BrowserWindow, protocol, ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -17,27 +16,24 @@ class User {
   }
 }
 
-let t = 700
+let t = 64
 
 class Model {
   constructor(user) {
     const center = { x: 0, y: 0, z: 0 };
     this.map = {
       [user.level]: {
-        center,
-        scene_radius: t,
+        center, 
         quadrant: t, 
         noiseWidth: t * 2, 
         noiseHeight: t,
-        segments: 50,
+        segments: 32,
         sop: {
-            trees: t * .7,
-            grasses: t * .7
+            trees: t * 3,
+            grasses: t * .8
         },
         grasses: [],
-        grass_triangles: [],
         trees: [],
-        grounds: [],
         Grass: [
             '#33462d', //
             '#435c3a', //
@@ -46,22 +42,19 @@ class Model {
             '#536c46', //
             '#5d6847', //
         ],
-        treeCondition: `!inCastle && (Math.random() < 0.1)`,
+        treeCondition: `!inCastle && (Math.random() < 0.031 || (Math.random() < 0.3 && !isNearGrassPatch))`,
         grassPatchPersistence: 0.01,//0.03,
-        grassBladeDensity: 10,
         textures: {
           barks: Array.from({ length: 7 }, (_, i) => `/images/trees/bark/bark-${i + 1}.jpg`),
           branches: Array.from({ length: 4 }, (_, i) => `/images/trees/foliage/branches/tree-branch-${i + 1}.png`),
-          foliage: Array.from({ length: 7 }, (_, i) => `/images/trees/foliage/textures/foliage-${i + 1}.jpg`),
-          art: Array.from({ length: 5 }, (_, i) => `/images/painting${i + 1}.jpg`),
-          wall: Array.from({ length: 18 }, (_, i) => `/images/wall${i + 1}.jpg`),
-          sunflower: Array.from({ length: 5 }, (_, i) => `/images/wall${i + 1}.jpg`),
+          foliage: Array.from({ length: 7 }, (_, i) => `/images/trees/foliage/textures/foliage-${i + 1}.jpg`)
         },
         amplitude: 50,
         persistence: 0.15,
-        altitudeVariance: 20,
+        altitudeVariance: 10,
         width: t * 2,
-        height: t * 2
+        height: t * 2,
+        grassBladeDensity: 300
       }
     };
     this.user = user;
@@ -109,11 +102,6 @@ app.whenReady().then(() => {
       filePath = path.join(__dirname, 'src', url.replace('src/', ''));
     } else if (url.startsWith('images/')) {
       filePath = path.join(__dirname, 'images', url.replace('images/', ''));
-    } else if (url.startsWith('audio/')) {
-      filePath = path.join(__dirname, 'audio', url.replace('audio/', ''));
-    } else if (/^random/.test(url)) {
-      var imgs = fs.readdirSync('./images')
-      filePath = path.join(__dirname, 'images', imgs[Math.floor(Math.random() * imgs.length)])
     } else {
       filePath = path.join(__dirname, url);
     }
