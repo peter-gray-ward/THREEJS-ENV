@@ -14,6 +14,13 @@ export default class ViewModel {
         console.log("model loaded", model);
         this.user = model.user;
         this.map = model.map;
+
+
+
+        this.map[this.user.level].grassBladeDensity = 390
+
+
+
         await view.init();
         // var xhr = new XMLHttpRequest();
         // xhr.open("GET", `http://localhost:8080/load/${username}`, true);

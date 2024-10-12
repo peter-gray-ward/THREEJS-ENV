@@ -24,7 +24,8 @@ class Model {
     const center = { x: 0, y: 0, z: 0 };
     this.map = {
       [user.level]: {
-        center, 
+        center,
+        scene_radius: t,
         quadrant: t, 
         noiseWidth: t * 2, 
         noiseHeight: t,
@@ -34,6 +35,7 @@ class Model {
             grasses: t * .8
         },
         grasses: [],
+        grass_triangles: [],
         trees: [],
         Grass: [
             '#33462d', //
@@ -45,6 +47,7 @@ class Model {
         ],
         treeCondition: `!inCastle && (Math.random() < 0.031 || (Math.random() < 0.3 && !isNearGrassPatch))`,
         grassPatchPersistence: 0.01,//0.03,
+        grassBladeDensity: 640,
         textures: {
           barks: Array.from({ length: 7 }, (_, i) => `/images/trees/bark/bark-${i + 1}.jpg`),
           branches: Array.from({ length: 4 }, (_, i) => `/images/trees/foliage/branches/tree-branch-${i + 1}.png`),
@@ -54,8 +57,7 @@ class Model {
         persistence: 0.15,
         altitudeVariance: 10,
         width: t * 2,
-        height: t * 2,
-        grassBladeDensity: 300
+        height: t * 2
       }
     };
     this.user = user;
