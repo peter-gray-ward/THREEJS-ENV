@@ -32,7 +32,7 @@ class Model {
         segments: 32,
         sop: {
             trees: t * 3,
-            grasses: t * .8
+            grasses: t * .1
         },
         grasses: [],
         grass_triangles: [],
@@ -46,13 +46,16 @@ class Model {
             '#536c46', //
             '#5d6847', //
         ],
-        treeCondition: `!inCastle && (Math.random() < 0.031 || (Math.random() < 0.3 && !isNearGrassPatch))`,
+        treeCondition: `!inCastle && (Math.random() < 0.0031)`,
         grassPatchPersistence: 0.01,//0.03,
         grassBladeDensity: 640,
         textures: {
           barks: Array.from({ length: 7 }, (_, i) => `/images/trees/bark/bark-${i + 1}.jpg`),
           branches: Array.from({ length: 4 }, (_, i) => `/images/trees/foliage/branches/tree-branch-${i + 1}.png`),
-          foliage: Array.from({ length: 7 }, (_, i) => `/images/trees/foliage/textures/foliage-${i + 1}.jpg`)
+          foliage: Array.from({ length: 7 }, (_, i) => `/images/trees/foliage/textures/foliage-${i + 1}.jpg`),
+          art: Array.from({ length: 5 }, (_, i) => `/images/painting${i + 1}.jpg`),
+          wall: Array.from({ length: 18 }, (_, i) => `/images/wall${i + 1}.jpg`),
+          sunflower: Array.from({ length: 5 }, (_, i) => `/images/wall${i + 1}.jpg`),
         },
         amplitude: 50,
         persistence: 0.15,
@@ -106,6 +109,9 @@ app.whenReady().then(() => {
       filePath = path.join(__dirname, 'src', url.replace('src/', ''));
     } else if (url.startsWith('images/')) {
       filePath = path.join(__dirname, 'images', url.replace('images/', ''));
+    } else if (/^random/.test(url)) {
+      var imgs = fs.readdirSync('./images')
+      filePath = path.join(__dirname, 'images', imgs[Math.floor(Math.random() * imgs.length)])
     } else {
       filePath = path.join(__dirname, url);
     }
