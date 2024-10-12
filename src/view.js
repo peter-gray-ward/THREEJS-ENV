@@ -1069,17 +1069,36 @@ class Terrain {
                     indices.push(a, b, d);
                     indices.push(b, c, d);
                     
-
                     const t1 = TriangleMesh(vertices, a, b, d, this.width, this.height);
                     const t2 = TriangleMesh(vertices, b, c, d, this.width, this.height);
 
                     [t1, t2].forEach((triangle) => {
+                        scene.add(triangle)
+
+                        var normal = new THREE.Vector3();  // Create a vector to hold the normal
+                        triangle.geometry.computeVertexNormals();  // Ensure normals are computed if necessary
+                        normal.copy(triangle.geometry.attributes.normal);  // Get the first normal for simplicity
+
+                        // Normalize the normal vector just in case
+                        normal.normalize();
+
+
+                        // normal.fromBufferAttribute(triangle.geometry.attributes.normal, 0);  // Getting the first normal for simplicity
+
+                        // Define how far you want to move the mesh away from its normal (distance)
+                        var distance = randomInRange(0.2, 0.5);  // Adjust this value to move the mesh further or closer
+
+                        // Move the mesh along the normal vector
+                        triangle.position.add(normal.multiplyScalar(-distance));
+
+                        // Define the amount of rotation (in radians), positive for counter-clockwise and negative for clockwise
+                        var angle = Math.random() * Math.PI * 2//-Math.PI / 4; 
+                        triangle.rotateOnAxis(normal, angle)
                         this.grounds.push(triangle);
 
-                        const normal = triangle.normal;
-                        const slope = Math.atan2(normal.y, normal.x);
-
-                        const isCliff = slope > 0.5 || slope < -0.5;
+                        // const normal = triangle.normal;
+                        // const slope = Math.atan2(normal.y, normal.x);
+                        // const isCliff = slope > 0.5 || slope < -0.5;
                         
                         //
                         // Grasses!
@@ -1091,6 +1110,9 @@ class Terrain {
                             const grassResult = this.createGrassPatch(indices, vertices, triangle);
 
                             VM.map[VM.user.level].grasses.push(grassResult);
+
+                            triangle.rotation.z = Math.random() * Math.PI;
+                            triangle.rotation.x = randomInRange(Math.PI, Math.PI * 2)
 
                         }
                         //
@@ -1106,9 +1128,15 @@ class Terrain {
                         // Cliffs!
                         //
 
-                        if (isCliff) {
-                            this.cliffs.push(triangle.triangle);
-                        }
+                        // if (isCliff) {
+                        //     this.cliffs.push(triangle.triangle);
+                        // }
+
+
+
+
+
+                        VM.map[VM.user.level].grounds.push(triangle)
                     });
 
                     
@@ -1141,7 +1169,11 @@ class Terrain {
 
                     } else {
                         // No grass means brown soil
-                        colors.push(randomInRange(0.1, 0.3), randomInRange(0.11, 0.15), randomInRange(0, 0.08));  // RGB color for dark brown soil
+                        if (Math.random() < 0.05) {
+                            colors.push(randomInRange(0.1, 0.3), randomInRange(0.11, 0.15), randomInRange(0, 0.08));
+                        }  else {
+                            colors.push(randomInRange(0.1, 0.43), randomInRange(0.81, 0.15), randomInRange(0.1, 0.99));
+                        }// RGB color for dark brown soil
                     }
                 }
             }
@@ -1173,7 +1205,7 @@ class Terrain {
             vertexColors: true,  // Enable vertex colors
             side: THREE.DoubleSide,
             wireframe: false,
-            transparent: true,
+            transparent: false,
             opacity: 0
         });
 
@@ -2103,27 +2135,27 @@ class Terrain {
 
 
         // Add triangles within the SOP to the scene
-        this.grounds.forEach((mesh) => {
-            const triangle = mesh.triangle; // Get the triangle representation from the mesh
-            const triangleCenter = this.getTriangleCenter(triangle);
+        // VM.map[VM.user.level].grounds.forEach((mesh) => {
+        //     const triangle = mesh.triangle; // Get the triangle representation from the mesh
+        //     const triangleCenter = this.getTriangleCenter(triangle);
 
-            if (!mesh.parent && isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
-                scene.add(mesh);
-            } else if (mesh.parent && !isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
-                scene.remove(mesh);
-            }
-        });
+        //     if (!mesh.parent && isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
+        //         scene.add(mesh);
+        //     } else if (mesh.parent && !isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
+        //         scene.remove(mesh);
+        //     }
+        // });
 
         // Repeat for cliffs and grounds clusters if needed
-        this.cliffMeshes.forEach((mesh) => {
-            const meshCenter = this.getTriangleCenter(mesh.triangle);
-            if ((meshCenter.x < sopCenter.x - sopRadius || meshCenter.x > sopCenter.x + sopRadius ||
-                meshCenter.z < sopCenter.z - sopRadius || meshCenter.z > sopCenter.z + sopRadius)) {
-                scene.remove(mesh);
-            } else {
-                scene.add(mesh);
-            }
-        });
+        // this.cliffMeshes.forEach((mesh) => {
+        //     const meshCenter = this.getTriangleCenter(mesh.triangle);
+        //     if ((meshCenter.x < sopCenter.x - sopRadius || meshCenter.x > sopCenter.x + sopRadius ||
+        //         meshCenter.z < sopCenter.z - sopRadius || meshCenter.z > sopCenter.z + sopRadius)) {
+        //         scene.remove(mesh);
+        //     } else {
+        //         scene.add(mesh);
+        //     }
+        // });
 
         // Remove triangles outside the SOP from the scene
         VM.map[VM.user.level].trees.forEach((tree) => {
@@ -2373,6 +2405,13 @@ class Terrain {
     }
 }
 
+// FOR THE GRASSES
+let lastCheckTime = 0;
+const checkInterval = 100; // Check every 100ms (adjust as needed)
+let lastPosition = new THREE.Vector3();
+let velocity = new THREE.Vector3();
+const dampeningFactor = 0.9; // Controls how quickly the force reduces
+
 class UserController {
     constructor(terrain, bvh) {
         this.terrain = terrain;
@@ -2548,9 +2587,9 @@ class UserController {
         this.camera.foot = null;
         this.camera.position.set(position.x, position.y + 2, position.z);
         this.camera.velocity = new THREE.Vector3(0, 0, 0);
-        this.cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
+        this.cameraBoundingBox = () => new THREE.Box3().setFromCenterAndSize(
             this.camera.position,
-            new THREE.Vector3(1, 1, 1) // Adjust size if needed
+            new THREE.Vector3(1.25, .2, .5) // Adjust size if needed
         );
     }
 
@@ -2575,7 +2614,6 @@ class UserController {
                 this.camera.getWorldDirection(direction);
                 direction.y = 0;
                 direction.normalize();
-                console.log(this.wS, window.user.wS)
                 forwardMovement.add(direction.multiplyScalar(this.wS));
             }
             if (this.s) {
@@ -2668,6 +2706,69 @@ class UserController {
             if (intersectsCastle.length > 0 && intersectsCastle.some(i => i.distance < 0.2)) {
                 this.handleCastleCollision(intersectsCastle[0], dir, collisionResponseForce);
             }
+
+
+            const now = performance.now();
+
+            // Throttle how often collision detection happens
+            if (now - lastCheckTime < checkInterval) return;
+            lastCheckTime = now;
+
+            // Get camera bounding box only once per check
+            const cameraBoundingBox = user.cameraBoundingBox();
+
+            // Calculate user velocity based on the difference in positions between frames
+            velocity.subVectors(this.camera.position, lastPosition);
+
+           // Helper function to apply rotation to a vector
+            function rotateVertex(vertex, axis, angle) {
+                const quaternion = new THREE.Quaternion();  // Create a quaternion for rotation
+                quaternion.setFromAxisAngle(axis, angle);   // Set rotation axis and angle
+
+                // Apply rotation
+                vertex.applyQuaternion(quaternion);
+            }
+
+            // Process grass collisions
+            VM.map[VM.user.level].grasses
+                .filter((gc) => {
+                    // Compute bounding sphere if it doesn't exist
+                    if (!gc.mesh.boundingSphere) {
+                        gc.mesh.computeBoundingSphere();
+                    }
+
+                    // Check if grass overlaps with the camera's bounding box
+                    return gc.mesh.boundingSphere.intersectsBox(cameraBoundingBox);
+                })
+                .slice(0, 5) // Limit processing to 5 grasses per interval
+                .forEach((gc) => {
+                    // Get the vertices of the grass mesh
+                    const positions = gc.mesh.geometry.attributes.position.array;
+
+                    // Define the axis of rotation (e.g., y-axis for rotation around the vertical axis)
+                    const rotationAxis = new THREE.Vector3(Math.random(), Math.random(), Math.random());  // y-axis
+                    const rotationAngle = Math.PI / 16;  // Example: rotate by 11.25 degrees
+
+                    // Rotate each vertex in the mesh's position array
+                    for (let i = 0; i < positions.length; i += 3) {
+                        const vertex = new THREE.Vector3(positions[i], positions[i + 1], positions[i + 2]);
+
+                        // Rotate the vertex around the y-axis
+                        rotateVertex(vertex, rotationAxis, rotationAngle);
+
+                        // Update the position array with the new rotated vertex
+                        positions[i] = vertex.x;
+                        positions[i + 1] = vertex.y;
+                        positions[i + 2] = vertex.z;
+                    }
+
+                    // Mark the geometry as needing an update
+                    gc.mesh.geometry.attributes.position.needsUpdate = true;
+                });
+
+
+            // Update lastPosition for the next frame
+            lastPosition.copy(this.camera.position);
         }
     }
 
@@ -2687,18 +2788,28 @@ class UserController {
     // Handle castle part collision
     handleCastleCollision(intersection, direction, responseForce) {
         const responseDirection = this.camera.position.clone().sub(intersection.point).normalize();
-
-        // If it's a vertical intersection (like standing on a foundation)
         if (isVerticalIntersection(intersection.face.normal)) {
             this.camera.velocity.y = 0;
-            this.camera.position.y = intersection.point.y + 1;  // Adjust height for foundation
-
-            // Optionally, you can "stop" here or adjust new terrain logic
-            // this.terrain.createNewTerrain(); // Create new terrain logic, if necessary
+            this.camera.position.y = intersection.point.y + 1;
         } else {
-            // Horizontal collision with walls, push the player away
             this.camera.position.add(responseDirection.multiplyScalar(responseForce));
         }
+    }
+
+    handleGrassCollision(center, grassResult) {
+        const responseDirection = this.camera.position.clone().sub(center).normalize();
+
+        // debugger
+        this.camera.position.add(responseDirection.multiplyScalar(0.001));
+
+        // // If it's a vertical intersection (like standing on a foundation)
+        // if (isVerticalIntersection(intersection.face.normal)) {
+        //     this.camera.velocity.y = 0;
+        //     this.camera.position.y = intersection.point.y + 1;  // Adjust height for foundat
+        // } else {
+        //     // Horizontal collision with walls, push the player away
+        //     this.camera.position.add(responseDirection.multiplyScalar(responseForce));
+        // }
     }
 
     handleJumping() {

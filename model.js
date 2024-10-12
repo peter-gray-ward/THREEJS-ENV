@@ -37,6 +37,7 @@ class Model {
         grasses: [],
         grass_triangles: [],
         trees: [],
+        grounds: [],
         Grass: [
             '#33462d', //
             '#435c3a', //

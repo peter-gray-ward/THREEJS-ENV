@@ -187,7 +187,7 @@ export default class Terrain {
                     const t2 = this.TriangleMesh(vertices, b, c, d, this.width, this.height);
 
                     [t1, t2].forEach((triangle) => {
-                        this.grounds.push(triangle.triangle);
+                        VM.map[VM.user.level].grounds.push(triangle);
 
                         const normal = triangle.normal;
                         const slope = Math.atan2(normal.y, normal.x);
@@ -351,7 +351,7 @@ export default class Terrain {
 
         const triangleMaterial = new THREE.MeshStandardMaterial({
             transparent: false,
-            wireframe: true,
+            wireframe: false,
             color: 'red',
             side: THREE.DoubleSide
             // color: new THREE.Color(Math.random(), Math.random(), Math.random())
@@ -1284,16 +1284,24 @@ export default class Terrain {
 
 
         // Add triangles within the SOP to the scene
-        // this.grassTriangles.forEach((mesh) => {
-        //     const triangle = mesh.triangle; // Get the triangle representation from the mesh
-        //     const triangleCenter = this.getTriangleCenter(triangle);
+        this.grounds.forEach((mesh) => {
+            var a = mesh.triangle.a;  // Vertex A of the triangle
+            var b = mesh.triangle.b;  // Vertex B of the triangle
+            var c = mesh.triangle.b;  // Vertex C of the triangle
 
-        //     if (!mesh.parent && isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
-        //         scene.add(mesh);
-        //     } else if (mesh.parent && !isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
-        //         scene.remove(mesh);
-        //     }
-        // });
+            // Calculate the center of the triangle (average of the three vertices)
+            var triangleCenter = new THREE.Vector3(
+                (a.x + b.x + c.x) / 3,
+                (a.y + b.y + c.y) / 3,
+                (a.z + b.z + c.z) / 3
+            );
+
+            if (!mesh.parent && isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
+                scene.add(mesh);
+            } else if (mesh.parent && !isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
+                scene.remove(mesh);
+            }
+        });
 
         // Repeat for cliffs and grounds clusters if needed
         this.cliffMeshes.forEach((mesh) => {
