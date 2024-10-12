@@ -196,7 +196,7 @@ export default class Terrain {
 
 
                         //  // Check if VM triangle is either in a grass patch or adjacent to one
-                        const isNearGrassPatch = (grassPatches[i][j] || 
+                        const isNearGrassPatch = false && (grassPatches[i][j] || 
                                                   (i > 0 && grassPatches[i - 1][j]) ||  // Check left
                                                   (i < this.segments && grassPatches[i + 1][j]) ||  // Check right
                                                   (j > 0 && grassPatches[i][j - 1]) ||  // Check above

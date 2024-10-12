@@ -4,7 +4,7 @@ import ViewModel from "/src/view-model.js";
 
 const evaluator = new Evaluator();
 
-
+const HOUSEDIM = [80,50]
 
 window.THREE = THREE;
 
@@ -25,10 +25,9 @@ window.map = {}
 var oceanBackground = null;
 
 const plantTexture = [
-    new THREE.TextureLoader().load("/images/trees/foliage/branches/tree-branch-1.png"),
-    new THREE.TextureLoader().load("/images/trees/foliage/branches/tree-branch-2.png"),
-    new THREE.TextureLoader().load("/images/trees/foliage/branches/tree-branch-3.png"),
-    new THREE.TextureLoader().load("/images/trees/foliage/branches/tree-branch-4.png")
+    // new THREE.TextureLoader().load("/images/trees/foliage/branches/tree-branch-1.png"),
+    new THREE.TextureLoader().load("/images/trees/foliage/branches/tree-branch-2.png")
+    // new THREE.TextureLoader().load("/images/trees/foliage/branches/tree-branch-3.png")
 ]
 
 function Step(which) {
@@ -70,7 +69,7 @@ class GrassPatch {
     }
 }
 
-const groundMap  = new THREE.TextureLoader().load("/images/ground-1.jpg")
+const groundMap  = new THREE.TextureLoader().load("/images/ground-0.jpg")
 
 function TriangleMesh(vertices, a, b, c, terrainWidth, terrainHeight) {
 
@@ -98,7 +97,8 @@ function TriangleMesh(vertices, a, b, c, terrainWidth, terrainHeight) {
     triangleGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));  // Add UVs
 
     const triangleMaterial = new THREE.MeshStandardMaterial({
-        transparent: false,
+        transparent: true,
+        opacity: 0.3,
         wireframe: false,
         side: THREE.DoubleSide,
         // color: new THREE.Color(VM.map[VM.user.level].Grass[2])
@@ -146,17 +146,17 @@ class Sky {
     constructor(user) {
         this.counter = 0;
         this.user = user;
-        this.sceneRadius = 1150;
+        this.sceneRadius = 550;
         this.full_circle = 2 * Math.PI;
         this.time = 0;
 
-        // this.hemisphereLight = new THREE.HemisphereLight(0xfefeff, 0x444444, 1.15); // Sky and ground color
-        // this.hemisphereLight.position.set(0, 0, 0);
-        // scene.add(this.hemisphereLight);
+        this.hemisphereLight = new THREE.HemisphereLight(0xfefeff, 0x444444, .0015); // Sky and ground color
+        this.hemisphereLight.position.set(0, 0, 0);
+        scene.add(this.hemisphereLight);
 
 
-        this.sun = new THREE.DirectionalLight(0xffffff, 10);
-        this.sun.position.set(0, 150, 0);
+        this.sun = new THREE.DirectionalLight(0xffffff, 3);
+        this.sun.position.set(0, sceneRadius, 0);
         scene.add(this.sun)
         this.sun.lookAt(0, 0, 0)
 
@@ -167,21 +167,21 @@ class Sky {
         this.sun.shadow.mapSize.height = 1024;
 
         // Configure the shadow camera for the directional light (this affects shadow casting area)
-        this.sun.shadow.camera.near = 0.05;
-        this.sun.shadow.camera.far = 500;
-        this.sun.shadow.camera.left = -500;
-        this.sun.shadow.camera.right = 500;
-        this.sun.shadow.camera.top = 500;
-        this.sun.shadow.camera.bottom = -500;
+        this.sun.shadow.camera.near = 0.005;
+        this.sun.shadow.camera.far = 1200;
+        this.sun.shadow.camera.left = -1200;
+        this.sun.shadow.camera.right = 1200;
+        this.sun.shadow.camera.top = 1200;
+        this.sun.shadow.camera.bottom = -1200;
         this.sky = [];
         this.sphere = new THREE.Mesh(
-            new THREE.SphereGeometry(2, 30, 30), 
+            new THREE.SphereGeometry(20, 30, 30), 
             new THREE.MeshBasicMaterial({ 
                 side: THREE.DoubleSide, 
                 color: 'white' 
             })
         );
-        this.sphere.position.set(0, 150, 0);
+        this.sphere.position.set(0, this.sun.y - 150, 0);
         scene.add(this.sphere)
 
         this.createDome();
@@ -189,10 +189,10 @@ class Sky {
     }
 
  createDome() {
-    var gridSize = 50; // Larger grid size for more detail at the horizon
+    var gridSize = 20; // Larger grid size for more detail at the horizon
     var radius = this.sceneRadius;
     var maxdist = 0;
-    
+    var highestY = 0
     for (var i = 0; i < gridSize; i++) {
         for (var j = 0; j < gridSize; j++) {
             // Calculate spherical coordinates
@@ -204,10 +204,12 @@ class Sky {
             var z = radius * Math.cos(phi);
             var y = radius * Math.sin(phi) * Math.sin(theta);
 
+            if (y > highestY) highestY = y
+
             // For the horizon, create smaller tiles and blend colors
-            var tileSize = randomInRange(100, 200); // Smaller tiles
-            if (y < radius * 0.11) { // Near horizon
-                tileSize /= 20
+            var tileSize = 150; // Smaller tiles
+            if (y <= 1) { // Near horizon
+                tileSize /= 3
             }
             var planeGeometry = new THREE.PlaneGeometry(tileSize, tileSize);
             
@@ -224,13 +226,13 @@ class Sky {
             });
 
             // If near the horizon, add cloud texture
-            if (y < radius * 0.08) { // Near horizon
-                planeMaterial.map = new THREE.TextureLoader().load('/images/cloud_texture.png'); // Cloud texture
-                planeMaterial.transparent = true;
-            }
+            // if (y < radius * 0.08) { // Near horizon
+            //     planeMaterial.map = new THREE.TextureLoader().load('/images/cloud_texture.png'); // Cloud texture
+            //     planeMaterial.transparent = true;
+            // }
 
             var plane = new THREE.Mesh(planeGeometry, planeMaterial);
-            plane.position.set(x, y - this.sceneRadius * .1, z);
+            plane.position.set(x, y , z);
             plane.rotation.y = plane.rotation.y >= this.full_circle ? 0 : plane.rotation.y += 0.05;
             plane.lookAt(window.user.camera.position.x, user.camera.position.y, user.camera.position.z);
             
@@ -245,24 +247,27 @@ class Sky {
             scene.add(plane);
         }
     }
-}
+
+    this.sun.position.y = highestY
+    this.sphere.position.y = highestY
+ }   
 
 
 
 
 update() {
-    this.time += 0.0005;
+    // this.time += 0.005;
     var theta = this.full_circle * this.time;
     var sunTheta = theta;  // Sun's azimuthal angle (around the dome horizontally)
     var sunPhi = Math.PI / 2;  // Sun stays at the middle of the dome (hemisphere)
 
-    // Update the sun's position (optional if you want to visualize it)
-    var sunX = this.sceneRadius * Math.sin(sunPhi) * Math.cos(sunTheta);
-    var sunY = this.sceneRadius * Math.sin(sunPhi) * Math.sin(sunTheta);
-    var sunZ = this.sceneRadius * Math.cos(sunPhi);
+    // // Update the sun's position (optional if you want to visualize it)
+    // var sunX = this.sceneRadius * Math.sin(sunPhi) * Math.cos(sunTheta);
+    // var sunY = this.sceneRadius * Math.sin(sunPhi) * Math.sin(sunTheta);
+    // var sunZ = this.sceneRadius * Math.cos(sunPhi);
 
-    this.sun.position.set(sunX, sunY, sunZ);
-    this.sphere.position.set(sunX, sunY, sunZ);
+    // this.sun.position.set(sunX, sunY, sunZ);
+    // this.sphere.position.set(sunX, sunY, sunZ);
 
     for (var i = 0; i < this.sky.length; i++) {
         var skyTheta = this.sky[i].theta;  // Azimuthal angle of the plane
@@ -285,11 +290,13 @@ update() {
         intensity = Math.max(0, Math.min(1, intensity));
 
         // Define the colors for the gradient (white near the sun, dark blue away)
-        var colorFar = new THREE.Color('#150c25');  // Far color (dark blue)
-        var colorNear = new THREE.Color(0x00f0ff);  // Near color (light blue)
+        var colorFar = new THREE.Color(0x00f0ff);  // Far color (dark blue)
+        var colorNear = new THREE.Color(0x00f0ff);
 
         // Interpolate between the colors based on intensity
         var color = new THREE.Color().lerpColors(colorFar, colorNear, intensity);
+
+
 
         // Update the material color based on angular proximity to the sun
         var horizonThreshold = this.sceneRadius * 0.15;  // Adjust based on where the horizon should be
@@ -302,6 +309,11 @@ update() {
         } else {
             this.sky[i].material.color.copy(color);  // Use the interpolated color
             this.sky[i].material.transparent = false;
+        }
+
+        if (this.sun.position.y < 0) {
+            this.sky[i].material.transparent = true;
+            this.sky[i].material.opacity = 0.1;
         }
 
         this.sky[i].material.needsUpdate = true;  // Ensure material is updated
@@ -325,7 +337,7 @@ class Castle {
         if (this.centerPoint.y < 0) {
             this.centerPoint.y = .01
         }
-        this.houseDim = [30, 19]; // Width and Length of the house
+        this.houseDim = HOUSEDIM; // Width and Length of the house
         this.parts = parts ? parts : []
         this.elevator = []
         this.wallHeight = 5;
@@ -877,7 +889,7 @@ class Terrain {
 
                 v.y += variance;
 
-                var inCastle = v.x > -45 && v.x < 45 && v.z > -30 && v.z < 30
+                var inCastle = v.x > -HOUSEDIM[0] && v.x < HOUSEDIM[0] && v.z > -HOUSEDIM[0] && v.z < HOUSEDIM[1]
                 if (inCastle) {
                     v.y = 0
                 }
@@ -918,27 +930,25 @@ class Terrain {
             case 'dense':
                 for (let i = 0; i < this.segments; i++) {
                     for (let j = 0; j < this.segments; j++) {
-                        for (var k = 0; k < 3; k++) {
-                            grassPatches[i][j] = Math.random() < 0.09;
-                        }
+                        grassPatches[i][j] = Math.random() < 0.09;
+                        
                     }
                 }
                 break;
             case 'sparse':
                 for (let i = 0; i < this.segments; i++) {
                     for (let j = 0; j < this.segments; j++) {
-                        for (var k = 0; k < 3; k++) {
-                            grassPatches[i][j] = Math.random() < 0.009;
-                        }
+                        grassPatches[i][j] = Math.random() < 0.009;
+                        
                     }
                 }
                 break;
             case 'half':
                 for (let i = 0; i < this.segments; i++) {
                     for (let j = 0; j < this.segments; j++) {
-                        for (var k = 0; k < 3; k++) {
-                            grassPatches[i][j] = Math.random() < 0.05;
-                        }
+                        grassPatches[i][j] = Math.random() < 0.05;
+                        
+
                     }
                 }
                 break;
@@ -966,9 +976,9 @@ class Terrain {
                 v.y = (1 - x) * (1 - y) * v0.y + x * (1 - y) * v1.y + x * y * v2.y + (1 - x) * y * v3.y;
                 v.z = (1 - x) * (1 - y) * v0.z + x * (1 - y) * v1.z + x * y * v2.z + (1 - x) * y * v3.z;
 
-                var inCastle = v.x > -50 && v.x < 50 && v.z > -35 && v.z < 35
+                var inCastle = v.x > -HOUSEDIM[0] && v.x < HOUSEDIM[0] && v.z > -HOUSEDIM[1] && v.z < HOUSEDIM[1]
 
-                var isNearGrassPatch = (grassPatches[i][j] || 
+                var isNearGrassPatch = !inCastle && (grassPatches[i][j] || 
                                           (i > 0 && grassPatches[i - 1][j]) ||  // Check left
                                           (i < this.segments && grassPatches[i + 1][j]) ||  // Check right
                                           (j > 0 && grassPatches[i][j - 1]) ||  // Check above
@@ -980,7 +990,7 @@ class Terrain {
                 );
 
 
-                const isTree = true//eval(this.treeCondition);
+                const isTree = eval(this.treeCondition);
 
                 if (a >= 0 && b >= 0 && c >= 0 && d >= 0 && a < vertices.length / 3 && b < vertices.length / 3 && c < vertices.length / 3 && d < vertices.length / 3) {
                     indices.push(a, b, d);
@@ -2148,9 +2158,8 @@ class Terrain {
         foliageTexture.repeat.set(10, 10); // Increase these numbers for more repetitions and smaller texture
 
         let sphereMaterial = new THREE.MeshPhongMaterial({
-            color: 'white',
-            map: foliageTexture,
-            transparent: false,
+            color: new THREE.Color(0.2, randomInRange(0.9, 1), 0.2),
+            transparent: true,
             specular: new THREE.Color(0x000000), // No specular highlights
             shininess: 0, // Minimum shininess to reduce the glossy effect
         });
@@ -2205,20 +2214,20 @@ class Terrain {
         scene.add(planeMesh);
 
         // Adding rotating triangles around the foliage sphere
-        const triangleGeometry = new THREE.BufferGeometry();
-        const vertices = new Float32Array([
-            0, 1, 0,  // Vertex 1
-            -1, -1, 0, // Vertex 2
-            1, -1, 0   // Vertex 3
-        ]);
-        triangleGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-        const triangleMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide });
-        const triangleMesh = new THREE.Mesh(triangleGeometry, triangleMaterial);
-        scene.add(triangleMesh);
+        // const triangleGeometry = new THREE.BufferGeometry();
+        // const vertices = new Float32Array([
+        //     0, 1, 0,  // Vertex 1
+        //     -1, -1, 0, // Vertex 2
+        //     1, -1, 0   // Vertex 3
+        // ]);
+        // triangleGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+        // const triangleMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide });
+        // const triangleMesh = new THREE.Mesh(triangleGeometry, triangleMaterial);
+        // scene.add(triangleMesh);
 
         // Position and rotation logic for planes and triangles
         planeMesh.position.set(xS, yS + foliageRadius, zS);
-        triangleMesh.position.set(xS, yS + foliageRadius, zS);
+        // triangleMesh.position.set(xS, yS + foliageRadius, zS);
 
 
         return new Terrain.Tree(tubeMesh, sphere);
@@ -2262,28 +2271,28 @@ class Terrain {
     createGrassResult(indices, vertices, triangleMesh, bladeCount = 11, bladeHeight = 1, bladeWidth = 0.1) {
         var triangle = triangleMesh.triangle
         
-        var bd = randomInRange(1, 32)
+        var bd = randomInRange(1, 15)
 
         // const bladeGeometry = new THREE.PlaneGeometry(bd / 17, bd, 1, 4);
         const GEOMETRIES = [
             new THREE.PlaneGeometry(bd / 17, bd, 1, 4),
-            new THREE.BoxGeometry(bd / 17, bd, bd / 17),
-            new THREE.SphereGeometry(bd / 17, 8, 8),
+            // new THREE.BoxGeometry(bd / 17, bd, bd / 17),
+            // new THREE.SphereGeometry(bd / 17, 8, 8),
             // new THREE.CylinderGeometry(bd / 17, bd / 17, bd, 8),
             // new THREE.ConeGeometry(bd / 17, bd, 8),
             // new THREE.TorusGeometry(bd / 17, bd / 34, 8, 16),
             // new THREE.TetrahedronGeometry(bd / 17),
-            new THREE.IcosahedronGeometry(bd / 17),
-            new THREE.OctahedronGeometry(bd / 17),
-            new THREE.DodecahedronGeometry(bd / 17),
-            new THREE.RingGeometry(bd / 34, bd / 17, 8)
+            new THREE.IcosahedronGeometry(bd / 17)
+            // new THREE.OctahedronGeometry(bd / 17),
+            // new THREE.DodecahedronGeometry(bd / 17),
+            // new THREE.RingGeometry(bd / 34, bd / 17, 8)
         ];
         const bladeGeometry = GEOMETRIES[Math.floor(Math.random() * GEOMETRIES.length)];
         bladeGeometry.computeVertexNormals();
         
         const material = new THREE.MeshStandardMaterial({
             map: plantTexture[Math.floor(Math.random() * plantTexture.length)],
-            transparent: true,
+            transparent: false,
             opacity: 1,
             side: THREE.DoubleSide
         });
@@ -2392,7 +2401,7 @@ class UserController {
             } else if (key == 'D') {
                 this.d = true;
             } else if (key == ' ') {
-                if (this.isJumping) return
+                // if (this.isJumping) return
                 this.isJumping = true;
                 this.jumpVelocity = 0.4
             } else if (key == 'ARROWUP') {
