@@ -41,6 +41,10 @@ function randomInRange(from, to, startDistance = 0) {
    return val;
 }
 
+function mapToRange(normalizedValue, minNew, maxNew) {
+    return minNew + normalizedValue * (maxNew - minNew);
+}
+
 
 class GrassPatch {
     constructor(initobject) {
@@ -311,6 +315,15 @@ class Sky {
 
         this.createDome();
 
+        for (var i = 0; i < 29; i++) {
+            var cloud = this.MakeCloud()
+            cloud.position.y += randomInRange(50, 250)
+            cloud.position.x -= randomInRange(-50, 50)
+            cloud.position.z -= randomInRange(-50, 50)
+
+            scene.add(cloud)
+        }
+
     }
 
      createDome() {
@@ -347,6 +360,7 @@ class Sky {
                 var planeMaterial = new THREE.MeshBasicMaterial({
                     color: color,
                     transparent: true,
+                    opacity: 0.7,
                     side: THREE.DoubleSide
                 });
 
@@ -376,6 +390,71 @@ class Sky {
         this.sun.position.y = highestY
         this.sphere.position.y = highestY
      }   
+
+
+MakeCloud() {
+    // Create a group to hold the cloud's spheres
+    const cloud = new THREE.Group();
+
+    // Generate a random number of clusters (elongated parts of the cloud)
+    const numClusters = randomInRange(7, 11); // Fewer larger cloud parts for a wispy appearance
+
+    for (let i = 0; i < numClusters; i++) {
+        // Create a group for each elongated cluster
+        const cluster = new THREE.Group();
+        
+        // Define a random radius for the cluster
+        const clusterLength = randomInRange(15, 30); // Elongated in horizontal direction
+        const clusterHeight = randomInRange(3, 7); // Thin in the vertical direction
+        
+        var sphereSmall = this.sceneRadius * .01;
+        var sphereLarge = this.sceneRadius * .1
+        // Randomize the number of small spheres per cluster
+        const numSpheres = randomInRange(10, 19); // More spheres for each elongated cluster
+
+        for (let j = 0; j < numSpheres; j++) {
+            // Random radius for smaller spheres within the cluster
+            const radius = randomInRange(sphereSmall, sphereLarge); // Much smaller spheres for a wispy look
+
+            // Create a sphere geometry
+            const geometry = new THREE.SphereGeometry(radius, 32, 32);
+
+            // Create a material with white color and lower opacity for a lighter appearance
+            const material = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: mapToRange(1 - ((radius - sphereSmall) / (sphereLarge - sphereSmall)), 0.7, 1) // Lower opacity between 0.3 and 0.5
+            });
+
+            // Create the mesh (small sphere)
+            const sphere = new THREE.Mesh(geometry, material);
+
+            // Position the small spheres more spread out horizontally, but thin vertically
+            sphere.position.set(
+                Math.random() * clusterLength - clusterLength / 2, // Wider in x direction
+                randomInRange(clusterHeight - 10, clusterHeight), // Narrower in y direction
+                Math.random() * 5 - 2.5  // Some variation in z direction
+            );
+
+            // Add the small sphere to the cluster
+            cluster.add(sphere);
+        }
+
+        // Position the entire cluster randomly in the cloud space but focus on elongation
+        cluster.position.set(
+            randomInRange(-this.sceneRadius, this.sceneRadius),  // Spread out horizontally
+            randomInRange(100, 1000),  // Some vertical spread
+            randomInRange(-this.sceneRadius, this.sceneRadius)   // Spread out in depth for 3D look
+        );
+
+        // Add the cluster to the cloud group
+        cloud.add(cluster);
+    }
+
+    // Return the cloud group, which now contains all the clusters and spheres
+    return cloud;
+}
+
 
 
 
@@ -448,6 +527,71 @@ class Sky {
 
 }
 
+class Structure {
+    parts = {}
+    constructor(struct) {
+        for (var key in struct) {
+            this[key] = struct[key]
+        }
+        console.log(this)
+    }
+    erect() {
+        this.buildFoundation();
+        this.buildFloors();
+    }
+    buildFoundation() {
+        const foundation = new THREE.Mesh(
+            new THREE.BoxGeometry(
+                this.area.foundation.width, 
+                this.area.foundation.height, 
+                this.area.foundation.depth
+            ),
+            new THREE.MeshStandardMaterial({
+                map: new THREE.TextureLoader().load(this.textures.foundation),
+                transparent: true,
+                opacity: 0.7
+            })
+        );
+        foundation.geometry.computeVertexNormals()
+        foundation.castShadow = true;
+        foundation.receiveShadow = true;
+        foundation.position.set(
+            this.position.foundation.x,
+            this.position.foundation.y,
+            this.position.foundation.z
+        );
+        console.log('~built foundation')
+        this.parts.foundation = foundation;
+        scene.add(foundation);
+    }
+    buildFloors() {
+        for (var i = 1, j = 0; i < this.floors; i++, j++) {
+            var floor = new THREE.Mesh(
+                new THREE.BoxGeometry(
+                    this.area.foundation.width,
+                    this.area.foundation.height,
+                    this.area.foundation.length
+                ),
+                new THREE.MeshStandardMaterial({
+                    map: new THREE.TextureLoader().load(this.textures.foundation)
+                })
+            )
+            floor.geometry.computeVertexNormals();
+            floor.position.set(
+                this.position.foundation.x,
+                this.position.foundation.y + (i * this.area.wall / 2),
+                this.position.foundation.z
+            )
+
+            floor.castShadow = true;
+            floor.receiveShadow = true;
+
+            this.parts[`floor${i}`] = floor;
+            scene.add(floor);
+        }
+    }
+}
+
 class Castle {
     offsetY = 1.5
     elevatorSpeed = 0.2
@@ -457,7 +601,7 @@ class Castle {
         if (this.centerPoint.y < 0) {
             this.centerPoint.y = .01
         }
-        this.houseDim = [70, 50]; // Width and Length of the house
+        this.houseDim = VM.map[VM.user.level]; // Width and Length of the house
         this.parts = [];
         this.elevator = []
         this.wallHeight = 5;
@@ -476,7 +620,7 @@ class Castle {
         foundation.geometry.computeVertexNormals()
         foundation.castShadow = true;
         foundation.receiveShadow = true;
-        foundation.position.set(0, this.centerPoint.y, 0); // Position the foundation
+        foundation.position.set(0, this.centerPoint.y - this.foundationHeight / 2, 0); // Position the foundation
         this.parts.push(foundation);
         scene.add(foundation);
 
@@ -513,7 +657,7 @@ class Castle {
             floorGroup.add(floorPart2);
 
             // Position the whole floor group for each level
-            floorGroup.position.set(0, this.centerPoint.y + (this.wallHeight * 3 * i), 0);
+            floorGroup.position.set(0, this.centerPoint.y + (this.wallHeight * 3 * i) - (this.foundationHeight / 2) , 0);
 
             // Cast and receive shadows
             floorPart1.castShadow = true;
@@ -908,11 +1052,11 @@ class Castle {
 
 
         console.log('lighting the levels bottom-up') 
-        var ambientLight = new THREE.AmbientLight(new THREE.Color('aliceblue'), 1)
+        // var ambientLight = new THREE.AmbientLight(new THREE.Color('aliceblue'), 1)
 
-        ambientLight.position.y = this.wallHeight * 3 / 2
+        // ambientLight.position.y = this.wallHeight * 3 / 2
 
-        scene.add(ambientLight)
+        // scene.add(ambientLight)
  
         var createDecorativeWall = (foundation, width, times = 1) => {
             console.log("Building decorative wall...");
@@ -1399,6 +1543,39 @@ class Terrain {
         this.generate();
     }
 
+    getSurroundingTriangles(point) {
+        let surroundingTriangles = [];
+
+        // Iterate through all grounds to find triangles that surround the given point
+        this.grounds.forEach(ground => {
+            const triangle = ground.triangle;
+
+            // Check if the point lies inside the triangle using a point-in-triangle check
+            if (this.isPointNearTriangle(point, triangle)) {
+                surroundingTriangles.push(ground);
+            }
+        });
+
+        return surroundingTriangles;
+    }
+
+    // Helper function to check if a point is near or inside a triangle
+    isPointNearTriangle(point, triangle) {
+        // Calculate barycentric coordinates or use distance-based checks
+        const { a, b, c } = triangle;
+
+        // Check if point is near any of the triangle's vertices or edges
+        const distanceThreshold = 20; // Define a threshold distance to consider "near"
+        const distToA = point.distanceTo(a);
+        const distToB = point.distanceTo(b);
+        const distToC = point.distanceTo(c);
+
+        // If the point is within a certain distance of any vertex, we consider it "near" the triangle
+        return (distToA < distanceThreshold || distToB < distanceThreshold || distToC < distanceThreshold);
+    }
+
+
+
     generate(centerX = 0, centerY = 0, centerZ = 0) {
         const centerKey = `${centerX}_${centerZ}`;
         this.terrainType = 'dense'//['sparse', 'dense', 'half'][Math.floor(Math.random() * 3)];
@@ -1531,6 +1708,7 @@ class Terrain {
                         
         }
 
+        console.log('shouldnt be more than ' + this.segments * this.segments + ' trees')
 
         var start_i = 1.0;
         // Process triangles and apply grass in defined ranges
@@ -1554,7 +1732,7 @@ class Terrain {
 
                 var inCastle = v.x > -50 && v.x < 50 && v.z > -35 && v.z < 35
 
-                var isNearGrassPatch = (grassPatches[i][j] || 
+                var isNearGrassPatch = false && !inCastle/*(grassPatches[i][j] || 
                                           (i > 0 && grassPatches[i - 1][j]) ||  // Check left
                                           (i < this.segments && grassPatches[i + 1][j]) ||  // Check right
                                           (j > 0 && grassPatches[i][j - 1]) ||  // Check above
@@ -1563,10 +1741,10 @@ class Terrain {
                                           (i < this.segments && j > 0 && grassPatches[i + 1][j - 1]) ||  // Check top-right diagonal
                                           (i > 0 && j < this.segments && grassPatches[i - 1][j + 1]) ||  // Check bottom-left diagonal
                                           (i < this.segments && j < this.segments && grassPatches[i + 1][j + 1])  // Check bottom-right diagonal
-                );
+                );*/
 
 
-                const isTree = eval(this.treeCondition);
+                const isTree = false && eval(this.treeCondition);
 
                 if (a >= 0 && b >= 0 && c >= 0 && d >= 0 && a < vertices.length / 3 && b < vertices.length / 3 && c < vertices.length / 3 && d < vertices.length / 3) {
                     indices.push(a, b, d);
@@ -1577,7 +1755,7 @@ class Terrain {
                     const t2 = TriangleMesh(vertices, b, c, d, this.width, this.height);
 
                     [t1, t2].forEach((triangle) => {
-                        this.grounds.push(triangle.triangle);
+                        VM.map[VM.user.level].grounds.push(triangle);
 
                         const normal = triangle.normal;
                         const slope = Math.atan2(normal.y, normal.x);
@@ -1600,9 +1778,11 @@ class Terrain {
                         // Trees!
                         //
 
-                        if (isTree) {
+                        if (false) {
                             var tree = this.createTree(triangle.triangle.a.x, triangle.triangle.a.y, triangle.triangle.a.z, 1);
                             VM.map[VM.user.level].trees.push(tree);
+
+                             
                         }
 
                         //
@@ -1676,8 +1856,8 @@ class Terrain {
             vertexColors: true,  // Enable vertex colors
             side: THREE.DoubleSide,
             wireframe: false,
-            transparent: false,
-            opacity: 1
+            transparent: true,
+            opacity: 0.5
         });
 
         const mesh = new THREE.Mesh(planeGeometry, material);
@@ -1694,8 +1874,22 @@ class Terrain {
        
         this.meshes.push(this.mesh);
 
+        console.log("there are " + this.trees.length + " trees")
+        // Now, let's find surrounding triangles and place additional trees
+        // this.trees.forEach(tree => {
+        //     let surroundingTriangles = this.getSurroundingTriangles(tree.trunk.position);
+        //     surroundingTriangles.forEach((surroundingTriangle) => {
 
-
+        //         var surroundingTree = this.createTree(
+        //             surroundingTriangle.triangle.a.x,
+        //             surroundingTriangle.triangle.a.y,
+        //             surroundingTriangle.triangle.a.z,
+        //             0.8 // Slightly smaller trees surrounding the main one
+        //         );
+        //         VM.map[VM.user.level].trees.push(surroundingTree);
+                
+        //     });
+        // })
 
         return this;
     }
@@ -2579,16 +2773,16 @@ class Terrain {
 
 
         // Add triangles within the SOP to the scene
-        // this.grassTriangles.forEach((mesh) => {
-        //     const triangle = mesh.triangle; // Get the triangle representation from the mesh
-        //     const triangleCenter = this.getTriangleCenter(triangle);
+        VM.map[VM.user.level].grounds.forEach((mesh) => {
+            const triangle = mesh.triangle; // Get the triangle representation from the mesh
+            const triangleCenter = this.getTriangleCenter(triangle);
 
-        //     if (!mesh.parent && isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
-        //         scene.add(mesh);
-        //     } else if (mesh.parent && !isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
-        //         scene.remove(mesh);
-        //     }
-        // });
+            if (!mesh.parent && isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
+                scene.add(mesh);
+            } else if (mesh.parent && !isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
+                scene.remove(mesh);
+            }
+        });
 
         // Repeat for cliffs and grounds clusters if needed
         this.cliffMeshes.forEach((mesh) => {
@@ -2762,7 +2956,7 @@ class Terrain {
         return [instancedMesh, bladePositions];
     }
 
-    createGrassResult(indices, vertices, triangleMesh, bladeCount = 11, bladeHeight = 1, bladeWidth = 0.1) {
+    createGrassResult(indices, vertices, triangleMesh, bladeCount = 1000, bladeHeight = 1, bladeWidth = 0.1) {
         var triangle = triangleMesh.triangle
         
         const bladeGeometry = new THREE.PlaneGeometry(bladeWidth, bladeHeight, 1, 4);
@@ -2799,8 +2993,8 @@ class Terrain {
             vertices,
             mesh,
             VM.map[VM.user.level].grassBladeDensity,
-            randomInRange(0.05, 0.2),
-            randomInRange(0.1, 0.5)
+            .8,
+            .2
         );
 
         // Mark grass on groundColorMap to match patches
@@ -2823,17 +3017,19 @@ class Terrain {
 
 class UserController {
     constructor(terrain, bvh) {
+        this.record = false
         this.terrain = terrain;
         this.bvh = bvh;
         this.isJumping = false;
+        this.previousPosition = null
         this.w = false;
         this.a = false;
         this.s = false;
         this.d = false;
-        this.wS = .15
-        this.aS = .1
-        this.sS = .1
-        this.dS = .1
+        this.wS = .3
+        this.aS = .2
+        this.sS = .2
+        this.dS = .2
         this.tS = .15
         this.shift = false
         this.space = false;
@@ -2844,15 +3040,30 @@ class UserController {
         this.leftShift = false;
         this.rightShift = false;
         this.isJumping = false;
+        this.intersection = {}
+        this.self = () => (
+            new THREE.Box3().setFromCenterAndSize(
+                this.camera.position,
+                new THREE.Vector3(.5, 1 + .2, .2)
+            )
+        ),
+        this.width = .5;
+        this.height = 1.2;
+        this.depth = .2;
         this.jump_velocity = { x: 0, y: 0, z: 0 };
         this.centerKey = null;
-        this.velocity = new THREE.Vector3(); // General velocity
+        this.velocity = {
+            weight: 1
+        }
         this.intersectsTerrain = [];
         this.time_held = {
             w: 0,
             a: 0,
             s: 0,
             d: 0
+        }
+        this.time = {
+            jump: null
         }
         this.addEventListener();
         this.init();
@@ -2872,7 +3083,8 @@ class UserController {
                 this.d = true;
             } else if (key == ' ') {
                 this.isJumping = true;
-                this.jump_velocity.y = 0.4;
+                this.time.jump = 0;
+                this.jump_velocity.y = 1
             } else if (key == 'ARROWUP') {
                 this.ArrowUp = true;
             } else if (key == 'ARROWDOWN') {
@@ -3084,6 +3296,13 @@ class UserController {
         // Apply movement after collision handling
         this.camera.position.add(combinedMovement);
 
+        if (this.record) {
+            var user_history = window.user.usermesh.clone();
+            scene.add(user_history)
+        }
+        window.user.usermesh.position.copy(this.camera.position)
+        window.user.usermesh.rotation.copy(this.camera.rotation)
+
         this.updateBoundingBox();
     }
 
@@ -3117,10 +3336,14 @@ class UserController {
             }
 
             // Check for intersections with castle parts
-            const intersectsCastle = raycaster.intersectObjects(window.castle.parts, true);
+            const intersectsCastle = raycaster.intersectObjects(Object.values(window.castle.parts), true);
             if (intersectsCastle.length > 0 && intersectsCastle.some(i => i.distance < 0.2)) {
                 this.handleCastleCollision(intersectsCastle[0], dir, collisionResponseForce);
             }
+
+            // if (!downIntersection) {
+            //     downIntersection = this.self().intersectsBox(new THREE.Box3().setFromObject(window.terrain))
+            // }
         }
     }
 
@@ -3163,52 +3386,135 @@ class UserController {
         // Simulate gravity by decreasing the Y velocity (falling down)
         this.jump_velocity.y -= 0.03 * 0.8; // You can tweak gravity strength here
 
-        // Optional: Add movement velocity based on directional keys (W, A, S, D)
-        if (this.w) {
-            this.jump_velocity.z = -0.1; // Move forward
-        } else if (this.s) {
-            this.jump_velocity.z = 0.1; // Move backward
-        }
+        var minDistance = Infinity
 
-        if (this.a) {
-            this.jump_velocity.x = -0.1; // Move left
-        } else if (this.d) {
-            this.jump_velocity.x = 0.1; // Move right
-        }
-
-        // Cast a ray from the camera downwards to detect the ground
+        // // Cast a ray from the camera downwards to detect the ground
         const downRaycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
-        const downIntersection = this.findClosestIntersection(downRaycaster);
+        let downIntersection = null
 
-        // Cast a ray upwards to detect ceilings
+
+        // Check intersections with terrain meshes
+        for (let mesh of this.terrain.meshes) {
+            const intersects = downRaycaster.intersectObject(mesh, true);
+            if (intersects.length > 0 && intersects[0].distance < minDistance) {
+                downIntersection = intersects[0];
+                minDistance = intersects[0].distance;
+            }
+        }
+
+        // Check intersections with castle parts
+        for (var part_key in window.castle.parts) {
+            const intersects = downRaycaster.intersectObject(window.castle.parts[part_key], true);
+            if (intersects.length > 0 && intersects[0].distance < minDistance) {
+                downIntersection = intersects[0];
+                minDistance = intersects[0].distance;
+            }
+            
+        }
+
+
         const upRaycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, 1, 0));
-        const upIntersection = this.findClosestIntersection(upRaycaster);
+        let upIntersection = null
 
-        // Ground collision detection (landing)
-        if (downIntersection && downIntersection.distance < 1) {
-            console.log("Camera is above the ground, landing");
 
-            // Adjust the camera position to the surface plus a small offset to simulate landing
-            this.camera.position.y = downIntersection.point.y + 1;
-            this.jump_velocity.y = 0; // Stop vertical velocity
-            this.isJumping = false;   // The jump is over, camera is now on the ground
-
-            this.updateTerrain(downIntersection); // Optionally update terrain based on landing position
+        // Check intersections with terrain meshes
+        for (let mesh of this.terrain.meshes) {
+            const intersects = upRaycaster.intersectObject(mesh, true);
+            if (intersects.length > 0 && intersects[0].distance < minDistance) {
+                upIntersection = intersects[0];
+                minDistance = intersects[0].distance;
+            }
         }
 
-        // Ceiling collision detection (prevent moving through ceilings)
-        if (upIntersection && upIntersection.distance < 0.5) {
-            console.log("Camera hit the ceiling");
-
-            // Prevent the camera from going through the ceiling
-            this.camera.position.y = upIntersection.point.y - 0.5; // Adjust position to stop at the ceiling
-            this.jump_velocity.y = 0; // Stop upward velocity
+        // Check intersections with castle parts
+        for (var part in window.castle.parts) {
+            const intersects = upRaycaster.intersectObject(window.castle.parts[part], true);
+            if (intersects.length > 0 && intersects[0].distance < minDistance) {
+                upIntersection = intersects[0];
+                minDistance = intersects[0].distance;
+            }
+            
         }
 
-        // If the camera is neither on the ground nor hitting a ceiling, it continues falling
-        if (!downIntersection && !upIntersection) {
-            console.log("No ground or ceiling detected, camera is still in the air");
+        if (minDistance < 1) {
+            console.log(minDistance)
         }
+        
+
+        // // Ceiling collision detection (prevent moving through ceilings)
+        // if (upIntersection && upIntersection.distance < 0.5) {
+        //     console.log("Camera hit the ceiling");
+
+        //     // Prevent the camera from going through the ceiling
+        //     this.camera.position.y = upIntersection.point.y - 0.5; // Adjust position to stop at the ceiling
+        //     this.jump_velocity.y = 0; // Stop upward velocity
+        // }
+
+        // // If the camera is neither on the ground nor hitting a ceiling, it continues falling
+        // if (!downIntersection && !upIntersection) {
+        //     console.log("No ground or ceiling detected, camera is still in the air");
+        // }
+
+        //  // Check for intersections with castle parts
+        
+        // const intersectsCastle = downRaycaster.intersectObjects(Object.values(window.castle.parts), true);
+        
+        // if (intersectsCastle.length > 0 && intersectsCastle.some(i => i.distance < 0.1)) {
+        //     this.handleCastleCollision(intersectsCastle[0], dir, collisionResponseForce);
+        // }
+
+        // const previousPosition = this.previousPosition.clone();
+        // const currentPosition = this.camera.position.clone();
+
+        // // Direction of movement
+        // const movementDirection = currentPosition.clone().sub(previousPosition).normalize();
+        // const movementDistance = previousPosition.distanceTo(currentPosition);
+
+        // // Cast a ray from the previous position along the movement direction
+        // const raycaster = new THREE.Raycaster(previousPosition, movementDirection);
+        // let intersects = raycaster.intersectObjects(Object.values(window.castle.parts), true);
+
+        // if (intersects.length > 0 && intersects[0].distance < movementDistance) {
+        //     // Collision occurred between the previous and current positions
+        //     this.camera.position.copy(intersects[0].point); // Stop the camera at the collision point
+        //     this.jump_velocity.y = 0// Stop the velocity
+        // } else {
+        //     // Update the previous camera position to the current one for the next frame
+        //     this.previousPosition.copy(this.camera.position);
+        // }
+
+        for (var mesh of window.terrain.meshes) {
+            const meshBoundingBox = new THREE.Box3().setFromObject(mesh);
+
+            if (window.user.self().intersectsBox(meshBoundingBox) && this.time.jump > .01) {
+                // Now that there's a bounding box intersection, perform raycasting
+                const rayOrigin = this.camera.position.clone(); // Starting point of the ray
+                const rayDirection = new THREE.Vector3(0, -1, 0).normalize(); // Ray pointing downwards
+
+                const raycaster = new THREE.Raycaster(rayOrigin, rayDirection.normalize(), 0, 1);
+                const intersects = raycaster.intersectObject(mesh, true);
+
+                if (intersects.length > 0) {
+
+                    this.record = true
+                    console.log('Precise intersection detected at:', intersects[0].point);
+                    const boundingBox = new THREE.Box3().setFromObject(intersects[0].object);
+                    const intersectionObjectHeight = boundingBox.max.y - boundingBox.min.y;
+                    window.user.camera.velocity.y = 0
+                    window.user.jump_velocity.y = 0
+                    window.user.camera.position.y += (window.user.height / 2) + (intersectionObjectHeight / 2)
+                    window.user.isJumping = false
+                    window.user.time.jump = null
+
+                    setTimeout(() => { 
+                        this.record = false
+                    }, 1000)
+                }
+            }
+
+        }
+        
+
     }
 
 
@@ -3216,50 +3522,56 @@ class UserController {
 
     applyGravity() {
         if (!this.isJumping) {
-            this.camera.velocity.y += -0.05; 
-            if (this.camera.velocity.y < TERMINAL_VELOCITY) {
-                this.camera.velocity.y = TERMINAL_VELOCITY;
-            }
-            this.camera.position.y += this.camera.velocity.y;
+            var downVelocity = -this.velocity.weight;
 
-            const raycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
-            const intersection = this.findClosestIntersection(raycaster);
+            const raycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0), 0, 1);
+            let intersection = null;
+            let minDistance = Infinity;
+
+            // Check intersections with terrain meshes
+            for (let mesh of this.terrain.meshes) {
+                const intersects = raycaster.intersectObject(mesh, true);
+                if (intersects.length > 0 && intersects[0].distance < minDistance) {
+                    intersection = intersects[0];
+                    minDistance = intersects[0].distance;
+                }
+            }
+
+            // Check intersections with castle parts
+            for (let part of Object.values(window.castle.parts)) {
+                const intersects = raycaster.intersectObject(part, true);
+                if (intersects.length > 0 && intersects[0].distance < minDistance) {
+                    intersection = intersects[0];
+                    minDistance = intersects[0].distance;
+                }
+            }
 
             if (intersection && intersection.distance < 1) {
-                this.camera.position.y = intersection.point.y + 1;
-                this.camera.velocity.y = 0;
-                this.isJumping = false;
 
+                this.record = true
+                console.log('Precise intersection detected at:', intersection.point);
+                const boundingBox = new THREE.Box3().setFromObject(intersection.object);
+                const intersectionObjectHeight = boundingBox.max.y - boundingBox.min.y;
+                window.user.camera.velocity.y = 0
+                window.user.jump_velocity.y = 0
+                window.user.camera.position.y += (window.user.height / 2) + (intersectionObjectHeight / 2)
+                window.user.isJumping = false
+                window.user.time.jump = null
+
+                setTimeout(() => { 
+                    this.record = false
+                }, 1000)
+
+                this.intersection = intersection.point
                 this.updateTerrain(intersection);
             }
+
+            this.camera.position.y += downVelocity
+
+            
         }
     }
 
-    // Helper function to find the closest intersection with terrain
-    findClosestIntersection(raycaster) {
-        let closestIntersection = null;
-        let minDistance = Infinity;
-
-        // Check intersections with terrain meshes
-        for (let mesh of this.terrain.meshes) {
-            const intersects = raycaster.intersectObject(mesh, true);
-            if (intersects.length > 0 && intersects[0].distance < minDistance) {
-                closestIntersection = intersects[0];
-                minDistance = intersects[0].distance;
-            }
-        }
-
-        // Check intersections with castle parts
-        for (let part of window.castle.parts) {
-            const intersects = raycaster.intersectObject(part, true);
-            if (intersects.length > 0 && intersects[0].distance < minDistance) {
-                closestIntersection = intersects[0];
-                minDistance = intersects[0].distance;
-            }
-        }
-
-        return closestIntersection;
-    }
 
 
     // Update terrain after collision or landing
@@ -3324,6 +3636,13 @@ class View {
 
         window.terrain = new Terrain(VM);
 
+        WIRE('boundingBox',  null, window.terrain.meshes[0].position, 
+            VM.map[VM.user.level].structures[0].area.foundation.width,
+            VM.map[VM.user.level].structures[0].area.foundation.height, 
+            VM.map[VM.user.level].structures[0].area.foundation.depth
+        )
+
+
 
         window.boundingVolumeHierarchy = new BoundingVolumeHierarchy();
         window.user = new UserController(terrain, boundingVolumeHierarchy);
@@ -3336,66 +3655,6 @@ class View {
         boundingVolumeHierarchy.init(window.terrain.grassTriangles);
         
         this.addUser();
-
-        function createRandomBezierCurve(heightLimit = 10) {
-            // Calculate the bounding box of all meshes
-            const boundingBox = new THREE.Box3();
-            terrain.meshes.forEach(mesh => boundingBox.expandByObject(mesh));
-        
-            // Get the bounds of the bounding box
-            const min = boundingBox.min;
-            const max = boundingBox.max;
-        
-            // Function to generate a random point within the bounding box and height limit
-            function randomPoint() {
-                return new THREE.Vector3(
-                    THREE.MathUtils.randFloat(min.x, max.x),
-                    THREE.MathUtils.randFloat(min.y, max.y + heightLimit),
-                    THREE.MathUtils.randFloat(min.z, max.z)
-                );
-            }
-        
-            // Create control points for the Bezier curve
-            const p0 = randomPoint();
-            const p1 = randomPoint();
-            const p2 = randomPoint();
-            const p3 = randomPoint();
-        
-            return new THREE.CubicBezierCurve3(p0, p1, p2, p3);
-        }
-
-        // Function to create a point light with a helper
-        function createPointLight(color, intensity, distance) {
-            const pointLight = new THREE.PointLight(color, intensity, distance);
-            const pointLightHelper = new THREE.PointLightHelper(pointLight);
-            return { pointLight, pointLightHelper };
-        }
-
-        function movePointLights(pointLights, curves, time) {
-            pointLights.forEach((light, index) => {
-                const t = (time % 1) * 0.1; // Slow down the movement
-                const position = curves[index].getPoint(t);
-                light.pointLight.position.copy(position);
-            });
-        }
-
-        // Create point lights
-        const pointLights = [
-            createPointLight(0xffffff, 1, 100),
-            createPointLight(0xffffff, 1, 100)
-        ];
-
-        // Add point lights and helpers to the scene
-        pointLights.forEach(({ pointLight, pointLightHelper }) => {
-            scene.add(pointLight);
-            scene.add(pointLightHelper);
-        });
-
-        // Create random Bezier curves for the point lights
-        const curves = [
-            createRandomBezierCurve(50),
-            createRandomBezierCurve(50)
-        ];
 
         var mapQuadrant = +getComputedStyle(devview.children[0]).width.split('px')[0];
         var centerTile = devview.children[12];
@@ -3439,15 +3698,35 @@ class View {
 
             // Debugging
 
-            var centerKey = `${Math.round(userPosition.x / 128) * 128}_${Math.round(userPosition.z / 128) * 128}`;
-            document.querySelectorAll('.quadrant').forEach(q => {
-                for (var i = 0; i < terrain.meshes.length; i++) {
-                    document.getElementById(terrain.meshes[i].centerKey).classList.add('built');
+            // var centerKey = `${Math.round(userPosition.x / 128) * 128}_${Math.round(userPosition.z / 128) * 128}`;
+            // document.querySelectorAll('.quadrant').forEach(q => {
+            //     for (var i = 0; i < terrain.meshes.length; i++) {
+            //         document.getElementById(terrain.meshes[i].centerKey).classList.add('built');
+            //     }
+            //     q.classList.remove("on")
+            // });
+            // document.getElementById(centerKey).classList.add('on');
+            document.getElementById('map').innerHTML = `<pre style="font-size: 0.5rem; width: 80vw; height: 80vh; background: rgba(0,0,0,0.3); color:white">${JSON.stringify({
+                x: user.usermesh.position.x,
+                y: user.usermesh.position.y,
+                z: user.usermesh.position.z,
+                isJumping: user.isJumping,
+                user: {
+                    velocity: user.camera.velocity,
+                    intersection: user.intersection
                 }
-                q.classList.remove("on")
-            });
-            document.getElementById(centerKey).classList.add('on');
+            }, null, 2)}</pre>`
 
+            window.user.previousPosition = window.user.camera.position.clone()
+
+
+            
+             for (var time in window.user.time) {
+                if (window.user.time[time] == 0 || window.user.time[time] > 0) {
+                    console.log(time, window.user.time[time])
+                    window.user.time[time] += 0.001
+                }
+            }
         }
 
 
@@ -3458,17 +3737,14 @@ class View {
 
     addUser() {
         // Create a wireframe box to visualize the bounding box
-        const boxGeometry = new THREE.BoxGeometry(1, 1, 1); // Adjust dimensions as needed
-        const wireframeMaterial = new THREE.MeshBasicMaterial({
-            color: 0x00ff00, // Wireframe color (green, adjust as needed)
-            wireframe: true
-        });
-        window.wireframeBox = new THREE.Mesh(boxGeometry, wireframeMaterial);
+        
+        window.user.usermesh = WIRE('boundingBox', null, window.user.camera.position, .5, 1.2, .2)
+        window.user.usermesh.position.set(0, .7, 0)
 
         window.terrain.findNearestTerrainCenters(terrain.center);
 
         // Add the wireframe to the scene
-        window.scene.add(wireframeBox);
+        window.scene.add(window.user.usermesh);
 
         var mesh = terrain.meshes[0];
 
@@ -3486,14 +3762,19 @@ class View {
             }
         }
 
-        window.user.camera.position.set(33.953909365281795, 2.610000001490116, 23.053098469337314);
+        window.user.camera.position.set(33.953909365281795, 5.610000001490116, 23.053098469337314);
         window.user.camera.rotation.set(0, 1.533185307179759, 0)
 
 
         var centerPoint = getCenterOfGeometry(mesh.geometry);
         centerPoint.y -= 4.5
 
-        window.castle = new Castle(centerPoint);
+        window.castle = new Structure(VM.map[VM.user.level].structures.filter(s => s.name == 'castle').pop())
+
+        window.castle.erect();
+
+
+       
         
     }
 
@@ -3538,6 +3819,97 @@ window.view = new View();
 window.devview = document.getElementById('map');
 
 
+function createRandomBezierCurve(heightLimit = 10) {
+    // Calculate the bounding box of all meshes
+    const boundingBox = new THREE.Box3();
+    terrain.meshes.forEach(mesh => boundingBox.expandByObject(mesh));
 
+    // Get the bounds of the bounding box
+    const min = boundingBox.min;
+    const max = boundingBox.max;
+
+    // Function to generate a random point within the bounding box and height limit
+    function randomPoint() {
+        return new THREE.Vector3(
+            THREE.MathUtils.randFloat(min.x, max.x),
+            THREE.MathUtils.randFloat(min.y, max.y + heightLimit),
+            THREE.MathUtils.randFloat(min.z, max.z)
+        );
+    }
+
+    // Create control points for the Bezier curve
+    const p0 = randomPoint();
+    const p1 = randomPoint();
+    const p2 = randomPoint();
+    const p3 = randomPoint();
+
+    return new THREE.CubicBezierCurve3(p0, p1, p2, p3);
+}
 
 await VM.init("Peter", view);
+
+
+
+
+
+
+
+
+
+
+
+function WIRE(type, mesh, position = new THREE.Vector3(0, 0, 0), width = 1, height = 1, depth = 1) {
+    if (type === 'boundingBox') {
+        let box;
+
+        // If a mesh is provided, create the bounding box from the object
+        if (mesh) {
+            box = new THREE.Box3().setFromObject(mesh);
+        } 
+        // If no mesh, manually create a box using the provided position and dimensions
+        else if (position) {
+            const min = new THREE.Vector3(
+                position.x - width / 2,
+                position.y - height / 2,
+                position.z - depth / 2
+            );
+            const max = new THREE.Vector3(
+                position.x + width / 2,
+                position.y + height / 2,
+                position.z + depth / 2
+            );
+            box = new THREE.Box3(min, max);
+        }
+
+        // Create the wireframe geometry
+        const boxSize = box.getSize(new THREE.Vector3());  // Get the dimensions of the box
+        const boxGeometry = new THREE.BoxGeometry(boxSize.x, boxSize.y, boxSize.z);
+        const wireframeMaterial = new THREE.MeshBasicMaterial({
+            color: 0x00ff00, // Wireframe color (green)
+            wireframe: true
+        });
+        const wireframe = new THREE.Mesh(boxGeometry, wireframeMaterial);
+
+        // Set the position of the wireframe
+        const boxCenter = box.getCenter(new THREE.Vector3());
+        wireframe.position.copy(boxCenter);
+
+        scene.add(wireframe)
+
+        return wireframe;  // Return the wireframe object
+    } else {
+        // Handle other types if needed
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
