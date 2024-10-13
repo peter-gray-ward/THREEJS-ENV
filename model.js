@@ -16,7 +16,7 @@ class User {
   }
 }
 
-let t = 64
+let t = 500
 
 class Model {
   constructor(user) {
@@ -27,10 +27,10 @@ class Model {
         quadrant: t, 
         noiseWidth: t * 2, 
         noiseHeight: t,
-        segments: 32,
+        segments: 21,
         sop: {
-            trees: t * 3,
-            grasses: t * .8
+            trees: t * 2,
+            grasses: t * .1
         },
         grasses: [],
         trees: [],

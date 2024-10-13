@@ -275,9 +275,9 @@ class Sky {
         this.full_circle = 2 * Math.PI;
         this.time = 0;
 
-        this.hemisphereLight = new THREE.HemisphereLight(0xfefeff, 0x444444, .0015); // Sky and ground color
-        this.hemisphereLight.position.set(0, 0, 0);
-        scene.add(this.hemisphereLight);
+        // this.hemisphereLight = new THREE.HemisphereLight(0xfefeff, 0x444444, .00015); // Sky and ground color
+        // this.hemisphereLight.position.set(0, 0, 0);
+        // scene.add(this.hemisphereLight);
 
 
         this.sun = new THREE.DirectionalLight(0xffffff, 3);
@@ -500,7 +500,7 @@ class Castle {
             floorPart1.position.set(-escalationCooridorDim / 2, this.centerPoint.y, 0); // Shift to the left
             floorGroup.add(floorPart1);
 
-            // Create the second large part of the floor (remaining part after cut-out)
+            // // Create the second large part of the floor (remaining part after cut-out)
             const floorPart2 = new THREE.Mesh(
                 new THREE.BoxGeometry(width, this.foundationHeight, length - escalationCooridorDim),
                 new THREE.MeshStandardMaterial({
@@ -615,6 +615,7 @@ class Castle {
         this.parts.push(elevatorShaftOutsideRight)
 
         // Iterate through each level (13 separate shaft segments)
+
         for (let i = 1; i <= 13; i++) {
             // Create the elevator shaft segment for this floor
             var elevatorShaftLeft = new THREE.Mesh(
@@ -896,6 +897,465 @@ class Castle {
             this.elevator.push(button)
             scene.add(button);
         }
+
+
+
+
+
+
+        console.log("elevator built~")
+
+
+
+        console.log('lighting the levels bottom-up') 
+        var ambientLight = new THREE.AmbientLight(new THREE.Color('aliceblue'), 1)
+
+        ambientLight.position.y = this.wallHeight * 3 / 2
+
+        scene.add(ambientLight)
+ 
+        var createDecorativeWall = (foundation, width, times = 1) => {
+            console.log("Building decorative wall...");
+
+            // Define the wall dimensions
+            const wallHeight = this.wallHeight * 3 * times; // Example: 3 floors tall
+            const wallWidth = width; // Example wall width
+            const wallThickness = 0.3; // Example thickness
+
+            // Create the base wall geometry
+            const wallGeometry = new THREE.BoxGeometry(wallWidth, wallHeight, wallThickness);
+            const wallBrush = new Brush(wallGeometry);
+            wallBrush.position.set(
+                foundation.position.x,
+                this.centerPoint.y + wallHeight / 2 + this.offsetY,
+                foundation.position.z
+            );
+            wallBrush.updateMatrixWorld();
+
+            // Create cutouts for windows at varying heights and sizes
+            const evaluator = new Evaluator();
+            
+            // Create small windows at level 1
+            const window1Geometry = new THREE.BoxGeometry(0.5, 0.5, wallThickness + 0.1); // Small square window
+            const window1Brush = new Brush(window1Geometry);
+            window1Brush.position.set(foundation.position.x, this.centerPoint.y + wallHeight / 6, foundation.position.z);
+            window1Brush.updateMatrixWorld();
+            
+            // Create larger windows at level 2
+            const window2Geometry = new THREE.BoxGeometry(1, 1, wallThickness + 0.1); // Larger window
+            const window2Brush = new Brush(window2Geometry);
+            window2Brush.position.set(foundation.position.x, this.centerPoint.y + wallHeight / 2, foundation.position.z);
+            window2Brush.updateMatrixWorld();
+
+            // Create small circular window at level 3
+            const window3Geometry = new THREE.CylinderGeometry(0.3, 0.3, wallThickness + 0.1, 32); // Circular window
+            const window3Brush = new Brush(window3Geometry);
+            window3Brush.rotation.x = Math.PI / 2; // Rotate cylinder to face forward
+            window3Brush.position.set(foundation.position.x, this.centerPoint.y + wallHeight * 5 / 6, foundation.position.z);
+            window3Brush.updateMatrixWorld();
+
+            // Perform the CSG subtraction to create the windows in the wall
+            let finalWallGeometry = evaluator.evaluate(wallBrush, window1Brush, SUBTRACTION);
+            finalWallGeometry = evaluator.evaluate(finalWallGeometry, window2Brush, SUBTRACTION);
+            finalWallGeometry = evaluator.evaluate(finalWallGeometry, window3Brush, SUBTRACTION);
+
+            let texture = new THREE.TextureLoader().load("/images/wallpaper3.jpg")
+            texture.wrapS = THREE.RepeatWrapping; // Repeat horizontally
+            texture.wrapT = THREE.RepeatWrapping;
+            // Convert the result back into a Mesh
+            const decorativeWall = new THREE.Mesh(
+                finalWallGeometry.geometry, 
+                new THREE.MeshStandardMaterial({ 
+                    map: texture,
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 0.63
+                }));
+            
+            scene.add(decorativeWall); // Add the wall with cutouts to the scene
+
+            this.parts.push(decorativeWall)
+
+            return decorativeWall
+        }
+
+
+        var createGlassWall = (foundation, width, iterations = 11, withBottom = true, i) => {
+            console.log("Building glass wall...");
+            var result = []
+
+
+
+            // Define the glass wall dimensions
+            const wallHeight = this.wallHeight * 3 / 11; // Example: 3 floors tall
+            const wallWidth = width; // Example wall width
+            const wallThickness = 0.1; // Thin thickness to represent glass
+
+            // Create the base glass wall geometry (using a thin BoxGeometry to create a pane of glass)
+            const glassGeometry = new THREE.BoxGeometry(wallWidth, wallHeight, wallThickness);
+            
+            let glassOptions = {
+                color: 0xA1C1E0, // Light blueish tint for glass
+                opacity: 0.65, // Semi-transparent
+                transparent: true, // Enable transparency
+                roughness: 0.1, // Low roughness for a smoother glass look
+                metalness: 0, // No metal effect
+            }
+            var txtr = new THREE.TextureLoader().load(`/images/trees/foliage/textures/foliage-7.jpg`);
+
+            // Set texture wrapping to repeat
+            txtr.wrapS = THREE.RepeatWrapping; // Horizontal wrapping
+            txtr.wrapT = THREE.RepeatWrapping; // Vertical wrapping if needed
+
+            // Set the number of repetitions (for example, repeat 4 times horizontally)
+            txtr.repeat.set(randomInRange(11, 36), randomInRange(1, 7)); // Repeat 4 times in the X direction (columns), 1 time in the Y direction
+
+
+            // Apply the texture to the glass material
+            glassOptions.map = txtr;
+
+            // Create transparent material for the glass
+            const glassMaterial = new THREE.MeshStandardMaterial(glassOptions);
+
+            // Create the glass wall mesh
+            const glassWall = new THREE.Mesh(glassGeometry, glassMaterial);
+            glassWall.position.set(
+                foundation.position.x,
+                this.centerPoint.y + wallHeight / 2 + this.offsetY,
+                foundation.position.z
+            );
+
+            // Add the glass wall to the scene
+            scene.add(glassWall);
+            this.parts.push(glassWall);
+
+            // Optionally, you can add a metal frame or borders around the glass
+            const frameThickness = 0.01; // Example frame thickness
+            const frameMaterial = new THREE.MeshStandardMaterial({
+                color: 0xffffff, // Dark gray for the frame
+                opacity: 0.5,
+                transparent: true,
+                metalness: 0.8, // Add metallic properties to the frame
+                roughness: 1,
+            });
+
+            // Create a border frame around the glass
+            const topFrameGeometry = new THREE.BoxGeometry(wallWidth + frameThickness, frameThickness, wallThickness);
+            const topFrame = new THREE.Mesh(topFrameGeometry, frameMaterial);
+            topFrame.position.set(foundation.position.x, glassWall.position.y + wallHeight / 2, foundation.position.z);
+            scene.add(topFrame);
+            this.parts.push(topFrame);
+
+            let bottomFrame = new THREE.Mesh(topFrameGeometry, frameMaterial)
+            if (withBottom) {
+                bottomFrame.position.set(foundation.position.x, glassWall.position.y - wallHeight / 2, foundation.position.z);
+                scene.add(bottomFrame);
+                this.parts.push(bottomFrame);
+            }
+
+            const sideFrameGeometry = new THREE.BoxGeometry(frameThickness, wallHeight, wallThickness);
+            const leftFrame = new THREE.Mesh(sideFrameGeometry, frameMaterial);
+            leftFrame.position.set(foundation.position.x - wallWidth / 2, glassWall.position.y, foundation.position.z);
+            scene.add(leftFrame);
+            this.parts.push(leftFrame);
+
+            const rightFrame = new THREE.Mesh(sideFrameGeometry, frameMaterial);
+            rightFrame.position.set(foundation.position.x + wallWidth / 2, glassWall.position.y, foundation.position.z);
+            scene.add(rightFrame);
+            this.parts.push(rightFrame);
+
+            // // Add random latticework bars across the wall (geometric lattice)
+            // const latticeMaterial = new THREE.MeshStandardMaterial({
+            //     color: 0x4F4F4F, // Same material for latticework
+            //     metalness: 0.8,
+            //     roughness: 0.2,
+            // });
+
+            // const latticeCount = 10; // Number of random lattice bars
+            // for (let i = 0; i < latticeCount; i++) {
+            //     const latticeThickness = 0.05; // Thin bars for the lattice
+            //     const latticeGeometry = new THREE.BoxGeometry(
+            //         Math.random() * wallWidth * 0.8 + wallWidth * 0.2, // Random width of the lattice
+            //         latticeThickness, // Thin bar
+            //         wallThickness
+            //     );
+                
+            //     const lattice = new THREE.Mesh(latticeGeometry, latticeMaterial);
+
+            //     // Randomly position the lattice
+            //     const randomX = foundation.position.x - wallWidth / 2 + Math.random() * wallWidth;
+            //     const randomY = this.centerPoint.y + Math.random() * wallHeight - wallHeight / 2;
+                
+            //     lattice.position.set(randomX, randomY, foundation.position.z);
+                
+            //     // Randomly rotate the lattice for an abstract pattern
+            //     lattice.rotation.z = Math.random() * Math.PI * 2;
+
+            //     // Add the lattice to the scene
+            //     scene.add(lattice);
+            //     result.push(lattice)
+            //     this.parts.push(lattice);
+            // }
+
+            return [...result, glassWall, topFrame, bottomFrame, leftFrame, rightFrame];
+        }
+
+
+
+        var createCastleWall = (foundation, width) => {
+            console.log("Building castle wall...");
+
+            // Define the castle wall dimensions
+            const wallHeight = this.wallHeight * 3; // Example: 3 floors tall
+            const wallWidth = width; // Example width
+            const wallThickness = 1; // Thicker than the other walls to represent stone
+            const crenellationHeight = wallHeight * 0.1; // Height of the crenellations
+            const crenellationWidth = wallWidth * 0.2; // Width of each crenellation gap
+            const crenellationGap = crenellationWidth * 0.5; // Gap between each crenellation
+
+            // Create the base castle wall geometry (without the crenellations)
+            const castleWallGeometry = new THREE.BoxGeometry(wallWidth, wallHeight, wallThickness);
+            const castleWallMaterial = new THREE.MeshStandardMaterial({ color: 0x8B5A2B }); // Brownish for stone
+
+            const castleWall = new THREE.Mesh(castleWallGeometry, castleWallMaterial);
+            castleWall.position.set(
+                foundation.position.x,
+                this.centerPoint.y + wallHeight / 2 + this.offsetY,
+                foundation.position.z
+            );
+            scene.add(castleWall); // Add the base wall to the scene
+            this.parts.push(castleWall)
+
+            // Add crenellations to the top of the wall
+            const numCrenellations = Math.floor(wallWidth / (crenellationWidth + crenellationGap)); // Number of crenellations
+            for (let i = 0; i < numCrenellations; i++) {
+                const crenellationGeometry = new THREE.BoxGeometry(crenellationWidth, crenellationHeight, wallThickness);
+                const crenellation = new THREE.Mesh(crenellationGeometry, castleWallMaterial);
+                
+                const xOffset = i * (crenellationWidth + crenellationGap) - wallWidth / 2 + crenellationWidth / 2;
+                crenellation.position.set(
+                    foundation.position.x + xOffset,
+                    this.centerPoint.y + wallHeight + crenellationHeight / 2 + this.offsetY,
+                    foundation.position.z
+                );
+                scene.add(crenellation); // Add each crenellation to the scene
+                this.parts.push(crenellation)
+            }
+
+            // Optionally, you can add a texture to simulate stone blocks
+            const textureLoader = new THREE.TextureLoader();
+            const stoneTexture = textureLoader.load('/images/wall3.jpg'); // Replace with your texture path
+            castleWallMaterial.map = stoneTexture; // Apply texture to the wall material
+            castleWallMaterial.needsUpdate = true; // Ensure the material updates after adding texture
+
+            return castleWall
+        }
+
+        var createMossyWall = (foundation, width) => {
+            console.log("Building mossy wall with circular cutouts...");
+
+            // Define the wall dimensions
+            const wallHeight = this.wallHeight * 3; // Example: 3 floors tall
+            const wallWidth = width; // Example width
+            const wallThickness = 0.5; // Example thickness for a mossy stone wall
+
+            // Create the base wall geometry
+            const mossyWallGeometry = new THREE.BoxGeometry(wallWidth, wallHeight, wallThickness);
+            const mossyWallMaterial = new THREE.MeshStandardMaterial({ color: 0x3E4A33 }); // Mossy greenish-brown color
+
+            // Apply a mossy texture if available
+            const textureLoader = new THREE.TextureLoader();
+            const mossTexture = textureLoader.load('/images/turf-wall.jpg'); // Replace with actual texture path
+            mossyWallMaterial.map = mossTexture;
+            mossyWallMaterial.needsUpdate = true;
+
+            // Create the mossy wall mesh
+            const mossyWall = new THREE.Mesh(mossyWallGeometry, mossyWallMaterial);
+            mossyWall.position.set(
+                foundation.position.x,
+                this.centerPoint.y + wallHeight / 2 + this.offsetY,
+                foundation.position.z
+            );
+            scene.add(mossyWall); // Add the mossy wall to the scene
+            this.parts.push(mossyWall)
+
+            // Create circular window cutouts using CSG (Constructive Solid Geometry)
+            // const evaluator = new Evaluator();
+
+            // // Define circular cutouts (windows)
+            // const numWindows = 3; // Example: 3 circular windows
+            // const windowRadius = 0.8; // Radius of the circular windows
+            // const windowGap = wallHeight / (numWindows + 1); // Gap between windows
+            // for (let i = 0; i < numWindows; i++) {
+            //     // Create the circular window geometry directly as BufferGeometry (no need to convert)
+            //     const windowGeometry = new THREE.CylinderGeometry(windowRadius, windowRadius, wallThickness + 0.1, 32); 
+            //     const windowMesh = new THREE.Mesh(windowGeometry); // Create a mesh from the geometry
+
+            //     windowMesh.rotation.z = Math.PI / 2; // Rotate to face the front
+            //     windowMesh.updateMatrixWorld(); // Update the world matrix to account for transformations
+
+            //     // No need for conversion to BufferGeometry, as THREE.CylinderGeometry is already BufferGeometry
+            //     const windowBrush = new Brush(windowMesh.geometry); // Use Brush with BufferGeometry
+
+            //     // Position the windows at different heights
+            //     const yOffset = (i + 1) * windowGap - wallHeight / 2;
+            //     windowBrush.position.set(
+            //         foundation.position.x, 
+            //         this.centerPoint.y + yOffset + this.offsetY,
+            //         foundation.position.z
+            //     );
+            //     windowBrush.updateMatrixWorld();
+
+            //     // Perform the CSG subtraction to create the window cutouts in the wall
+            //     const finalGeometry = evaluator.evaluate(mossyWall, windowBrush, SUBTRACTION);
+            //     mossyWall.geometry = finalGeometry.geometry; // Update the wall geometry with the cutouts
+            // }
+
+
+
+            // Convert the result back into a Mesh and add to the scene
+            // mossyWall.geometry = finalGeometry.geometry;
+            // mossyWall.material = mossyWallMaterial;
+            scene.add(mossyWall); // Add the wall with circular cutouts to the scene
+        }
+
+
+        var side = 0
+        for (var wall_instructions of [
+            'decorative wall with cutout windows at 1 - 2 levels of varying sizes',
+            'a wall of glass',
+            'a castle wall',
+            'a mossy wall with circular window cutouts'
+        ]) {
+
+            // Function to build the elevator on top of the foundation
+            var _side = side++
+            var height = this.wallHeight * 3
+            console.log("Building on top of foundation...");
+
+            // Use houseDim for dimensions
+            const houseWidth = side % 2 == 0 ? this.houseDim[0] : this.houseDim[1];  // Width of the house/foundation
+            const houseLength = side % 2 == 0 ? this.houseDim[1] : this.houseDim[0]; // Length of the house/foundation
+
+
+            // // Example wall for the elevator shaft
+            // const wallGeometry = new THREE.BoxGeometry(houseWidth, height, 0.1); // Width of the wall is the house width
+            // const wallBrush = new Brush(wallGeometry);
+            // wallBrush.position.set(
+            //     foundation.position.x,  // X position matches the foundation's position
+            //     this.centerPoint.y + height / 2 + this.offsetY, // Center vertically on foundation
+            //     foundation.position.z - houseLength / 2 + 0.1 // Z position based on foundation's length
+            // );
+            // wallBrush.updateMatrixWorld();
+
+            // // Example door cutout in the wall
+            // const doorGeometry = new THREE.BoxGeometry(1.25, 2, 0.1); // Door size
+            // const doorBrush = new Brush(doorGeometry);
+            // doorBrush.position.set(
+            //     foundation.position.x,  // X position matches foundation
+            //     this.centerPoint.y + this.wallHeight / 2,  // Center door on wall's height
+            //     foundation.position.z - houseLength / 2 + 0.1 // Same Z as the wall
+            // );
+            // doorBrush.updateMatrixWorld();
+
+            // // Perform the CSG subtraction to create a door in the wall
+            // const evaluator = new Evaluator();
+            // const finalWallGeometry = evaluator.evaluate(wallBrush, doorBrush, SUBTRACTION);
+
+            // // Convert the result back into a Mesh
+            // const eWall = new THREE.Mesh(finalWallGeometry.geometry, new THREE.MeshStandardMaterial({ color: 0x808080 }));
+            
+
+
+            var walls = []
+
+
+            switch (wall_instructions) {
+                case 'decorative wall with cutout windows at 1 - 2 levels of varying sizes':
+                    var aDecorativeWall = createDecorativeWall(foundation, this.houseDim[0]);
+                    aDecorativeWall.position.z += this.houseDim[1] / 2
+                    
+                    walls.push(aDecorativeWall)
+                    break;
+                case 'a wall of glass':
+                    var aDecorativeWall = createDecorativeWall(foundation, this.houseDim[1]);
+                    aDecorativeWall.position.x += this.houseDim[0] / 2
+                    aDecorativeWall.rotation.y += Math.PI / 2
+                    
+                    walls.push(aDecorativeWall)
+                    break;
+                case 'a castle wall':
+                    var aDecorativeWall = createDecorativeWall(foundation, this.houseDim[0]);
+                    aDecorativeWall.position.z -= this.houseDim[1] / 2
+                    aDecorativeWall.rotation.y += -Math.PI 
+                    
+                    walls.push(aDecorativeWall)
+                    break;
+                case 'a mossy wall with circular window cutouts':
+                    var aDecorativeWall = createDecorativeWall(foundation, this.houseDim[1]);
+                    aDecorativeWall.position.x -= this.houseDim[0] / 2
+                    aDecorativeWall.rotation.y = -Math.PI / 2
+                    walls.push(aDecorativeWall)
+                    break;
+            }
+
+            for (var i = 0; i < walls.length; i++) {
+                const glassBoundingBox = new THREE.Box3().setFromObject(walls[i]);
+
+                // Access foliage objects from the trees
+                window.terrain.trees.map(tree => tree.foliage).forEach(foliage => {
+                    const foliageBoundingBox = new THREE.Box3().setFromObject(foliage);
+
+                    // Check if the foliage intersects with the glass bounding box
+                    if (glassBoundingBox.intersectsBox(foliageBoundingBox)) {
+
+                        // Get the foliage geometry (assuming it is a BufferGeometry)
+                        const foliageGeometry = foliage.geometry;
+                        foliageGeometry.computeBoundingBox();
+
+                        // Access foliage vertices to subtract the out-of-bounds ones
+                        const vertices = foliageGeometry.attributes.position;
+                        const vertex = new THREE.Vector3();
+
+                        for (let j = 0; j < vertices.count; j++) {
+                            vertex.fromBufferAttribute(vertices, j);
+
+                            // Check if the vertex is inside the glass bounding box in the XZ plane
+                            if (vertex.x > glassBoundingBox.min.x && vertex.x < glassBoundingBox.max.x &&
+                                vertex.z > glassBoundingBox.min.z && vertex.z < glassBoundingBox.max.z) {
+                                
+                                // If the vertex is inside the glass wall bounds, "collapse" it vertically
+                                // You could set it to the height of the glass or move it outside the bounds
+                                vertex.y = glassBoundingBox.min.y;  // Collapsing the vertex to ground level, adjust as needed
+
+                                // Alternatively, move the vertex outside the glass bounds in the XZ plane
+                                // vertex.x = glassBoundingBox.min.x - someOffset;  // Example of repositioning
+
+                                // Or completely remove/skip the vertex (if removing is supported by your setup)
+                            }
+
+                            // Update the vertex positions
+                            vertices.setXYZ(j, vertex.x, vertex.y, vertex.z);
+                        }
+
+                        // Mark geometry as needing an update
+                        foliageGeometry.attributes.position.needsUpdate = true;
+                    }
+                });
+            }
+
+
+
+
+            
+            
+
+
+        
+        }
+
+
+
     }
 
 }
@@ -1241,23 +1701,7 @@ class Terrain {
     }
 
     updateTerrain() {
-        for (var center of this.surroundingCenters) {
-            var centerKey = `${center.center.x}_${center.center.z}`;
-            if (center.center.distanceTo(user.camera.position) < 75) {
-                center.pillar.material.color.set(0xff0000);
-                var terrainCreated = false;
-                for (var j = 0; j < this.meshes.length; j++) {
-                    if (this.meshes[j].centerKey == centerKey) {
-                        terrainCreated = true;
-                    }
-                }
-                if (!terrainCreated) {
-                    this.generate(center.center.x, center.center.y, center.center.z);
-                }
-            } else {
-                center.pillar.material.color.set(0xffffff);
-            }
-        }
+        
         
         this.updateVisibleTrianglesAndClusters(window.user.camera.position);
     
@@ -2108,18 +2552,7 @@ class Terrain {
             {x: roundedX + this.quadrant * 2, y: 0, z: roundedZ + this.quadrant * 2}  // Bottom-Right
         ];
 
-        for (var i = 0; i < centers.length; i++) {
-            var pillarGeometry = new THREE.CylinderGeometry(1, 1, 32, 32);
-            var pillarMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-            var pillar = new THREE.Mesh(pillarGeometry, pillarMaterial);
-            pillar.position.set(centers[i].x, centers[i].y, centers[i].z);
-            centers[i] = { 
-                center: new THREE.Vector3(centers[i].x, centers[i].y, centers[i].z), 
-                pillar 
-            }
-            scene.add(pillar);
-           
-        }
+       
 
         this.surroundingCenters = centers;
         
@@ -2262,6 +2695,7 @@ class Terrain {
         
         const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
         sphere.castShadow = true
+        sphere.name = 'foliage'
         sphere.receiveShadow = true
         sphere.position.set(xS, yS + (foliageRadius / 2), zS); // Set foliage position
         scene.add(sphere);
@@ -2410,7 +2844,7 @@ class UserController {
         this.leftShift = false;
         this.rightShift = false;
         this.isJumping = false;
-        this.jumpVelocity = 0;
+        this.jump_velocity = { x: 0, y: 0, z: 0 };
         this.centerKey = null;
         this.velocity = new THREE.Vector3(); // General velocity
         this.intersectsTerrain = [];
@@ -2438,7 +2872,7 @@ class UserController {
                 this.d = true;
             } else if (key == ' ') {
                 this.isJumping = true;
-                this.jumpVelocity = 0.4;
+                this.jump_velocity.y = 0.4;
             } else if (key == 'ARROWUP') {
                 this.ArrowUp = true;
             } else if (key == 'ARROWDOWN') {
@@ -2507,7 +2941,7 @@ class UserController {
                         var arrived = false
                         var targetFloor = intersects[i].object.floor
                         var targetHeight = eFloor.interval * targetFloor + castle.offsetY;
-                        console.log(targetFloor, targetHeight);
+
                         function riseElevator() {
                             if (arrived) return
                             castle.elevator.forEach(m => {
@@ -2530,7 +2964,7 @@ class UserController {
                                     }
                                 } else if (m.name == 'elevator-floor' && (up ? m.position.y >= targetHeight : m.position.y <= targetHeight)) {
                                     m.position.y = targetHeight;
-                                    console.log('reaching targetHeight', m.position.y)
+                                    console.log('! reaching targetHeight', m.position.y)
                                     arrived = true
                                 }
                             });
@@ -2721,9 +3155,26 @@ class UserController {
     }
 
     handleJumping() {
-        // Update camera position based on the jump velocity
-        this.camera.position.y += this.jumpVelocity;
-        this.jumpVelocity -= 0.03 * 0.8; // Simulate gravity by decreasing velocity
+        // Apply jump velocity to the camera position
+        this.camera.position.y += this.jump_velocity.y;
+        this.camera.position.x += this.jump_velocity.x;
+        this.camera.position.z += this.jump_velocity.z;
+        
+        // Simulate gravity by decreasing the Y velocity (falling down)
+        this.jump_velocity.y -= 0.03 * 0.8; // You can tweak gravity strength here
+
+        // Optional: Add movement velocity based on directional keys (W, A, S, D)
+        if (this.w) {
+            this.jump_velocity.z = -0.1; // Move forward
+        } else if (this.s) {
+            this.jump_velocity.z = 0.1; // Move backward
+        }
+
+        if (this.a) {
+            this.jump_velocity.x = -0.1; // Move left
+        } else if (this.d) {
+            this.jump_velocity.x = 0.1; // Move right
+        }
 
         // Cast a ray from the camera downwards to detect the ground
         const downRaycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
@@ -2733,35 +3184,33 @@ class UserController {
         const upRaycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, 1, 0));
         const upIntersection = this.findClosestIntersection(upRaycaster);
 
-        // Ground collision detection
+        // Ground collision detection (landing)
         if (downIntersection && downIntersection.distance < 1) {
             console.log("Camera is above the ground, landing");
 
             // Adjust the camera position to the surface plus a small offset to simulate landing
             this.camera.position.y = downIntersection.point.y + 1;
-            this.camera.velocity.y = 0;
-            this.isJumping = false;
+            this.jump_velocity.y = 0; // Stop vertical velocity
+            this.isJumping = false;   // The jump is over, camera is now on the ground
 
-            this.updateTerrain(downIntersection);
+            this.updateTerrain(downIntersection); // Optionally update terrain based on landing position
         }
 
-        // Ceiling collision detection
-        if (upIntersection && upIntersection.distance < .5) {
+        // Ceiling collision detection (prevent moving through ceilings)
+        if (upIntersection && upIntersection.distance < 0.5) {
             console.log("Camera hit the ceiling");
 
             // Prevent the camera from going through the ceiling
-            this.camera.position.y = upIntersection.point.y - .5; // Adjust based on how close you want to stop
-            this.camera.velocity.y = 0;
-            this.isJumping = false;
-
-            // Optional: handle additional ceiling collision logic here
+            this.camera.position.y = upIntersection.point.y - 0.5; // Adjust position to stop at the ceiling
+            this.jump_velocity.y = 0; // Stop upward velocity
         }
 
-        // If neither intersection is detected, continue falling
+        // If the camera is neither on the ground nor hitting a ceiling, it continues falling
         if (!downIntersection && !upIntersection) {
-            console.log("No intersection detected, camera still in the air");
+            console.log("No ground or ceiling detected, camera is still in the air");
         }
     }
+
 
 
 
@@ -2883,56 +3332,7 @@ class View {
         window.terrain.setCamera(window.user.camera);
 
     
-        // Set up the axis object to define colors for positive and negative directions
-        var axis = {
-            x: {
-                neg: 'blue',  // Negative X direction (left)
-                pos: 'red'    // Positive X direction (right)
-            },
-            z: {
-                neg: 'green',  // Negative Z direction (backward)
-                pos: 'yellow'  // Positive Z direction (forward)
-            }
-        };
-
-        var cylinderLength = VM.map[VM.user.level].quadrant * 2;
-
-        // Loop through each axis (x and z) and each polarity (positive and negative)
-        for (var xyz in axis) {
-            for (var polarity in axis[xyz]) {
-                // Create the cylinder geometry for each axis and polarity
-                var cylinderHelperGeometry = new THREE.CylinderGeometry(0.15, 0.5, cylinderLength, 32); // Radius 0.5, length 20 (horizontal)
-
-                // Create the material with the appropriate color
-                var cylinderMaterial = new THREE.MeshBasicMaterial({ color: axis[xyz][polarity] });
-
-                // Create the cylinder mesh
-                var cylinder = new THREE.Mesh(cylinderHelperGeometry, cylinderMaterial);
-
-                // Position the cylinder based on the axis and polarity
-                if (xyz === 'x') {
-                    // For the X-axis, move the cylinder along the X-axis and rotate it to be horizontal
-                    cylinder.position.x = polarity === 'pos' ? cylinderLength / 2 : -cylinderLength / 2; // Positive or negative X
-                    cylinder.position.z = 0; // Keep it centered on the Z-axis
-                    cylinder.rotation.z = Math.PI / 2; // Rotate to lie horizontally along X
-                } else if (xyz === 'z') {
-                    // For the Z-axis, move the cylinder along the Z-axis and rotate it to be horizontal
-                    cylinder.position.z = polarity === 'pos' ? cylinderLength / 2 : -cylinderLength / 2; // Positive or negative Z
-                    cylinder.position.x = 0; // Keep it centered on the X-axis
-                    cylinder.rotation.x = Math.PI / 2; // Rotate to lie horizontally along Z
-                }
-
-                // Set the Y-position to an appropriate height (like a grid on the roof)
-                cylinder.position.y = 15;
-
-                // Add the cylinder to the scene
-                scene.add(cylinder);
-            }
-        }
-
-
-
-
+      
         boundingVolumeHierarchy.init(window.terrain.grassTriangles);
         
         this.addUser();
@@ -3136,5 +3536,8 @@ window.VM = new ViewModel();
 window.view = new View();
 
 window.devview = document.getElementById('map');
+
+
+
 
 await VM.init("Peter", view);
