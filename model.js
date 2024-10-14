@@ -31,7 +31,7 @@ class Model {
         sop: {
             trees: t * 2,
             grasses: t * .5,
-            grounds: t
+            grounds: 0
         },
         grasses: [],
         grounds: [],
@@ -41,7 +41,7 @@ class Model {
             position: {
               foundation: {
                 x: 0,
-                y: 0,
+                y: 16,
                 z: 0,
               },
               elevator: {
@@ -104,9 +104,14 @@ class Model {
             },
             area: {
               foundation: {
-                width: 80,
+                width: 20,
+                height: 50,
+                depth: 20
+              },
+              floor: {
+                width: 20,
                 height: 3,
-                depth: 50
+                depth: 20
               },
               elevator: {
                 width: 2.5,
