@@ -80,10 +80,9 @@ function TriangleMesh(vertices, a, b, c, terrainWidth, terrainHeight) {
 
     const triangleMaterial = new THREE.MeshStandardMaterial({
         transparent: false,
-        wireframe: true,
-        color: 'red',
-        side: THREE.DoubleSide
-        // color: new THREE.Color(Math.random(), Math.random(), Math.random())
+        wireframe: false,
+        side: THREE.DoubleSide,
+        color: new THREE.Color(Math.random(), Math.random(), Math.random())
     });
     
 
@@ -106,6 +105,9 @@ function TriangleMesh(vertices, a, b, c, terrainWidth, terrainHeight) {
     triangleMesh.slope = slope;
     triangleMesh.normal = normal;
     triangleMesh.triangle.uvs = uvs;  // Store UVs for later use (e.g., for texture painting)
+    triangleMesh.name = `triangle${[vertices[a * 3], vertices[a * 3 + 1], vertices[a * 3 + 2],
+        vertices[b * 3], vertices[b * 3 + 1], vertices[b * 3 + 2],
+        vertices[c * 3], vertices[c * 3 + 1], vertices[c * 3 + 2]].map(n => n.toFixed(1))}`
 
     return triangleMesh;
 }
@@ -594,13 +596,15 @@ class Structure {
 
             floor.castShadow = true;
             floor.receiveShadow = true;
-
-            this.parts[`floor${i}`] = floor;
+            const floorName = `floor${i}`
+            console.log(floorName)
+            this.parts[floorName] = floor;
+            floor.name = floorName
             scene.add(floor);
         }
     }
     buildWalls() {
-        var createDecorativeWall = (foundation, width, times = 1) => {
+        var createDecorativeWall = (foundation, width, times = 1, wall_instructions) => {
             console.log("Building decorative wall...");
 
             // Define the wall dimensions
@@ -657,7 +661,7 @@ class Structure {
                     transparent: true,
                     opacity: 0.63
                 }));
-            decorativeWall.name = 'wall'
+            decorativeWall.name = wall_instructions
             // decorativeWall.computeBoundingSphere()
             const positions = finalWallGeometry.geometry.attributes.position.array;
             for (let i = 0; i < positions.length; i++) {
@@ -964,27 +968,27 @@ class Structure {
 
             switch (wall_instructions) {
                 case 'decorative wall with cutout windows at 1 - 2 levels of varying sizes':
-                    var aDecorativeWall = createDecorativeWall(this.parts.foundation, this.area.foundation.width);
+                    var aDecorativeWall = createDecorativeWall(this.parts.foundation, this.area.foundation.width, 1, wall_instructions);
                     aDecorativeWall.position.z += this.area.foundation.depth / 2
                     scene.add(aDecorativeWall)
                     this.parts[aDecorativeWall.name] = aDecorativeWall
                     break;
                 case 'a wall of glass':
-                    var aDecorativeWall = createDecorativeWall(this.parts.foundation, this.area.foundation.depth);
+                    var aDecorativeWall = createDecorativeWall(this.parts.foundation, this.area.foundation.depth, 1, wall_instructions);
                     aDecorativeWall.position.x += this.area.foundation.width / 2
                     aDecorativeWall.rotation.y += Math.PI / 2
                     scene.add(aDecorativeWall)
                     this.parts[aDecorativeWall.name] = aDecorativeWall
                     break;
                 case 'a castle wall':
-                    var aDecorativeWall = createDecorativeWall(this.parts.foundation, this.area.foundation.width);
+                    var aDecorativeWall = createDecorativeWall(this.parts.foundation, this.area.foundation.width, 1, wall_instructions);
                     aDecorativeWall.position.z -= this.area.foundation.depth / 2
                     aDecorativeWall.rotation.y += -Math.PI 
                     scene.add(aDecorativeWall)
                     this.parts[aDecorativeWall.name] = aDecorativeWall
                     break;
                 case 'a mossy wall with circular window cutouts':
-                    var aDecorativeWall = createDecorativeWall(this.parts.foundation, this.area.foundation.depth);
+                    var aDecorativeWall = createDecorativeWall(this.parts.foundation, this.area.foundation.depth, 1, wall_instructions);
                     aDecorativeWall.position.x -= this.area.foundation.width / 2
                     aDecorativeWall.rotation.y = -Math.PI / 2
                     scene.add(aDecorativeWall)
@@ -2037,7 +2041,7 @@ class Terrain {
 
                 v.y += variance;
 
-                var inCastle = v.x > -45 && v.x < 45 && v.z > -30 && v.z < 30
+                var inCastle = v.x > -castle.area.foundation.width && v.x < castle.area.foundation.width && v.z > -castle.area.foundation.depth && v.z < castle.area.foundation.depth
                 if (inCastle) {
                     v.y = 0
                 }
@@ -2127,7 +2131,7 @@ class Terrain {
                 v.y = (1 - x) * (1 - y) * v0.y + x * (1 - y) * v1.y + x * y * v2.y + (1 - x) * y * v3.y;
                 v.z = (1 - x) * (1 - y) * v0.z + x * (1 - y) * v1.z + x * y * v2.z + (1 - x) * y * v3.z;
 
-                var inCastle = v.x > -50 && v.x < 50 && v.z > -35 && v.z < 35
+                var inCastle = v.x > -castle.area.foundation.width * 1.5 && v.x < castle.area.foundation.width * 1.5 && v.z > -castle.area.foundation.depth * 1.5 && v.z < castle.area.foundation.depth * 1.5
 
                 var isNearGrassPatch = false && !inCastle/*(grassPatches[i][j] || 
                                           (i > 0 && grassPatches[i - 1][j]) ||  // Check left
@@ -3382,8 +3386,8 @@ class UserController {
         this.height = 1.2;
         this.depth = .2;
         this.weight = 0.1
-        this._energy = { x: 1, y: .3, z: 1 };
-        this.energy = { x: 1, y: .3, z: 1 };
+        this._energy = { x: 1, y: .5, z: 1 };
+        this.energy = { x: 1, y: .5, z: 1 };
         this.velocity = { x: 0, y: 0, z: 0 };
         this.energy_start = { x: 0, y: 0, z: 0 };
         this.centerKey = null;
@@ -3542,6 +3546,7 @@ class UserController {
             this.camera.position,
             new THREE.Vector3(1, 1, 1) // Adjust size if needed
         );
+
     }
 
     updateSpheres() {
@@ -3561,6 +3566,9 @@ class UserController {
 
         // Check intersections with castle parts using raycasting
         Object.values(window.castle.parts).forEach(mesh => {
+            if (!mesh.name) {
+                throw new Error('missing name')
+            }
             
             if (mesh.position.distanceTo(this.camera.position) < 100) {
                 user.objects.push(mesh);
@@ -3572,6 +3580,9 @@ class UserController {
 
         // Check intersections with grounds (triangles) using raycasting
         VM.map[VM.user.level].grounds.forEach(mesh => {
+            if (!mesh.name) {
+                throw new Error('missing name')
+            }
             let isIntersecting = false;
             const triangleCenter = terrain.getTriangleCenter(mesh.triangle);
 
@@ -3586,10 +3597,13 @@ class UserController {
             });
 
             // Add or remove based on intersections
-            if (isIntersecting) {
-                user.objects.push(mesh);
+            if (mesh.position.distanceTo(user.camera.position) < VM.map[VM.user.level].sop.grounds) {
+                if (isIntersecting) {
+                    
+                    user.objects.push(mesh);
+                }
                 if (!mesh.parent) scene.add(mesh);
-            } else if (mesh.parent) {
+            } else {
                 scene.remove(mesh);
             }
         });
@@ -3655,15 +3669,16 @@ class UserController {
                     for (let obj of user.objects) {
                         const intersects = raycaster.intersectObject(obj, true);
                         if (intersects.length > 0 && intersects.some(obj => obj.distance < .55)) {
-                            this.intersects.push(intersects[0]);
+                            this.intersects.push(intersects[0].object);
                             this.record = true;
                             setTimeout(() => { 
                                 this.record = false;
-                            }, 5000);
+                            }, 1000);
 
                             this.isFalling = false;
                             this.velocity.y = 0;
                             this.camera.position.y = intersects[0].point.y + this.height / 2;
+                            console.log("landing at", this.camera.position.y)
                             this.usermesh.position.copy(this.camera.position);
                             break;
                         }
@@ -3673,7 +3688,7 @@ class UserController {
                     for (let mesh of terrain.meshes) {
                         const intersects = raycaster.intersectObject(mesh, true);
                         if (intersects.length > 0 && intersects.some(obj => obj.distance < .55)) {
-                            this.intersects.push(intersects[0]);
+                            this.intersects.push(intersects[0].object);
                             this.record = true;
                             setTimeout(() => { 
                                 this.record = false;
@@ -3689,17 +3704,21 @@ class UserController {
             }
 
             // Apply gravity if still falling
-            if (this.velocity.y > TERMINAL_VELOCITY) {
-                this.velocity.y -= 0.03;  // Decrease velocity gradually
+            if (this.isFalling && this.velocity.y > TERMINAL_VELOCITY) {
+                this.velocity.y -= 0.05;  // Decrease velocity gradually
             }
+
             this.camera.position.y += this.velocity.y;
             this.usermesh.position.y += this.velocity.y;
+
+            if (this.velocity.y !== 0) {
+                console.log("changing y at", this.camera.position.y)
+            }
 
         } else if (this.isJumping) {
             if (user.objects.length) {
                 const rayOrigin = user.self().position.clone();
                 const directions = [
-                    new THREE.Vector3(0, -1, 0),  // Down
                     new THREE.Vector3(1, 0, 0),   // Right
                     new THREE.Vector3(-1, 0, 0),  // Left
                     new THREE.Vector3(0, 0, 1),   // Forward
@@ -3713,15 +3732,16 @@ class UserController {
                     for (let obj of user.objects) {
                         const intersects = raycaster.intersectObject(obj, true);
                         if (intersects.length > 0 && intersects[0].distance < .55 && intersects[0].point.y > this.camera.position.y) {
-                            this.intersects.push(intersects[0]);
+                            this.intersects.push(intersects[0].object);
+                            console.log(this.intersects)
                             this.record = true;
                             setTimeout(() => { 
                                 this.record = false;
-                            }, 5000);
+                            }, 100);
 
                             this.isFalling = false;
                             this.velocity.y = 0;
-                            // this.camera.position.y = intersects[0].point.y - this.height / 2 - .1;
+                            // this.camera.position.y = intersects[0].point.y - this.height / 2;
                             this.usermesh.position.copy(this.camera.position);
                             break;
                         }
@@ -3730,9 +3750,10 @@ class UserController {
             }
 
             if (this.energy.y > 0) {
-                this.energy.y -= .01;  // Simulate loss of energy during the jump
+                this.energy.y -= .05;  // Simulate loss of energy during the jump
                 this.camera.position.y += this.energy.y;
                 this.usermesh.position.y += this.energy.y;
+                console.log("Jumping to", this.camera.position.y)
             } else {
                 this.energy.y = this._energy.y;
                 this.isJumping = false;
@@ -3746,10 +3767,10 @@ class UserController {
             const intersects = raycaster.intersectObjects(user.objects, true);
 
             if (intersects.length > 0 && intersects.some(obj => obj.distance < 2)) {
-                this.record = true;
-                this.intersects.push(intersects[0]);
-                this.camera.position.y = intersects[0].point.y + this.height;
-                this.usermesh.position.y = intersects[0].point.y + this.height;
+                
+                this.intersects.push(intersects[0].object);
+                // this.camera.position.y = intersects[0].point.y + this.height;
+                // this.usermesh.position.y = intersects[0].point.y + this.height;
             }
 
             if (intersects.length === 0 || !intersects.some(obj => obj.distance < 2)) {
@@ -3830,7 +3851,7 @@ class UserController {
 
         // Handle collisions before applying movement
         // this.handleCollision();
-// 
+
         // Apply movement after collision handling
         this.camera.position.add(combinedMovement);
 
@@ -3863,11 +3884,13 @@ class UserController {
             new THREE.Vector3(0, 0, 1),    // Forward
             new THREE.Vector3(0, 0, -1),   // Backward
             new THREE.Vector3(0, 1, 0),    // Up
-            new THREE.Vector3(0, -1, 0)    // Down
+            // new THREE.Vector3(0, -1, 0)    // Down
         ];
 
         const collisionDistance = 0.5; 
         let collisionResponseForce = 0.3; 
+
+
 
         for (let i = 0; i < directions.length; i++) {
             let dir = directions[i];
@@ -3888,12 +3911,17 @@ class UserController {
             try {
                 const intersectsCastle = raycaster.intersectObjects(user.objects, true);
                 if (intersectsCastle.length > 0 && intersectsCastle.some(i => i.distance < 1)) {
-                    this.handleCastleCollision(intersectsCastle[0], dir, collisionResponseForce);
+                    intersectsCastle.forEach(intersection => {
+                        this.handleCastleCollision(intersection, dir, collisionResponseForce);
+                    })
+                    
                 }
             } catch (e) {
                 debugger
             }
         }
+
+
     
     }
 
@@ -3916,6 +3944,8 @@ class UserController {
     handleCastleCollision(intersection, direction, responseForce) {
         const responseDirection = this.camera.position.clone().sub(intersection.point).normalize();
 
+        user.intersects.push(intersection.object)
+
         // If it's a vertical intersection (like standing on a foundation)
         if (isVerticalIntersection(intersection.face.normal) && (this.isFalling || this.isJumping)) {
             this.energy.y = this._energy.y;
@@ -3923,7 +3953,9 @@ class UserController {
             this.isFalling = true;  // Switch to falling after the jump peak
         } else {
             // Horizontal collision with walls, push the player away
+            console.log("Changing position from collision to", this.camera.position.clone())
             this.camera.position.add(responseDirection.multiplyScalar(responseForce));
+            console.log("Collision changed position to", this.camera.position.clone())
         }
     }
 
@@ -3989,6 +4021,9 @@ class View {
 
 
         console.log(VM);
+        window.castle = new Structure(VM.map[VM.user.level].structures.filter(s => s.name == 'castle').pop())
+
+        window.castle.erect();
 
         window.terrain = new Terrain(VM);
 
@@ -4071,8 +4106,12 @@ class View {
                 user: {
                     velocity: user.velocity,
                     energy: user.energy,
-                    intersections: user.intersects.map(i => i.point),
-                    record: user.record
+                    intersections: user.intersects.map(i => {
+                        if (!i.name) console.log(i)
+                        return i.name
+                    }),
+                    record: user.record,
+                    objects: user.objects.map(i => i.name)
                 }
             }, null, 2)}</pre>`
 
@@ -4121,19 +4160,19 @@ class View {
             }
         }
 
-        window.user.camera.position.set(0, 1.5 + user.height / 2, 0);
-        window.user.usermesh.position.set(0, 1.5 + user.height / 2, 0);
+        window.user.camera.position.set(0, castle.position.foundation.y + (castle.area.foundation.height / 2) + (user.height / 2), 0);
+        window.user.usermesh.position.set(0, castle.position.foundation.y + (castle.area.foundation.height / 2) + (user.height / 2), 0);
         window.user.camera.rotation.set(0, 1.533185307179759, 0)
 
 
         var centerPoint = getCenterOfGeometry(mesh.geometry);
         centerPoint.y -= 4.5
 
-        window.castle = new Structure(VM.map[VM.user.level].structures.filter(s => s.name == 'castle').pop())
+        
 
-        window.castle.erect();
-
-
+        setTimeout(() => { 
+            user.record = false;
+        }, 1000);
        
         
     }
