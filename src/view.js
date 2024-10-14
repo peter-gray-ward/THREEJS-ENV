@@ -3242,73 +3242,93 @@ class UserController {
             this.usermesh.position[dir] += this.jump_velocity[dir];
         }
 
-        if (this.isFalling) {
+       if (this.isFalling) {
             if (user.objects.length) {
                 const rayOrigin = user.self().position.clone();
-                const rayDirection = new THREE.Vector3(0, -1, 0);
-                const raycaster = new THREE.Raycaster(rayOrigin, rayDirection.normalize());
-                for (var obj of user.objects) {
-                    const intersects = raycaster.intersectObject(obj, true);
-                    if (intersects.length > 0 && intersects.some(obj => obj.distance < 5)) {
-                        this.intersects.push(intersects[0])
-                        this.record = true
-                        setTimeout(() => { 
-                            this.record = false
-                        }, 5000)
-                        this.isFalling = false;
-                        this.velocity.y = 0;
-                        this.camera.position.y = intersects[0].point.y + this.height / 2
-                        this.usermesh.position.copy(this.camera.position)
+                const directions = [
+                    new THREE.Vector3(0, -1, 0),  // Down
+                    new THREE.Vector3(1, 0, 0),   // Right
+                    new THREE.Vector3(-1, 0, 0),  // Left
+                    new THREE.Vector3(0, 0, 1),   // Forward
+                    new THREE.Vector3(0, 0, -1),  // Backward
+                    new THREE.Vector3(0, 1, 0)    // Up (optional, if you want to handle ceilings)
+                ];
+
+                // Iterate through all directions and objects for raycasting
+                for (let dir of directions) {
+                    const raycaster = new THREE.Raycaster(rayOrigin, dir.normalize());
+                    for (let obj of user.objects) {
+                        const intersects = raycaster.intersectObject(obj, true);
+                        if (intersects.length > 0 && intersects.some(obj => obj.distance < 5)) {
+                            this.intersects.push(intersects[0]);
+                            this.record = true;
+                            setTimeout(() => { 
+                                this.record = false;
+                            }, 5000);
+
+                            this.isFalling = false;
+                            this.velocity.y = 0;
+                            this.camera.position.y = intersects[0].point.y + this.height / 2;
+                            this.usermesh.position.copy(this.camera.position);
+                            break;
+                        }
                     }
-                }
-                for (var mesh of terrain.meshes) {
-                    const intersects = raycaster.intersectObject(obj, true);
-                    if (intersects.length > 0 && intersects.some(obj => obj.distance < 5)) {
-                        this.intersects.push(intersects[0])
-                        this.record = true
-                        setTimeout(() => { 
-                            this.record = false
-                        }, 5000)
-                        obj.intersects = intersects
-                        this.isFalling = false;
-                        this.velocity.y = 0;
+
+                    // Also check terrain meshes
+                    for (let mesh of terrain.meshes) {
+                        const intersects = raycaster.intersectObject(mesh, true);
+                        if (intersects.length > 0 && intersects.some(obj => obj.distance < 5)) {
+                            this.intersects.push(intersects[0]);
+                            this.record = true;
+                            setTimeout(() => { 
+                                this.record = false;
+                            }, 5000);
+
+                            mesh.intersects = intersects;
+                            this.isFalling = false;
+                            this.velocity.y = 0;
+                            break;
+                        }
                     }
                 }
             }
 
-
+            // Apply gravity if still falling
             if (this.velocity.y > TERMINAL_VELOCITY) {
-                this.velocity.y -= 0.03;
+                this.velocity.y -= 0.03;  // Decrease velocity gradually
             }
             this.camera.position.y += this.velocity.y;
             this.usermesh.position.y += this.velocity.y;
+
         } else if (this.isJumping) {
             if (this.energy.y > 0) {
-                this.energy.y -= this.weight;
+                this.energy.y -= this.weight;  // Simulate loss of energy during the jump
                 this.camera.position.y += this.energy.y;
                 this.usermesh.position.y += this.energy.y;
             } else {
                 this.energy.y = this._energy.y;
-                this.isJumping = false
-                this.isFalling = true;
+                this.isJumping = false;
+                this.isFalling = true;  // Switch to falling after the jump peak
             }
+
         } else {
-
-            const u = user.self().position.clone();
-            const rayDirection = new THREE.Vector3(0, -1, 0);
-            const raycaster = new THREE.Raycaster(u, rayDirection.normalize());
+            const rayOrigin = user.self().position.clone();
+            const rayDirection = new THREE.Vector3(0, -1, 0);  // Downward ray to check the ground
+            const raycaster = new THREE.Raycaster(rayOrigin, rayDirection.normalize());
             const intersects = raycaster.intersectObjects(user.objects, true);
+
             if (intersects.length > 0 && intersects.some(obj => obj.distance < 2)) {
-                this.record = true
-                this.intersects.push(intersects[0])
-                this.camera.position.y = intersects[0].point.y + this.height
-                this.usermesh.position.y = intersects[0].point.y + this.height
+                this.record = true;
+                this.intersects.push(intersects[0]);
+                this.camera.position.y = intersects[0].point.y + this.height;
+                this.usermesh.position.y = intersects[0].point.y + this.height;
             }
 
-            if (intersects.length == 0 || !intersects.some(obj => obj.distance < 2)) {
-                this.isFalling = true
+            if (intersects.length === 0 || !intersects.some(obj => obj.distance < 2)) {
+                this.isFalling = true;  // No ground detected, switch to falling state
             }
         }
+
 
         // Movement (while not jumping, or with reduced movement during jumping)
         var combinedMovement = new THREE.Vector3();
