@@ -3298,14 +3298,14 @@ class UserController {
             const rayDirection = new THREE.Vector3(0, -1, 0);
             const raycaster = new THREE.Raycaster(u, rayDirection.normalize());
             const intersects = raycaster.intersectObjects(user.objects, true);
-            if (intersects.length > 0 && intersects.some(obj => obj.distance < 0.75)) {
+            if (intersects.length > 0 && intersects.some(obj => obj.distance < 2)) {
                 this.record = true
                 this.intersects.push(intersects[0])
                 this.camera.position.y = intersects[0].point.y + this.height
                 this.usermesh.position.y = intersects[0].point.y + this.height
             }
 
-            if (intersects.length == 0) {
+            if (intersects.length == 0 || !intersects.some(obj => obj.distance < 2)) {
                 this.isFalling = true
             }
         }
