@@ -126,7 +126,7 @@ class Model {
                 }
               },
               wall: {
-                height: 15
+                height: 30
               }
             },
             floors: 20,
