@@ -1193,21 +1193,31 @@ class Terrain {
                 let noiseX = Math.floor(x * (this.noiseWidth - 1));
                 let noiseY = Math.floor(y * (this.noiseHeight - 1));
                 let variance = perlinNoise[noiseY * this.noiseWidth + noiseX] * this.altitudeVariance;
-                //let variance = woodTerrain[noiseY * this.noiseWidth + noiseX] * this.altitudeVariance;;
 
                 v.y += variance;
 
-                var inCastle = v.x > -45 && v.x < 45 && v.z > -30 && v.z < 30
+                var inCastle = v.x > -45 && v.x < 45 && v.z > -30 && v.z < 30;
                 if (inCastle) {
-                    v.y = 0
+                    v.y = 0;
+                }
+
+                var goingDownToRiver = v.x >= 45 && v.z >= -30 && v.z <= 30;
+                if (goingDownToRiver) {
+                    let curveFactor = Math.random(); // Adjust 0.1 to control how smooth the curve is
+                    let targetHeight = -50;
+                    
+                    // Blend between current height and target height using cosine curve
+                    v.y = curveFactor * (v.y - targetHeight) + targetHeight;
                 }
 
                 if ([v.x, v.y, v.z].some(isNaN)) {
-                    debugger
+                    debugger;
                 }
+
                 vertices.push(v.x, v.y, v.z);
             }
         }
+
 
 
         for (var m of this.meshes) {
