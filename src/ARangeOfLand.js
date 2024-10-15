@@ -136,7 +136,7 @@ window.stage = {
     sun: {}
 }
 const FOV = 1600
-const TERMINAL_VELOCITY = -5.1 // lol
+const TERMINAL_VELOCITY = -5 // lol
 var Grass = [
     '#33462d', //
     '#435c3a', //
@@ -159,7 +159,7 @@ window.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.inner
 window.camera.touches = new Set()
 window.camera.foot = null;
 window.camera.velocity = new THREE.Vector3(0, 0, 0);
-var jumpVelocity = .3;
+var jumpVelocity = .5;
 window.camera.sectionTouched = null;
 window.camera.triangleTouched = null;
 window.scene.add(window.camera);
@@ -1082,7 +1082,7 @@ window.Animate = function() {
     // Jump & Gravity
     if (window.isJumping) {
         window.camera.position.y += window.jumpVelocity;
-        window.jumpVelocity -= 0.03 * 0.8; // Adjust the gravity effect on jump
+        window.jumpVelocity -= .05; // Adjust the gravity effect on jump
 
         // Check for collision with ground using raycasting
         const raycaster = new THREE.Raycaster(window.camera.position, new THREE.Vector3(0, -1, 0));
@@ -1096,7 +1096,7 @@ window.Animate = function() {
         }
     } else {
         // Gravity
-        window.camera.velocity.y += -0.02; // Gravity effect
+        window.camera.velocity.y += -0.05; // Gravity effect
 
         // Limit falling speed to terminal velocity
         if (window.camera.velocity.y < TERMINAL_VELOCITY) {
@@ -1435,7 +1435,47 @@ function Collide(combinedMovement) {
         camera.position.add(combinedMovement);
     }
 
-    CollideWithTrees(combinedMovement);
+    const directions = window.TREES ? [
+            new THREE.Vector3(1, 0, 0),    // Right
+            new THREE.Vector3(-1, 0, 0),   // Left
+            new THREE.Vector3(0, 0, 1),    // Forward
+            new THREE.Vector3(0, 0, -1),   // Backward
+            new THREE.Vector3(0, 1, 0),    // Up
+            new THREE.Vector3(0, -1, 0)    // Down
+    ] : []
+
+    const collisionDistance = 0.5; 
+    let collisionResponseForce = 0.3; 
+
+    for (let i = 0; i < directions.length; i++) {
+        let dir = directions[i];
+        if (i === 2) {  // Forward collision is stronger
+            collisionResponseForce = 0.5;
+        }
+
+        // Create a raycaster
+        const raycaster = new THREE.Raycaster(window.camera.position, dir.normalize());
+
+        // Check for intersections with trees
+        var trees = []
+        for (var treeSection of window.TREES) {
+            for (var treeSubSection of treeSection) {
+                for (var tree of treeSubSection) {
+                    if (tree.length) {
+                        for (var t of tree) {
+                            trees.push(t.trunk, t.foliage)
+                        }
+                    }
+                }
+            }
+        }
+        const intersectsTrees = raycaster.intersectObjects(trees, true);
+        if (intersectsTrees.length > 0 && intersectsTrees[0].distance < collisionDistance) {
+            const responseDirection = window.camera.position.clone().sub(intersectsTrees[0].point).normalize();
+            window.camera.position.add(responseDirection.multiplyScalar(collisionResponseForce));
+        }
+
+    };
 
     camera.position.add(combinedMovement);
 
@@ -1461,6 +1501,56 @@ function Collide(combinedMovement) {
 
     // Call the reset function after processing collisions
     resetAllTriangles(window.BVH);
+
+    // const directions = [
+    //     new THREE.Vector3(1, 0, 0),    // Right
+    //     new THREE.Vector3(-1, 0, 0),   // Left
+    //     new THREE.Vector3(0, 0, 1),    // Forward
+    //     new THREE.Vector3(0, 0, -1),   // Backward
+    //     new THREE.Vector3(0, 1, 0),    // Up
+    //     new THREE.Vector3(0, -1, 0)    // Down
+    // ];
+
+    // const collisionDistance = 1; // Adjust the distance threshold for tree collisions
+    // const collisionResponseForce = 0.1; // Adjust the response force for the collision
+
+    // // Loop through each direction to cast rays and detect collisions
+    // for (let dir of directions) {
+    //     // Create a raycaster for the current direction
+    //     const raycaster = new THREE.Raycaster(window.camera.position, dir.normalize());
+
+    //     // Check for intersections with tree trunks and foliage
+    //     var bb = new THREE.Box3().setFromCenterAndSize(
+    //         window.camera.position,
+    //         new THREE.Vector3(1, 2, 1) // Adjust size if needed
+    //     );
+    //     var tree_stuff = getTreesInNearbySectors(bb)
+    //     if (tree_stuff && tree_stuff.length) {
+    //         tree_stuff = tree_stuff.flatMap(t => [t.foliage, t.trunk])
+    //         const intersectsTrees = raycaster.intersectObjects(tree_stuff, true);
+
+    //         if (intersectsTrees.length > 0 && intersectsTrees[0].distance < collisionDistance) {
+    //             // Collision detected with a tree trunk or foliage
+    //             const intersection = intersectsTrees[0];
+
+    //             // Calculate the direction to move the camera away from the tree
+    //             const responseDirection = window.camera.position.clone().sub(intersection.point).normalize();
+
+    //             // Apply the collision response
+    //             window.camera.position.add(responseDirection.multiplyScalar(collisionResponseForce));
+
+    //             // Additional handling for upward and downward collisions
+    //             if (dir.equals(new THREE.Vector3(0, -1, 0))) {
+    //                 // If the camera is moving downward, stop falling (standing on tree)
+    //                 window.camera.velocity.y = 0;
+    //                 window.camera.position.y = intersection.point.y + 1; // Adjust based on tree height
+    //             } else if (dir.equals(new THREE.Vector3(0, 1, 0))) {
+    //                 // If the camera is moving upwards, prevent further upward movement
+    //                 window.camera.velocity.y = Math.min(window.camera.velocity.y, 0);
+    //             }
+    //         }
+    //     }
+    // }
 
 }
 
@@ -1534,10 +1624,10 @@ function MakeTerrainTileChildren(segments, vertices, indices, dom, scene) {
 
                         result.ground.push(t.triangle)
 
-                        // if (t.triangle.a.y > 20 && Math.random() < 0.03) {
-                        //     let tree = CREATE_A_TREE(t.triangle.a.x, t.triangle.a.y, t.triangle.a.z, 1);
-                        //     window.TREES.push(tree);
-                        // }
+                        if (t.triangle.a.y > 20 && Math.random() < 0.03) {
+                            let tree = CREATE_A_TREE(t.triangle.a.x, t.triangle.a.y, t.triangle.a.z, 1);
+                            window.TREES.push(tree);
+                        }
 
 
                         // for (var i = 0; i < 3; i++) {
@@ -1632,6 +1722,10 @@ function Terrain(T, v0, v1, v2, v3, segments, options) {
             let height = perlinNoise[noiseY * noiseWidth + noiseX] * 50;
 
             v.y += height;
+
+            if (Math.random() < 0.01) {
+                window.TREES.push(CREATE_A_TREE(v.x, v.y, v.z))
+            }
             
             vertices.push(v.x, v.y, v.z);
             uvs.push(x, y);
@@ -1788,6 +1882,7 @@ function CREATE_A_TREE(x, y, z, alternate) {
 
     // Add the mesh to the scene
     scene.add(tubeMesh);
+
 
     return new Tree(tubeMesh, sphere);
 }
