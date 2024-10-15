@@ -16,7 +16,7 @@ class User {
   }
 }
 
-let t = 500
+let t = 200
 
 class Model {
   constructor(user) {
@@ -162,7 +162,7 @@ class Model {
         altitudeVariance: 20,
         width: t * 2,
         height: t * 2,
-        grassBladeDensity: 100000
+        grassBladeDensity: 300
       }
     };
     this.user = user;
