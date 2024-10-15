@@ -17,6 +17,7 @@ const LEVEL = [
 window.sliding = false
 
 
+window.GRAVITY = -0.1
 window.TERMINAL_VELOCITY = -1,
 
 window.sunMaxDist = -Infinity;
@@ -53,7 +54,7 @@ class GrassPatch {
     }
 }
 
-function TriangleMesh(vertices, a, b, c, terrainWidth, terrainHeight) {
+function Triangle(vertices, a, b, c, terrainWidth, terrainHeight) {
 
     const triangleGeometry = new THREE.BufferGeometry();
 
@@ -64,48 +65,12 @@ function TriangleMesh(vertices, a, b, c, terrainWidth, terrainHeight) {
         vertices[c * 3], vertices[c * 3 + 1], vertices[c * 3 + 2]
     ];
 
-    triangleGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertexPositions, 3));
-    triangleGeometry.setIndex([0, 1, 2]);
-    triangleGeometry.computeVertexNormals();
-    triangleGeometry.computeBoundingBox();
-
-    // Calculate UVs (using simple planar mapping based on X and Z coordinates)
-    const uvs = [
-        vertexPositions[0] / terrainWidth, vertexPositions[2] / terrainHeight,  // Vertex a
-        vertexPositions[3] / terrainWidth, vertexPositions[5] / terrainHeight,  // Vertex b
-        vertexPositions[6] / terrainWidth, vertexPositions[8] / terrainHeight   // Vertex c
-    ];
-
-    triangleGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));  // Add UVs
-
-    const triangleMaterial = new THREE.MeshStandardMaterial({
-        transparent: false,
-        wireframe: true,
-        color: 'red',
-        side: THREE.DoubleSide
-        // color: new THREE.Color(Math.random(), Math.random(), Math.random())
-    });
-    
-
-    const triangleMesh = new THREE.Mesh(triangleGeometry, triangleMaterial);
-    triangleMesh.castShadow = true;
-    triangleMesh.receiveShadow = true;
-
     // Store the triangle geometry in a THREE.Triangle object
-    triangleMesh.triangle = new THREE.Triangle(
+    return new THREE.Triangle(
         new THREE.Vector3(vertexPositions[0], vertexPositions[1], vertexPositions[2]),
         new THREE.Vector3(vertexPositions[3], vertexPositions[4], vertexPositions[5]),
         new THREE.Vector3(vertexPositions[6], vertexPositions[7], vertexPositions[8])
     );
-
-    // Calculate the triangle's normal and slope
-    const normal = new THREE.Vector3();
-    triangleMesh.triangle.getNormal(normal);
-    const slope = Math.acos(normal.dot(new THREE.Vector3(0, 1, 0))) * (180 / Math.PI);
-
-    triangleMesh.slope = slope;
-    triangleMesh.normal = normal;
-    triangleMesh.triangle.uvs = uvs;  // Store UVs for later use (e.g., for texture painting)
 
     return triangleMesh;
 }
@@ -392,68 +357,68 @@ class Sky {
      }   
 
 
-MakeCloud() {
-    // Create a group to hold the cloud's spheres
-    const cloud = new THREE.Group();
+    MakeCloud() {
+        // Create a group to hold the cloud's spheres
+        const cloud = new THREE.Group();
 
-    // Generate a random number of clusters (elongated parts of the cloud)
-    const numClusters = randomInRange(7, 11); // Fewer larger cloud parts for a wispy appearance
+        // Generate a random number of clusters (elongated parts of the cloud)
+        const numClusters = randomInRange(7, 11); // Fewer larger cloud parts for a wispy appearance
 
-    for (let i = 0; i < numClusters; i++) {
-        // Create a group for each elongated cluster
-        const cluster = new THREE.Group();
-        
-        // Define a random radius for the cluster
-        const clusterLength = randomInRange(15, 30); // Elongated in horizontal direction
-        const clusterHeight = randomInRange(3, 7); // Thin in the vertical direction
-        
-        var sphereSmall = this.sceneRadius * .01;
-        var sphereLarge = this.sceneRadius * .1
-        // Randomize the number of small spheres per cluster
-        const numSpheres = randomInRange(10, 19); // More spheres for each elongated cluster
+        for (let i = 0; i < numClusters; i++) {
+            // Create a group for each elongated cluster
+            const cluster = new THREE.Group();
+            
+            // Define a random radius for the cluster
+            const clusterLength = randomInRange(15, 30); // Elongated in horizontal direction
+            const clusterHeight = randomInRange(3, 7); // Thin in the vertical direction
+            
+            var sphereSmall = this.sceneRadius * .01;
+            var sphereLarge = this.sceneRadius * .1
+            // Randomize the number of small spheres per cluster
+            const numSpheres = randomInRange(10, 19); // More spheres for each elongated cluster
 
-        for (let j = 0; j < numSpheres; j++) {
-            // Random radius for smaller spheres within the cluster
-            const radius = randomInRange(sphereSmall, sphereLarge); // Much smaller spheres for a wispy look
+            for (let j = 0; j < numSpheres; j++) {
+                // Random radius for smaller spheres within the cluster
+                const radius = randomInRange(sphereSmall, sphereLarge); // Much smaller spheres for a wispy look
 
-            // Create a sphere geometry
-            const geometry = new THREE.SphereGeometry(radius, 32, 32);
+                // Create a sphere geometry
+                const geometry = new THREE.SphereGeometry(radius, 32, 32);
 
-            // Create a material with white color and lower opacity for a lighter appearance
-            const material = new THREE.MeshBasicMaterial({
-                color: 0xffffff,
-                transparent: true,
-                opacity: mapToRange(1 - ((radius - sphereSmall) / (sphereLarge - sphereSmall)), 0.7, 1) // Lower opacity between 0.3 and 0.5
-            });
+                // Create a material with white color and lower opacity for a lighter appearance
+                const material = new THREE.MeshBasicMaterial({
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: mapToRange(1 - ((radius - sphereSmall) / (sphereLarge - sphereSmall)), 0.7, 1) // Lower opacity between 0.3 and 0.5
+                });
 
-            // Create the mesh (small sphere)
-            const sphere = new THREE.Mesh(geometry, material);
+                // Create the mesh (small sphere)
+                const sphere = new THREE.Mesh(geometry, material);
 
-            // Position the small spheres more spread out horizontally, but thin vertically
-            sphere.position.set(
-                Math.random() * clusterLength - clusterLength / 2, // Wider in x direction
-                randomInRange(clusterHeight - 10, clusterHeight), // Narrower in y direction
-                Math.random() * 5 - 2.5  // Some variation in z direction
+                // Position the small spheres more spread out horizontally, but thin vertically
+                sphere.position.set(
+                    Math.random() * clusterLength - clusterLength / 2, // Wider in x direction
+                    randomInRange(clusterHeight - 10, clusterHeight), // Narrower in y direction
+                    Math.random() * 5 - 2.5  // Some variation in z direction
+                );
+
+                // Add the small sphere to the cluster
+                cluster.add(sphere);
+            }
+
+            // Position the entire cluster randomly in the cloud space but focus on elongation
+            cluster.position.set(
+                randomInRange(-this.sceneRadius, this.sceneRadius),  // Spread out horizontally
+                randomInRange(100, 1000),  // Some vertical spread
+                randomInRange(-this.sceneRadius, this.sceneRadius)   // Spread out in depth for 3D look
             );
 
-            // Add the small sphere to the cluster
-            cluster.add(sphere);
+            // Add the cluster to the cloud group
+            cloud.add(cluster);
         }
 
-        // Position the entire cluster randomly in the cloud space but focus on elongation
-        cluster.position.set(
-            randomInRange(-this.sceneRadius, this.sceneRadius),  // Spread out horizontally
-            randomInRange(100, 1000),  // Some vertical spread
-            randomInRange(-this.sceneRadius, this.sceneRadius)   // Spread out in depth for 3D look
-        );
-
-        // Add the cluster to the cloud group
-        cloud.add(cluster);
+        // Return the cloud group, which now contains all the clusters and spheres
+        return cloud;
     }
-
-    // Return the cloud group, which now contains all the clusters and spheres
-    return cloud;
-}
 
 
 
@@ -536,7 +501,6 @@ class Castle {
         for (var key in VM.map[VM.user.level].structures[0]) {
             this[key] = VM.map[VM.user.level].structures[0][key]
         }
-
         this.centerPoint = centerPoint
         if (this.centerPoint.y < 0) {
             this.centerPoint.y = .01
@@ -564,6 +528,8 @@ class Castle {
         this.parts.push(foundation);
         this.foundation = foundation
         scene.add(foundation);
+
+        this.placeTile()
 
         var escalationCooridorDim = this.houseDim[0] * .05; // Size of the cut-out squares
 
@@ -1097,6 +1063,35 @@ class Castle {
     }
 
 
+    placeTile() {
+        const forestFloor = new THREE.TextureLoader().load("/images/floor18.jpg")
+        const floor = new THREE.TextureLoader().load("/images/floor119.jpg")
+        var startX = -this.houseDim[0] / 2
+        var endX = this.houseDim[0] / 2
+        var startZ = -this.houseDim[1] / 2
+        var endZ = this.houseDim[1] / 2
+        var stepX = (this.houseDim[0] + 10) / 50
+        var stepZ = this.houseDim[1] / 50
+        for (var x = startX; x < (this.houseDim[0] + 10) / 2; x += stepX) {
+            for (var z = -this.houseDim[0] / 2; z < this.houseDim[1] / 2; z += stepZ) {
+                var opts = {}
+                if (x >= this.houseDim[0] / 2) {
+                    opts.map = forestFloor;
+                } else {
+                    opts.map = floor
+                }
+                var tilePlane = new THREE.Mesh(
+                    new THREE.PlaneGeometry(stepX, stepZ),
+                    new THREE.MeshStandardMaterial(opts)
+                );
+                tilePlane.receiveShadow = true;
+                tilePlane.rotation.x = -Math.PI / 2
+                tilePlane.position.set(x, .1, z);
+                scene.add(tilePlane)
+            }
+        }
+    }
+
 }
 
 
@@ -1312,44 +1307,23 @@ class Terrain {
                     indices.push(b, c, d);
                     
 
-                    const t1 = TriangleMesh(vertices, a, b, d, this.width, this.height);
-                    const t2 = TriangleMesh(vertices, b, c, d, this.width, this.height);
+                    const t1 = Triangle(vertices, a, b, d, this.width, this.height);
+                    const t2 = Triangle(vertices, b, c, d, this.width, this.height);
 
                     [t1, t2].forEach((triangle) => {
-                        this.grounds.push(triangle.triangle);
-
-                        const normal = triangle.normal;
-                        const slope = Math.atan2(normal.y, normal.x);
-
-                        const isCliff = slope > 0.5 || slope < -0.5;
+                        this.grounds.push(triangle);
                         
-                        //
-                        // Grasses!
-                        //
+
                         if (isNearGrassPatch) {
-                            triangle.material.opacity = randomInRange(0.001, 0.5);
-                            triangle.material.color.set(this.Grass[Math.floor(Math.random() * this.Grass.length)]);
-
-                            const grassResult = this.createGrassPatch(indices, vertices, triangle);
-
-                            VM.map[VM.user.level].grasses.push(grassResult);
-
+                            this.groundColorMap[i][j] = Math.random()
                         }
                         //
                         // Trees!
                         //
 
                         if (isTree) {
-                            var tree = this.createTree(triangle.triangle.a.x, triangle.triangle.a.y, triangle.triangle.a.z, 1);
+                            var tree = this.createTree(triangle.a.x, triangle.a.y, triangle.a.z, 1);
                             VM.map[VM.user.level].trees.push(tree);
-                        }
-
-                        //
-                        // Cliffs!
-                        //
-
-                        if (isCliff) {
-                            this.cliffs.push(triangle.triangle);
                         }
                     });
 
@@ -2786,8 +2760,8 @@ class UserController {
                 this.time_held.w = performance.now();
                 var MOVE_FORWARD = this.wS;
 
-                if (time_held > 500) {
-                    MOVE_FORWARD *= 11
+                if (user.isFalling) {
+                    MOVE_FORWARD *= 2
                 }
 
                 this.camera.getWorldDirection(direction);
@@ -2922,7 +2896,7 @@ class UserController {
     handleJumping() {
         // Update camera position based on the jump velocity
         this.camera.position.y += this.jumpVelocity;
-        this.jumpVelocity -= 0.03 * 0.8; // Simulate gravity by decreasing velocity
+        this.jumpVelocity += GRAVITY * 0.7; // Simulate gravity by decreasing velocity
 
         // Cast a ray from the camera downwards to detect the ground
         const downRaycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
@@ -2966,7 +2940,7 @@ class UserController {
 
     applyGravity() {
         if (!this.isJumping) {
-            this.camera.velocity.y += -0.05; 
+            this.camera.velocity.y += GRAVITY; 
             if (this.camera.velocity.y < TERMINAL_VELOCITY) {
                 this.camera.velocity.y = TERMINAL_VELOCITY;
             }
@@ -2982,13 +2956,50 @@ class UserController {
 
                 this.updateTerrain(intersection);
             }
+            
+            // Cast a ray from the camera downwards to detect the ground
+            const downRaycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
+            const downIntersection = this.findClosestIntersection(downRaycaster);
+
+            // Cast a ray upwards to detect ceilings
+            const upRaycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, 1, 0));
+            const upIntersection = this.findClosestIntersection(upRaycaster);
+
+            // Ground collision detection
+            if (downIntersection && downIntersection.distance < 1) {
+                console.log("Camera is above the ground, landing");
+
+                // Adjust the camera position to the surface plus a small offset to simulate landing
+                this.camera.position.y = downIntersection.point.y + 1;
+                this.camera.velocity.y = 0;
+                this.isJumping = false;
+
+                this.updateTerrain(downIntersection);
+            }
+
+            // Ceiling collision detection
+            if (upIntersection && upIntersection.distance < .5) {
+                console.log("Camera hit the ceiling");
+
+                // Prevent the camera from going through the ceiling
+                this.camera.position.y = upIntersection.point.y - .5; // Adjust based on how close you want to stop
+                this.camera.velocity.y = 0;
+                this.isJumping = false;
+
+                // Optional: handle additional ceiling collision logic here
+            }
+
+            // If neither intersection is detected, continue falling
+            if (!downIntersection && !upIntersection) {
+                console.log("No intersection detected, camera still in the air");
+            }            
         }
     }
 
     // Helper function to find the closest intersection with terrain
     findClosestIntersection(raycaster) {
         let closestIntersection = null;
-        let minDistance = Infinity;
+        let minDistance = 3;
 
         // Check intersections with terrain meshes
         for (let mesh of this.terrain.meshes) {
