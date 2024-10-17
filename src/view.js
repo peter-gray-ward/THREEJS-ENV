@@ -2283,17 +2283,21 @@ class Terrain {
                 clusters.push(cluster);
             }
         }
+
+        this.cliffs = []
+
         clusters.forEach(cluster => {
             const geometry = this.createBufferGeometryFromCluster(cluster);
 
             const material = new THREE.MeshStandardMaterial({ 
-                // map: rockTexture,
                 color: 'white',
                 side: THREE.DoubleSide,
                 wireframe: false
             });
 
-            console.log("placing cliffs")
+            for (var j = 0; j < cluster.length; j++) {
+                this.cliffs.push(cluster[j].triangle)
+            }
                 
             const mesh = new THREE.Mesh(geometry, material);
             mesh.receiveShadow = true;
@@ -2303,8 +2307,9 @@ class Terrain {
             geometry.computeVertexNormals();
             mesh.boundingBox = geometry.boundingBox
             mesh.position.y += .2
+            mesh.triangle = cluster
             scene.add(mesh)
-            scene.add(mesh);
+            
         });
 
     }
@@ -2322,7 +2327,6 @@ class Terrain {
             const mesh = new THREE.Mesh(geometry, material);
             mesh.receiveShadow = true;
             mesh.castShadow = true;
-            // moveMeshAlongNormal(mesh, -0.05);
             meshes.push(mesh);
         });
         return meshes;
@@ -2941,50 +2945,88 @@ class UserController {
 
     }
 
-    // Main collision handler
+        // Main collision handler
     handleCollision() {
-        const directions = [
-            // Primary axes
-            new THREE.Vector3(1, 0, 0),    // Right
-            new THREE.Vector3(-1, 0, 0),   // Left
-            new THREE.Vector3(0, 0, 1),    // Forward
-            new THREE.Vector3(0, 0, -1),   // Backward
-            new THREE.Vector3(0, 1, 0),    // Up
-            new THREE.Vector3(0, -1, 0),   // Down
-        ];
+    // Define the camera's bounding box (assuming the camera has a width, height, and depth)
+    const cameraBox = new THREE.Box3().setFromCenterAndSize(
+        this.camera.position.clone(),
+        new THREE.Vector3(.5, 1.2, .2)  // Adjust based on camera size
+    );
 
+    // Define the list of directions (down, up, forward, backward, left, right, and diagonals)
+    const directions = [
+        new THREE.Vector3(0, -1, 0),   // Down
+        new THREE.Vector3(0, 1, 0),    // Up
+        new THREE.Vector3(1, 0, 0),    // Right
+        new THREE.Vector3(-1, 0, 0),   // Left
+        new THREE.Vector3(0, 0, 1),    // Forward
+        new THREE.Vector3(0, 0, -1),   // Backward
+        new THREE.Vector3(1, 0, 1).normalize(),   // Forward-right diagonal
+        new THREE.Vector3(-1, 0, 1).normalize(),  // Forward-left diagonal
+        new THREE.Vector3(1, 0, -1).normalize(),  // Backward-right diagonal
+        new THREE.Vector3(-1, 0, -1).normalize()  // Backward-left diagonal
+    ];
 
-        const collisionDistance = 0.5; 
-        let collisionResponseForce = 0.3; 
+    // Iterate through all the directions to check for collisions
+    for (const direction of directions) {
+        // Create a ray from the camera's position in the given direction
+        const ray = new THREE.Ray(this.camera.position.clone(), direction.clone().normalize());
+        
+        let closestIntersection = null;
+        let minDistance = 1;
 
-        for (let i = 0; i < directions.length; i++) {
-            let dir = directions[i];
-            if (i === 2) {  // Forward collision is stronger
-                collisionResponseForce = 0.5;
+        // Loop through all the terrain cliffs (assuming `terrain.cliffs` holds the geometries)
+        terrain.cliffs.forEach(cliffTriangle => {
+
+            // Each cliffTriangle already contains vertices a, b, c
+            const a = cliffTriangle.a;
+            const b = cliffTriangle.b;
+            const c = cliffTriangle.c;
+
+            // Create the intersection point vector
+            const intersectionPoint = new THREE.Vector3();
+
+            // Use intersectTriangle to test for intersection
+            const intersects = ray.intersectTriangle(a, b, c, false, intersectionPoint);
+
+            if (intersects) {
+                // Calculate the distance from the camera to the intersection point
+                const distance = this.camera.position.distanceTo(intersectionPoint);
+
+                // Keep track of the closest intersection
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestIntersection = intersectionPoint.clone();
+                }
             }
+        });
 
-            // Create a raycaster
-            const raycaster = new THREE.Raycaster(this.camera.position, dir.normalize(), 10);
+        // If a closest intersection was found, adjust the camera's position
+        if (closestIntersection) {
+            console.log('Intersection detected:', closestIntersection);
 
-            // Check for intersections with trees
-            const intersectsTrees = raycaster.intersectObjects(this.terrain.trees.flatMap(tree => [tree.trunk, tree.foliage]), true);
-            if (intersectsTrees.length > 0 && intersectsTrees[0].distance < collisionDistance) {
-                this.handleTreeCollision(intersectsTrees[0], dir, collisionResponseForce);
-            }
+            // Move the camera to prevent falling through the terrain
+            const offset = 1;  // Adjust based on your needs
+            this.camera.position.y = Math.max(this.camera.position.y, closestIntersection.y + offset);
 
-            // Check for intersections with castle parts
-            const intersectsCastle = raycaster.intersectObjects(window.castle.parts.filter(p => p), true);
-            if (intersectsCastle.length > 0 && intersectsCastle.some(i => i.distance < 0.2)) {
-                this.handleCastleCollision(intersectsCastle[0], dir, collisionResponseForce);
-            }
+            // Stop vertical movement if it's a ground or ceiling collision
+            this.camera.velocity.y = 0;
+            this.isJumping = false;
 
-            const intersectsCliffs = raycaster.intersectObjects(terrain.cliffs.map(c => c.mesh ? c.mesh : c), true);
-            if (intersectsCliffs.length > 0 && intersectsCastle.some(i => i.distance < 1)) {
-                console.log("intersectsCliff", intersectsCliffs)
-                this.handleTreeCollision(intersectsCliffs[0], dir, collisionResponseForce);
-            }
+            // Break after handling the closest intersection for this direction
+            break;
         }
     }
+}
+
+     getClosestPointOnBox(box, point) {
+        const clampedX = Math.max(box.min.x, Math.min(point.x, box.max.x));
+        const clampedY = Math.max(box.min.y, Math.min(point.y, box.max.y));
+        const clampedZ = Math.max(box.min.z, Math.min(point.z, box.max.z));
+
+        return new THREE.Vector3(clampedX, clampedY, clampedZ);
+    }
+
 
     // Handle tree collision
     handleTreeCollision(intersection, direction, responseForce) {
@@ -3076,6 +3118,7 @@ class UserController {
 
         if (intersection && intersection.distance < 1) {
             this.intersections.push(intersection)
+
             this.camera.position.y = intersection.point.y + 1;
 
 
@@ -3310,28 +3353,6 @@ class View {
             window.renderer.render(window.scene, window.user.camera);
 
 
-
-            const threshold = 1;  // Threshold distance for moving the user
-
-            user.intersections.forEach(intersection => {
-                // Calculate distance from camera to the intersection point
-                const distance = user.camera.position.distanceTo(intersection.point);
-                
-                // If the distance is smaller than the threshold, move the user
-                if (distance < threshold) {
-                    // Get the intersection normal (the direction to move along)
-                    const normal = intersection.normal//face.normal.clone().normalize();
-
-                    // Move the user along the normal by the difference
-                    const movementVector = normal.multiplyScalar(threshold - distance);
-
-                    // Adjust the user position by adding the movement vector
-                    user.camera.position.add(movementVector);
-
-                    // Optionally, log for debugging
-                    console.log(`User moved by ${movementVector.length()} units along the normal`);
-                }
-            })
            
 
         }
