@@ -475,10 +475,16 @@ function createBox(center, width, height, depth, map) {
         triangleGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(triangleVertices), 3));
         triangleGeometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(triangleNormals), 3));
 
-        const material = new THREE.MeshBasicMaterial({ 
-            color: new THREE.Color(Math.random(), Math.random(), Math.random()), // Random color for each triangle
+
+        var args = { 
             side: THREE.DoubleSide // Ensure both sides of triangles are visible
-        });
+        }
+        if (map) {
+            args.map = map
+        } else {
+            args.color = new THREE.Color(Math.random(), Math.random(), Math.random()) // Random color for each triangle
+        }
+        const material = new THREE.MeshStandardMaterial(args);
         const triangleMesh = new THREE.Mesh(triangleGeometry, material);
         triangleMesh.castShadow = true;
         triangleMesh.receiveShadow = true;
@@ -1220,6 +1226,11 @@ class Terrain {
         // let woodTerrain = this.generateRandomWoodsTerrain();
 
         var freshwaterPond = [];
+        var maxX = -Infinity
+        var maxZ = -Infinity
+        var minX = Infinity
+        var minZ = Infinity
+        var averageY = []
 
         // Generate vertices and initial setup
         for (let i = 0; i <= this.segments; i++) {
@@ -1231,6 +1242,8 @@ class Terrain {
                 v.x = (1 - x) * (1 - y) * v0.x + x * (1 - y) * v1.x + x * y * v2.x + (1 - x) * y * v3.x;
                 v.y = (1 - x) * (1 - y) * v0.y + x * (1 - y) * v1.y + x * y * v2.y + (1 - x) * y * v3.y;
                 v.z = (1 - x) * (1 - y) * v0.z + x * (1 - y) * v1.z + x * y * v2.z + (1 - x) * y * v3.z;
+
+                averageY.push(v.y)
 
                 let noiseX = Math.floor(x * (this.noiseWidth - 1));
                 let noiseY = Math.floor(y * (this.noiseHeight - 1));
@@ -1245,7 +1258,27 @@ class Terrain {
 
                 var goingDownToRiver = v.x >= 45 && v.z >= -30 && v.z <= 30;
                 if (goingDownToRiver) {
-                    freshwaterPond.push(v.x, v.y - 13, v.z);
+
+
+                    if (v.x > maxX) {
+                        maxX = v.x
+                    }
+
+                    if (v.z > maxZ) {
+                        maxZ = v.z
+                    }
+
+                    if (v.x < minX) {
+                        minX = v.x
+                    }
+
+                    if (v.z < minZ) {
+                        minZ = v.z
+                    }
+
+
+                   
+
                     let curveFactor = Math.cos(Math.random() * Math.PI); // Smooth cosine factor
                     let targetHeight = -50;
 
@@ -1260,6 +1293,23 @@ class Terrain {
                 vertices.push(v.x, v.y, v.z);  // Add to terrain vertices
             }
         }
+
+        var yLength = averageY.length
+        averageY = averageY.reduce((a, b) => a + b) / yLength
+
+        var xStep = (maxX - minX) / 300
+        var zStep = (maxZ - minZ) / 300
+
+        freshwaterPond = []
+        for (var x = minX - 10; x < maxX; x += xStep) {
+            for (var z = minZ; z < maxZ; z += zStep) {
+                var _y = averageY - 5
+                freshwaterPond.push(randomInRange(x - 1.5, x + 1.5), randomInRange(_y - 1.5, _y + 1.5), randomInRange(z -3.5, z + 3.5))
+                 
+            }
+        }
+
+
 
         // Create geometry for the pond
         var freshwaterPondGeometry = new THREE.BufferGeometry();
@@ -1283,6 +1333,8 @@ class Terrain {
 
         // Add the pond to the scene
         scene.add(freshwaterPondMesh);
+
+        this.water = freshwaterPondMesh
 
 
 
@@ -2375,12 +2427,18 @@ class Terrain {
 
         clusters.forEach(cluster => {
             const geometry = this.createBufferGeometryFromCluster(cluster);
+            const texture = new THREE.TextureLoader().load("/images/rockwall-2.jpg", (texture) => {
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+                texture.repeat.set(4, 4); // Adjust the 4, 4 values to control the tiling amount
+            });
 
             const material = new THREE.MeshStandardMaterial({ 
-                color: 'white',
+                map: texture,
                 side: THREE.DoubleSide,
                 wireframe: false
             });
+
 
             for (var j = 0; j < cluster.length; j++) {
                 this.cliffs.push(cluster[j].triangle)
@@ -3612,20 +3670,15 @@ class View {
             window.sky.update();
             window.user.handleMovement();
 
-            devview.innerHTML = `<pre style="color:white;background: rgba(0,0,0,0.3)">
-    ${JSON.stringify({
-        intersections: user.intersections.map(m => ({
-            name: m.object.name,
-            normal: m.normal
-        }))
-    }, null, 1)}
-            </pre>`
+           
 
             var newTerrain = window.terrain.updateTerrain(window.user.camera.position);
             window.renderer.render(window.scene, window.user.camera);
 
 
            
+
+           UndulateWater() 
 
         }
 
@@ -3676,6 +3729,37 @@ class View {
         
         
     }
+
+}
+
+function UndulateWater() {
+    // Store original water vertices
+    var originalWater = terrain.water.geometry.attributes.position.array;
+    var time = performance.now() * 0.001;  // Time factor for animating the waves
+    var speed1 = 1.5, speed2 = 2.0, speed3 = 0.8;  // Wave speeds
+    var amp1 = .02, amp2 = .01, amp3 = .05;  // Amplitudes for each wave
+    var waveLength1 = 0.02, waveLength2 = 0.03, waveLength3 = 0.01;  // Wavelengths
+
+    // Update the y position of the water vertices
+    var waterVertices = terrain.water.geometry.attributes.position.array;
+    for (let i = 0; i < originalWater.length; i += 3) {
+        var x = originalWater[i];
+        var z = originalWater[i + 2];
+
+        // Apply 3 different sine wave functions for variation
+        var wave1 = Math.sin(x * waveLength1 + time * speed1) * amp1;
+        var wave2 = Math.sin(z * waveLength2 + time * speed2) * amp2;
+        var wave3 = Math.sin((x + z) * waveLength3 + time * speed3) * amp3;
+
+        // Update the y position by adding the wave contributions
+        waterVertices[i + 1] = originalWater[i + 1] + wave1 + wave2 + wave3;
+    }
+
+    terrain.water.geometry.attributes.position.array = waterVertices
+
+    // Notify Three.js that the position attribute needs to be updated
+    terrain.water.geometry.attributes.position.needsUpdate = true;
+
 
 }
 
