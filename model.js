@@ -31,7 +31,8 @@ class Model {
         sop: {
             trees: t * 2,
             grasses: t * .5,
-            grounds: 0
+            grounds: 0,
+            cliffs: t / 2
         },
         grasses: [],
         grounds: [],

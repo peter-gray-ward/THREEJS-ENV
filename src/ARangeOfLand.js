@@ -102,6 +102,7 @@ function getY(point) {
 window.lightmap = []
 
 var T = 80
+window.isFalling = true
 window.sliding = false
 window.THREE = THREE;
 window.w = false;
@@ -136,7 +137,7 @@ window.stage = {
     sun: {}
 }
 const FOV = 1600
-const TERMINAL_VELOCITY = -5 // lol
+const TERMINAL_VELOCITY = -3 // lol
 var Grass = [
     '#33462d', //
     '#435c3a', //
@@ -173,9 +174,9 @@ var origin = new THREE.Mesh(new THREE.SphereGeometry(0.08, 20, 20), new THREE.Me
 origin.position.set(0, 0, 0);
 window.terrain = {}
 // Global bounding box for the camera
-const cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
+const cameraBoundingBox = () => new THREE.Box3().setFromCenterAndSize(
     camera.position,
-    new THREE.Vector3(1, 1, 1) // Adjust size if needed
+    new THREE.Vector3(.35, 1.2, .2) // Adjust size if needed
 );
 
 class Tree {
@@ -246,12 +247,32 @@ window.addEventListener('keydown', function(e) {
     const key = e.key.toUpperCase();
     if (key == 'W') {
         window.w = true;
+        if (window.isJumping) {
+            window.wS = jumpVelocity
+        } else {
+            window.wS = .1
+        }
     } else if (key == 'A') {
         window.a = true;
+        if (window.isJumping) {
+            window.aS = jumpVelocity
+        } else {
+            window.aS = .1
+        }
     } else if (key == 'S') {
         window.s = true;
+        if (window.isJumping) {
+            window.sS = jumpVelocity
+        } else {
+            window.sS = .1
+        }
     } else if (key == 'D') {
         window.d = true;
+        if (window.isJumping) {
+            window.dS = jumpVelocity
+        } else {
+            window.dS = .1
+        }
     } else if (key == ' ') {
         window.isJumping = true;
         window.jumpVelocity = jumpVelocity
@@ -948,20 +969,17 @@ function createBufferGeometryFromCluster(cluster) {
     geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     geometry.setIndex(indices);
     geometry.computeVertexNormals();
+    geometry.computeBoundingBox()
 
     return geometry;
 }
-
-
-
-
 
 
 function clusterResult(result) {
     const cliffClusters = findClusters(result.cliffs);
     cliffClusters.forEach(cluster => {
         const geometry = createBufferGeometryFromCluster(cluster);
-        const material = new THREE.MeshBasicMaterial({ 
+        const material = new THREE.MeshStandardMaterial({ 
             // map: rockTexture,
             color: 'white',
             side: THREE.DoubleSide,
@@ -1049,6 +1067,10 @@ window.Animate = function() {
 
     var combinedMovement = new THREE.Vector3();
 
+
+    CullFrustrum()
+    
+
     // Movement (while not jumping, or with reduced movement during jumping)
     if (window.w || window.a || window.s || window.d) {
         var direction = new THREE.Vector3();
@@ -1084,6 +1106,10 @@ window.Animate = function() {
         window.camera.position.y += window.jumpVelocity;
         window.jumpVelocity -= .05; // Adjust the gravity effect on jump
 
+        if (jumpVelocity < 0) {
+            window.isFalling = true
+        }
+
         // Check for collision with ground using raycasting
         const raycaster = new THREE.Raycaster(window.camera.position, new THREE.Vector3(0, -1, 0));
         const intersects = raycaster.intersectObject(window.terrain, true);
@@ -1097,6 +1123,7 @@ window.Animate = function() {
     } else {
         // Gravity
         window.camera.velocity.y += -0.05; // Gravity effect
+        
 
         // Limit falling speed to terminal velocity
         if (window.camera.velocity.y < TERMINAL_VELOCITY) {
@@ -1110,6 +1137,9 @@ window.Animate = function() {
         const intersects = raycaster.intersectObject(window.terrain, true);
 
         if (intersects.length > 0 && intersects[0].distance < 1) { // Adjust distance as needed
+
+            record('Touching terrain', 'lawngreen')
+            window.isFalling = false
             const intersection = intersects[0];
             window.camera.position.y = intersection.point.y + 1; // Adjust for the height of the triangle surface
             window.camera.velocity.y = 0; // Reset vertical velocity upon collision
@@ -1182,20 +1212,20 @@ const wireframeBox = new THREE.Mesh(boxGeometry, wireframeMaterial);
 scene.add(wireframeBox);
 
 // Ensure the wireframe stays in sync with the bounding box
-function updateBoundingBox() {
-    // Set the bounding box based on the camera's current position
-    cameraBoundingBox.setFromCenterAndSize(
-        camera.position,
-        new THREE.Vector3(1, 1, 1) // Adjust size if needed
-    );
+function updateBoundingBox(cameraBoundingBox) {
+    // // Set the bounding box based on the camera's current position
+    // cameraBoundingBox.setFromCenterAndSize(
+    //     camera.position,
+    //     new THREE.Vector3(1, 1, 1) // Adjust size if needed
+    // );
     
-    // Update the wireframe box position and size to match the bounding box
-    const center = cameraBoundingBox.getCenter(new THREE.Vector3());
-    const size = cameraBoundingBox.getSize(new THREE.Vector3());
+    // // Update the wireframe box position and size to match the bounding box
+    // const center = cameraBoundingBox.getCenter(new THREE.Vector3());
+    // const size = cameraBoundingBox.getSize(new THREE.Vector3());
 
-    wireframeBox.position.copy(center);
-    wireframeBox.rotation.copy(camera.rotation);
-    wireframeBox.scale.set(size.x, size.y, size.z);
+    // wireframeBox.position.copy(center);
+    // wireframeBox.rotation.copy(camera.rotation);
+    // wireframeBox.scale.set(size.x, size.y, size.z);
 }
 
 // Helper function to pick a random key and return notes in that key
@@ -1264,7 +1294,8 @@ function playNoteSound(note, duration = 1) {
 }
 
 function CollideWithTrees(combinedMovement) {
-    const TreesTouchingUser = checkTreeCollision(cameraBoundingBox);
+    const cbb = cameraBoundingBox()
+    const TreesTouchingUser = checkTreeCollision(cbb);
 
     window.TreesTouchingUser = TreesTouchingUser;
 
@@ -1278,7 +1309,7 @@ function CollideWithTrees(combinedMovement) {
                 const trunkBoundingBox = new THREE.Box3().setFromObject(tree.trunk);
 
                 // Check if the camera's bounding box intersects the trunk's bounding box
-                if (trunkBoundingBox.intersectsBox(cameraBoundingBox)) {
+                if (trunkBoundingBox.intersectsBox(cbb)) {
                     // Simply stop the movement when a collision is detected
                     combinedMovement.set(0, 0, 0);
                 }
@@ -1287,7 +1318,7 @@ function CollideWithTrees(combinedMovement) {
             // Handle collision with the foliage, if necessary
             if (tree.foliage) {
                 const foliageBoundingBox = new THREE.Box3().setFromObject(tree.foliage);
-                if (foliageBoundingBox.intersectsBox(cameraBoundingBox)) {
+                if (foliageBoundingBox.intersectsBox(cbb)) {
                     // Stop movement if inside foliage
                     combinedMovement.set(0, 0, 0);
                 }
@@ -1368,18 +1399,31 @@ function getSectorsToCheck(userPosition) {
     return sectorsToCheck;
 }
 
+function record(message, color) {
+    console.log(message)
+    var box = new THREE.Mesh(new THREE.BoxGeometry(.35, 1.2, .2), new THREE.MeshStandardMaterial({ color, wireframe: false, opacity: 0.5, transparent: true }));
+    box.position.set(camera.position.x, camera.position.y, camera.position.z)
+    scene.add(box)
+}
 
+function CullFrustrum(cameraBoundingVolume, bvhNode, triangles = []) {
+    
+}
 
 function Collide(combinedMovement) {
-    
+
     updateBoundingBox()
 
+    const cbb = cameraBoundingBox()
+
     // Handle Terrain
-    const TerrainMeshesTouchingUser = checkCollision(cameraBoundingBox);
+    const TerrainMeshesTouchingUser = checkCollision(cbb);
 
 
     // If there are intersecting triangles
     if (TerrainMeshesTouchingUser.length) {
+        record('Touching terrain triangle', 'red')
+        window.isFalling = false
         // Iterate over all intersecting triangles
         for (let i = 0; i < TerrainMeshesTouchingUser.length; i++) {
             const mesh = TerrainMeshesTouchingUser[i];
@@ -1624,10 +1668,10 @@ function MakeTerrainTileChildren(segments, vertices, indices, dom, scene) {
 
                         result.ground.push(t.triangle)
 
-                        if (t.triangle.a.y > 20 && Math.random() < 0.03) {
-                            let tree = CREATE_A_TREE(t.triangle.a.x, t.triangle.a.y, t.triangle.a.z, 1);
-                            window.TREES.push(tree);
-                        }
+                        // if (t.triangle.a.y > 20 && Math.random() < 0.03) {
+                        //     let tree = createTree(t.triangle.a.x, t.triangle.a.y, t.triangle.a.z, 1);
+                        //     window.TREES.push(tree);
+                        // }
 
 
                         // for (var i = 0; i < 3; i++) {
@@ -1723,10 +1767,7 @@ function Terrain(T, v0, v1, v2, v3, segments, options) {
 
             v.y += height;
 
-            if (Math.random() < 0.01) {
-                window.TREES.push(CREATE_A_TREE(v.x, v.y, v.z))
-            }
-            
+     
             vertices.push(v.x, v.y, v.z);
             uvs.push(x, y);
 
@@ -1887,6 +1928,112 @@ function CREATE_A_TREE(x, y, z, alternate) {
     return new Tree(tubeMesh, sphere);
 }
 
+
+
+function createTree(x, y, z, alternate) {
+    const textureIndex = Math.floor(Math.random() * 7);
+
+    var trunkHeight = randomInRange(3, 25)
+    var trunkBaseRadius = randomInRange(.1, .8)
+    var rr = alternate ? randomInRange(.01, .1) : randomInRange(.1, .5)
+    var trunkCurve = []
+    var trunkRadius = []
+    var zS = z
+    var xS = x
+    var yS = y;
+
+    for (; yS < y + trunkHeight; yS += 0.02) {
+        if (Math.random() < 0.13) {
+            zS += randomInRange(-rr, rr)
+        }
+        if (Math.random() < 0.13) {
+            xS += randomInRange(-rr, rr)
+        }
+        var r = trunkBaseRadius
+        trunkRadius.push(r)
+        trunkCurve.push(
+            new THREE.Vector3(
+                xS,
+                yS, 
+                zS
+            )
+        )
+    }
+
+    var textures = {
+      barks: Array.from({ length: 7 }, (_, i) => new THREE.TextureLoader().load(`/images/trees/bark/bark-${i + 1}.jpg`)),
+      branches: Array.from({ length: 4 }, (_, i) => new THREE.TextureLoader().load(`/images/trees/foliage/branches/tree-branch-${i + 1}.png`)),
+      foliage: Array.from({ length: 7 }, (_, i) => new THREE.TextureLoader().load(`/images/trees/foliage/textures/foliage-${i + 1}.jpg`))
+    }
+
+    // Default foliage (spherical)
+    var foliageRadius = randomInRange(trunkHeight * .3, 2.85)
+    const sphereGeometry = new THREE.SphereGeometry(foliageRadius, 10, 10);
+    const greenValue = Math.floor(Math.random() * 256);
+    const color = new THREE.Color(Math.random() < 0.05 ? randomInRange(0, 0.5) : 0, greenValue / 255, 0);
+    const foliageIndex = textureIndex > 4 ? textureIndex - 3 : textureIndex;
+    const foliageTexture = textures.foliage[Math.floor(Math.random() * 7)];
+
+    // Set how many times the texture should repeat in the U and V directions
+    foliageTexture.wrapS = THREE.RepeatWrapping; // Repeat horizontally
+    foliageTexture.wrapT = THREE.RepeatWrapping; // Repeat vertically
+
+    // Adjust these values to control the repetition frequency
+    foliageTexture.repeat.set(10, 10); // Increase these numbers for more repetitions and smaller texture
+
+    let sphereMaterial = new THREE.MeshStandardMaterial({
+        color,
+        map: foliageTexture,
+        transparent: false
+    });
+
+    
+    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+    sphere.castShadow = true
+    sphere.receiveShadow = true
+    sphere.position.set(xS, yS + (foliageRadius / 2), zS); // Set foliage position
+    scene.add(sphere);
+
+    var { array, itemSize } = sphereGeometry.attributes.position
+    for (let i = 0; i < 21; i++) {
+        for (var j = 0; j < 21; j++) {
+            var vertexIndex = (i * (21 + 1) + j) * itemSize
+            var x = array[vertexIndex]
+            var z = array[vertexIndex + 1]
+            var y = array[vertexIndex + 2]
+
+            array[vertexIndex] = randomInRange(x - (foliageRadius * 1.1), x + foliageRadius * 1.1)
+            array[vertexIndex + 1] = randomInRange(y - (foliageRadius * 1.1), y + foliageRadius * 1.1)
+            array[vertexIndex + 2] = randomInRange(z - (foliageRadius * 1.1), z + foliageRadius * 1.1)
+        }
+    }
+
+
+    const path = new THREE.CatmullRomCurve3(trunkCurve);
+
+    var segments = Math.floor(randomInRange(5, 11))
+    var radialSegments = 15
+
+    // Create the tube geometry
+    const tubeGeometry = new THREE.TubeGeometry(path, segments, trunkBaseRadius);
+
+    const material = new THREE.MeshStandardMaterial({ 
+        map: textures.barks[textureIndex],
+        // color: 'red',
+        side: THREE.DoubleSide
+    });
+
+    // Create the mesh
+    const tubeMesh = new THREE.Mesh(tubeGeometry, material);
+    tubeMesh.castShadow = true
+    tubeMesh.receiveShadow = true
+    tubeMesh.position.y -= 2
+
+    // Add the mesh to the scene
+    scene.add(tubeMesh);
+
+    return new Tree(tubeMesh, sphere);
+}
 
 
 class Sky {

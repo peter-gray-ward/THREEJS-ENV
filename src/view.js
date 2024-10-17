@@ -4,7 +4,7 @@ import ViewModel from "/src/view-model.js";
 
 const evaluator = new Evaluator();
 
-
+var pillars = []
 
 window.THREE = THREE;
 
@@ -12,7 +12,10 @@ const LEVEL = [
     null,
     "Heart of the Woods"
 ];
-
+const cameraBoundingBox = () => new THREE.Box3().setFromCenterAndSize(
+    window.user.camera.position,
+    new THREE.Vector3(.35, 1.2, .2) // Adjust size if needed
+);
 
 window.sliding = false
 
@@ -25,12 +28,44 @@ window.sunMinDist = Infinity
 window.map = {}
 var oceanBackground = null;
 
+function moveMeshAlongNormal(mesh, offset) {
+    // Calculate the normal of the mesh's geometry
+    const geometry = mesh.geometry;
+    geometry.computeVertexNormals();
+
+    // Assuming the mesh is a single triangle
+    const normal = new THREE.Vector3();
+    const positions = geometry.attributes.position;
+    const vertexA = new THREE.Vector3(positions.getX(0), positions.getY(0), positions.getZ(0));
+    const vertexB = new THREE.Vector3(positions.getX(1), positions.getY(1), positions.getZ(1));
+    const vertexC = new THREE.Vector3(positions.getX(2), positions.getY(2), positions.getZ(2));
+
+    const triangle = new THREE.Triangle(vertexA, vertexB, vertexC);
+    triangle.getNormal(normal);
+
+    // Move the mesh along the normal
+    mesh.position.add(normal.multiplyScalar(offset));
+}
 
 window.sceneRadius = 150
 
 var origin = new THREE.Mesh(new THREE.SphereGeometry(0.08, 20, 20), new THREE.MeshStandardMaterial({ color: 'turquoise' }));
 origin.position.set(0, 0, 0);
 // Global bounding box for the camera
+
+function getPositionFromVertexArray(array) {
+    const positions = [];
+    // Iterate through the array, stepping by 3 to group (x, y, z) coordinates
+    for (let i = 0; i < array.length; i += 3) {
+        const position = {
+            x: array[i],        // x coordinate
+            y: array[i + 1],    // y coordinate
+            z: array[i + 2]     // z coordinate
+        };
+        positions.push(position);
+    }
+    return positions;
+}
 
 
 
@@ -55,25 +90,41 @@ class GrassPatch {
 }
 
 function Triangle(vertices, a, b, c, terrainWidth, terrainHeight) {
-
-    const triangleGeometry = new THREE.BufferGeometry();
-
-    // Extract vertex positions
     const vertexPositions = [
-        vertices[a * 3], vertices[a * 3 + 1], vertices[a * 3 + 2],
-        vertices[b * 3], vertices[b * 3 + 1], vertices[b * 3 + 2],
-        vertices[c * 3], vertices[c * 3 + 1], vertices[c * 3 + 2]
+        vertices[a * 3], vertices[a * 3 + 1], vertices[a * 3 + 2],  // Vertex a
+        vertices[b * 3], vertices[b * 3 + 1], vertices[b * 3 + 2],  // Vertex b
+        vertices[c * 3], vertices[c * 3 + 1], vertices[c * 3 + 2]   // Vertex c
     ];
 
-    // Store the triangle geometry in a THREE.Triangle object
-    return new THREE.Triangle(
+    // Create the THREE.Triangle object
+    const triangle = new THREE.Triangle(
         new THREE.Vector3(vertexPositions[0], vertexPositions[1], vertexPositions[2]),
         new THREE.Vector3(vertexPositions[3], vertexPositions[4], vertexPositions[5]),
         new THREE.Vector3(vertexPositions[6], vertexPositions[7], vertexPositions[8])
     );
 
-    return triangleMesh;
+    // Set up indices (for BufferGeometry)
+    const indices = [0, 1, 2];  // Indices for a single triangle (points a, b, c)
+
+    // Create the BufferGeometry
+    const triangleGeometry = new THREE.BufferGeometry();
+    triangleGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertexPositions), 3));
+    triangleGeometry.setIndex(indices);
+    triangleGeometry.computeBoundingBox()
+
+    // Create a mesh for the triangle with a basic material (optional)
+    const triangleMesh = new THREE.Mesh(triangleGeometry, new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+    triangleMesh.name = `${a}_${b}_${c}`
+
+    // Return the triangle data and mesh
+    return {
+        triangle: triangle,            // THREE.Triangle object
+        vertexPositions: vertexPositions, // Raw vertex positions
+        indices: indices,                // Indices for BufferGeometry
+        mesh: triangleMesh               // The mesh object for this triangle
+    };
 }
+
 
 function getInstancePosition(instancedMesh, index) {
     const matrix = new THREE.Matrix4();
@@ -85,155 +136,7 @@ function getInstancePosition(instancedMesh, index) {
     return position;
 }
 
-class BoundingVolumeHierarchy {
 
-    constructor() {}
-
-    static BVHNode = class {
-        constructor(boundingBox, triangles, left = null, right = null) {
-            this.boundingBox = boundingBox;
-            this.grassTriangles = triangles;
-            this.left = left;
-            this.right = right;
-        }
-    }
-
-    init(triangles) {
-        console.log(triangles.length)
-        if (triangles.length) {
-            this.BVH = this.build(triangles);
-        }
-    }
-
-    build(triangles, depth = 0) {
-        if (triangles.length === 1) {
-            return new BoundingVolumeHierarchy.BVHNode(triangles[0].geometry.boundingBox, [triangles[0]]);
-        }
-
-        const axis = depth % 3; // Cycle through x, y, z axes
-        triangles.sort((a, b) => a.geometry.boundingBox.min[axis] - b.geometry.boundingBox.min[axis]);
-
-        const mid = Math.floor(triangles.length / 2);
-        const leftTriangles = triangles.slice(0, mid);
-        const rightTriangles = triangles.slice(mid);
-
-        const leftChild = this.build(leftTriangles, depth + 1);
-        const rightChild = this.build(rightTriangles, depth + 1);
-
-        const boundingBox = new THREE.Box3();
-        boundingBox.union(leftChild.boundingBox);
-        boundingBox.union(rightChild.boundingBox);
-
-        return new BoundingVolumeHierarchy.BVHNode(boundingBox, [], leftChild, rightChild);
-    }
-
-    add(object, bvhNode) {
-        if (!bvhNode) {
-            // If the BVH node is null, create a new node
-            return new BoundingVolumeHierarchy.BVHNode(object.geometry.boundingBox, [object]);
-        }
-
-        if (bvhNode.left === null && bvhNode.right === null) {
-            // If the node is a leaf, add the object here
-            bvhNode.triangles.push(object);
-            bvhNode.boundingBox.union(object.geometry.boundingBox);
-            return bvhNode;
-        }
-
-        // Determine which child to recurse into based on bounding box overlap
-        const leftVolume = bvhNode.left.boundingBox.clone().union(object.geometry.boundingBox);
-        const rightVolume = bvhNode.right.boundingBox.clone().union(object.geometry.boundingBox);
-
-        if (leftVolume.getSize(new THREE.Vector3()).lengthSq() < rightVolume.getSize(new THREE.Vector3()).lengthSq()) {
-            bvhNode.left = addObjectToBVH(object, bvhNode.left);
-        } else {
-            bvhNode.right = addObjectToBVH(object, bvhNode.right);
-        }
-
-        bvhNode.boundingBox.union(object.geometry.boundingBox);
-        return bvhNode;
-    }
-
-    remove(object, bvhNode) {
-        if (!bvhNode) return null;
-
-        if (bvhNode.triangles.includes(object)) {
-            // If this node contains the object, remove it
-            bvhNode.triangles = bvhNode.triangles.filter(tri => tri !== object);
-
-            if (bvhNode.triangles.length === 0 && !bvhNode.left && !bvhNode.right) {
-                // If the node is empty and has no children, remove it
-                return null;
-            }
-
-            // Recalculate the bounding box for the node
-            bvhNode.boundingBox = new THREE.Box3();
-            for (const tri of bvhNode.triangles) {
-                bvhNode.boundingBox.union(tri.geometry.boundingBox);
-            }
-            if (bvhNode.left) bvhNode.boundingBox.union(bvhNode.left.boundingBox);
-            if (bvhNode.right) bvhNode.boundingBox.union(bvhNode.right.boundingBox);
-            return bvhNode;
-        }
-
-        // Recursively search the child nodes
-        bvhNode.left = this.remove(object, bvhNode.left);
-        bvhNode.right = this.remove(object, bvhNode.right);
-
-        // If both children are removed, return null
-        if (!bvhNode.left && !bvhNode.right && bvhNode.triangles.length === 0) {
-            return null;
-        }
-
-        return bvhNode;
-    }
-
-    getAll(node = this.BVH, triangles = []) {
-        // If the node is null, return the current list of triangles
-        if (!node) {
-            return triangles;
-        }
-
-        // If the node has triangles, add them to the array
-        if (node.triangles && node.triangles.length > 0) {
-            triangles.push(...node.triangles); // Use spread operator to add all triangles
-        }
-
-        // Recursively call on the left and right children
-        if (node.left) {
-            this.getAllTriangles(node.left, triangles);
-        }
-        if (node.right) {
-            this.getAllTriangles(node.right, triangles);
-        }
-
-        // Return the accumulated list of triangles
-        return triangles;
-    }
-
-    // Method to apply a function to all triangles in the BVH
-    applyByFilter(node = this.BVH, filter) {
-        // If the node is null, return
-        if (!node) {
-            return;
-        }
-
-        // If the node has triangles, apply the filter function to each triangle
-        if (node.triangles && node.triangles.length > 0) {
-            node.triangles.forEach(triangle => filter(triangle));
-        }
-
-        // Recursively call on the left and right children
-        if (node.left) {
-            this.applyByFilter(node.left, filter);
-        }
-        if (node.right) {
-            this.applyByFilter(node.right, filter);
-        }
-    }
-
-
-}
 
 class Sky {
 
@@ -357,7 +260,7 @@ class Sky {
      }   
 
 
-    MakeCloud() {
+     MakeCloud() {
         // Create a group to hold the cloud's spheres
         const cloud = new THREE.Group();
 
@@ -379,7 +282,7 @@ class Sky {
 
             for (let j = 0; j < numSpheres; j++) {
                 // Random radius for smaller spheres within the cluster
-                const radius = randomInRange(sphereSmall, sphereLarge); // Much smaller spheres for a wispy look
+                const radius = (j / numSpheres) * randomInRange(sphereSmall, sphereLarge); // Much smaller spheres for a wispy look
 
                 // Create a sphere geometry
                 const geometry = new THREE.SphereGeometry(radius, 32, 32);
@@ -397,7 +300,7 @@ class Sky {
                 // Position the small spheres more spread out horizontally, but thin vertically
                 sphere.position.set(
                     Math.random() * clusterLength - clusterLength / 2, // Wider in x direction
-                    randomInRange(clusterHeight - 10, clusterHeight), // Narrower in y direction
+                    randomInRange(clusterHeight - sphereLarge, clusterHeight - sphereLarge - sphereSmall),
                     Math.random() * 5 - 2.5  // Some variation in z direction
                 );
 
@@ -418,7 +321,7 @@ class Sky {
 
         // Return the cloud group, which now contains all the clusters and spheres
         return cloud;
-    }
+     }
 
 
 
@@ -497,19 +400,18 @@ class Castle {
     offsetY = 1.5
     elevatorSpeed = 0.2
 
-    constructor(centerPoint) {
+    constructor(castleBaseCenter) {
+
+
+
         for (var key in VM.map[VM.user.level].structures[0]) {
             this[key] = VM.map[VM.user.level].structures[0][key]
         }
-        this.centerPoint = centerPoint
-        if (this.centerPoint.y < 0) {
-            this.centerPoint.y = .01
-        }
         this.houseDim = [70, 50]; // Width and Length of the house
-        this.parts = [];
+        this.parts = pillars;
         this.elevator = []
         this.wallHeight = 5;
-        var buildingHeight = this.centerPoint.y + (this.wallHeight * 3 * 13);
+        var buildingHeight = 300
         var elevatorHeight = 3
 
         // Create the foundation
@@ -524,72 +426,72 @@ class Castle {
         foundation.geometry.computeVertexNormals()
         foundation.castShadow = true;
         foundation.receiveShadow = true;
-        foundation.position.set(0, this.centerPoint.y, 0); // Position the foundation
+        foundation.position.set(0, castleBaseCenter.y, 0); // Position the foundation
         this.parts.push(foundation);
         this.foundation = foundation
+        this.foundation.name = "foundation"
         scene.add(foundation);
 
         this.placeTile()
 
-        var escalationCooridorDim = this.houseDim[0] * .05; // Size of the cut-out squares
-
-        // Create floors with cut-outs
+        
+        var elevatorWidth = this.houseDim[0] * .05;
         for (var i = 1, j = 0; i < 13; i++, j++) {
-            let width = this.houseDim[0];
-            let length = this.houseDim[1];
-            var floorGroup = new THREE.Group();
+            let width = this.houseDim[1];
+            let length = this.houseDim[0];
 
-            // Create the first large part of the floor (remaining part after cut-out)
-            const floorPart1 = new THREE.Mesh(
-                new THREE.BoxGeometry(width - escalationCooridorDim, this.foundationHeight, length),
-                new THREE.MeshStandardMaterial({
-                    color: 'gray',
+            const floorWidthPart = new THREE.Mesh(
+                new THREE.BoxGeometry(width - elevatorWidth, this.foundationHeight, width - elevatorWidth),
+                new THREE.MeshBasicMaterial({
+                    color: 'blue',
                     map: new THREE.TextureLoader().load("/images/concrete")
                 })
             );
-            floorPart1.geometry.computeVertexNormals()
-            floorPart1.position.set(-escalationCooridorDim / 2, this.centerPoint.y, 0); // Shift to the left
-            floorGroup.add(floorPart1);
+            floorWidthPart.geometry.computeVertexNormals()
+            floorWidthPart.position.set(0, castleBaseCenter.y + this.wallHeight * i, castleBaseCenter.z - length / 2);
+
 
             // Create the second large part of the floor (remaining part after cut-out)
-            const floorPart2 = new THREE.Mesh(
-                new THREE.BoxGeometry(width, this.foundationHeight, length - escalationCooridorDim),
-                new THREE.MeshStandardMaterial({
-                    color: 'gray',
+            const floorDepthPart = new THREE.Mesh(
+                new THREE.BoxGeometry(width, this.foundationHeight, elevatorWidth),
+                new THREE.MeshBasicMaterial({
+                    color: 'orange',
                     map: new THREE.TextureLoader().load("/images/concrete")
                 })
             );
-            floorPart2.geometry.computeVertexNormals()
-            floorPart2.position.set(0, this.centerPoint.y, -escalationCooridorDim / 2); // Shift downward
-            floorGroup.add(floorPart2);
+            floorDepthPart.geometry.computeVertexNormals()
+            floorDepthPart.position.set(0, castleBaseCenter.y + this.wallHeight * i, castleBaseCenter.y + length - elevatorWidth / 2); // Shift downward
 
-            // Position the whole floor group for each level
-            floorGroup.position.set(0, this.centerPoint.y + (this.wallHeight * 3 * i), 0);
 
             // Cast and receive shadows
-            floorPart1.castShadow = true;
-            floorPart1.receiveShadow = true;
-            floorPart2.castShadow = true;
-            floorPart2.receiveShadow = true;
+            floorWidthPart.castShadow = true;
+            floorWidthPart.receiveShadow = true;
+            floorDepthPart.castShadow = true;
+            floorDepthPart.receiveShadow = true;
 
-            this.parts.push(floorGroup);
-            scene.add(floorGroup);
+            this.parts.push(floorWidthPart);
+            scene.add(floorWidthPart);
+
+
+            this.parts.push(floorDepthPart);
+            scene.add(floorDepthPart);
         }
+
 
 
 
         // Elevator floor
         var eFloor = new THREE.Mesh(
-            new THREE.BoxGeometry(escalationCooridorDim, 0.2, escalationCooridorDim),
+            new THREE.BoxGeometry(elevatorWidth, 0.2, elevatorWidth),
             new THREE.MeshStandardMaterial({ color: 'maroon' })
         );
         eFloor.position.set(
-            this.houseDim[0] / 2 - escalationCooridorDim / 2, // X position (bottom-right corner)
-            this.centerPoint.y + this.offsetY, // Y position (same as floor)
-            this.houseDim[1] / 2 - escalationCooridorDim / 2  // Z position (bottom-right corner)
+            this.houseDim[0] / 2 - elevatorWidth / 2,
+            castleBaseCenter.y + this.offsetY,
+            this.houseDim[1] / 2 - elevatorWidth / 2
         );
         eFloor.geometry.computeVertexNormals()
-        eFloor.floorZero = this.centerPoint.y + this.offsetY
+        eFloor.floorZero = castleBaseCenter.y + this.offsetY
         eFloor.interval = this.wallHeight * 3
         eFloor.name = "elevator-floor"
         this.elevator.push(eFloor)
@@ -600,13 +502,13 @@ class Castle {
 
         // Elevator ceiling
         var eCeiling = new THREE.Mesh(
-            new THREE.BoxGeometry(escalationCooridorDim, 0.2, escalationCooridorDim),
+            new THREE.BoxGeometry(elevatorWidth, 0.2, elevatorWidth),
             new THREE.MeshStandardMaterial({ color: 'maroon' })
         );
         eCeiling.position.set(
-            this.houseDim[0] / 2 - escalationCooridorDim / 2, 
-            this.centerPoint.y + elevatorHeight + this.offsetY,  // Y position (at ceiling height)
-            this.houseDim[1] / 2 - escalationCooridorDim / 2
+            this.houseDim[0] / 2 - elevatorWidth / 2, 
+            castleBaseCenter.y + elevatorHeight + this.offsetY, 
+            this.houseDim[1] / 2 - elevatorWidth / 2
         );
         eCeiling.geometry.computeVertexNormals()
         this.elevator.push(eCeiling)
@@ -615,26 +517,27 @@ class Castle {
 
         let texture = new THREE.TextureLoader().load('/images/wall12.jpg')
 
-        var elevatorShaftRight = new THREE.Mesh(
+        var elevatorShaftInnerRight = new THREE.Mesh(
             new THREE.BoxGeometry(
-                escalationCooridorDim, buildingHeight, 0.2  // Segment height for this floor
+                elevatorWidth, buildingHeight, 0.2
             ),
-            new THREE.MeshStandardMaterial({
+            new THREE.MeshBasicMaterial({
                 map: texture,
                 side: THREE.DoubleSide
             })
         );
-        elevatorShaftRight.position.set(eFloor.position.x - escalationCooridorDim / 2, this.centerPoint.y + buildingHeight / 2 + this.offsetY, eFloor.position.z)
-        elevatorShaftRight.rotation.y = Math.PI / 2;
-        elevatorShaftRight.geometry.computeVertexNormals()
-        scene.add(elevatorShaftRight)
-        this.parts.push(elevatorShaftRight)
+        elevatorShaftInnerRight.position.set(
+            eFloor.position.x - elevatorWidth / 2, castleBaseCenter.y + buildingHeight / 2 + this.offsetY, eFloor.position.z)
+        elevatorShaftInnerRight.rotation.y = Math.PI / 2;
+        elevatorShaftInnerRight.geometry.computeVertexNormals()
+        scene.add(elevatorShaftInnerRight)
+        this.parts.push(elevatorShaftInnerRight)
 
-        var elevatorShaftOutsideLeft = new THREE.Mesh(
+        var elevatorShaftOuterLeft = new THREE.Mesh(
             new THREE.BoxGeometry(
-                escalationCooridorDim, buildingHeight, 0.2  // Segment height for this floor
+                elevatorWidth, buildingHeight, 0.2  // Segment height for this floor
             ),
-            new THREE.MeshStandardMaterial({
+            new THREE.MeshBasicMaterial({
                 transparent: true,
                 opacity: 0.3,
                 depthTest: true,   // Ensure depth testing is enabled
@@ -642,16 +545,19 @@ class Castle {
                 side: THREE.DoubleSide
             })
         );
-        elevatorShaftOutsideLeft.position.set(eFloor.position.x, this.centerPoint.y + buildingHeight / 2 + this.offsetY, eFloor.position.z + escalationCooridorDim / 2)
-        elevatorShaftOutsideLeft.geometry.computeVertexNormals()
-        scene.add(elevatorShaftOutsideLeft)
-        this.parts.push(elevatorShaftOutsideLeft)
+        elevatorShaftOuterLeft.position.set(
+            eFloor.position.x, castleBaseCenter.y + buildingHeight / 2 + this.offsetY, 
+            eFloor.position.z + elevatorWidth / 2
+        )
+        elevatorShaftOuterLeft.geometry.computeVertexNormals()
+        scene.add(elevatorShaftOuterLeft)
+        this.parts.push(elevatorShaftOuterLeft)
 
-        var elevatorShaftOutsideRight = new THREE.Mesh(
+        var elevatorShaftOuterRight = new THREE.Mesh(
             new THREE.BoxGeometry(
-                escalationCooridorDim, buildingHeight, 0.2  // Segment height for this floor
+                elevatorWidth, buildingHeight, 0.2  // Segment height for this floor
             ),
-            new THREE.MeshStandardMaterial({
+            new THREE.MeshBasicMaterial({
                 transparent: true,
                 opacity: 0.3,
                 depthTest: true,   // Ensure depth testing is enabled
@@ -659,39 +565,35 @@ class Castle {
                 side: THREE.DoubleSide
             })
         );
-        elevatorShaftOutsideRight.position.set(eFloor.position.x + escalationCooridorDim / 2, this.centerPoint.y + buildingHeight / 2 + this.offsetY, eFloor.position.z)
-        elevatorShaftOutsideRight.rotation.y = Math.PI / 2;
-        elevatorShaftOutsideRight.geometry.computeVertexNormals();
-        scene.add(elevatorShaftOutsideRight)
-        this.parts.push(elevatorShaftOutsideRight)
+        elevatorShaftOuterRight.position.set(eFloor.position.x + elevatorWidth / 2, castleBaseCenter.y + buildingHeight / 2 + this.offsetY, eFloor.position.z)
+        elevatorShaftOuterRight.rotation.y = Math.PI / 2;
+        elevatorShaftOuterRight.geometry.computeVertexNormals();
+        scene.add(elevatorShaftOuterRight)
+        this.parts.push(elevatorShaftOuterRight)
 
-        // Iterate through each level (13 separate shaft segments)
+
+
+        var elevatorShaftInnerLeft;
         for (let i = 1; i <= 13; i++) {
-            // Create the elevator shaft segment for this floor
             var elevatorShaftLeft = new THREE.Mesh(
                 new THREE.BoxGeometry(
-                    escalationCooridorDim, (this.wallHeight * 3), 0.1  // Segment height for this floor
+                    elevatorWidth, this.wallHeight * 3, 0.1
                 ),
-                new THREE.MeshStandardMaterial({
+                new THREE.MeshBasicMaterial({
                     map: texture,
                     side: THREE.DoubleSide
                 })
             );
             
-            // Calculate the correct y-position, summing each level incrementally
-            var yPosition = (i === 1)
-                ? this.centerPoint.y + (this.wallHeight * 3) / 2 // Start at half height
-                : this.centerPoint.y + ((this.wallHeight * 3 / 2) + (this.wallHeight * 3 * (i - 1)));  // Add height for each level
+            var yPosition = buildingHeight + (this.wallHeight * 3 / 2) * i
 
             var floorYPosition = yPosition - (this.wallHeight * 3) / 2;
-
-            console.log(yPosition); // Debugging the correct y-positions
 
             
             elevatorShaftLeft.position.set(
                 eFloor.position.x, 
                 yPosition,  // Y-position at this level
-                eFloor.position.z - escalationCooridorDim / 2
+                eFloor.position.z - elevatorWidth / 2
             );
 
             // Convert the elevator shaft into a Brush for CSG operations
@@ -699,7 +601,7 @@ class Castle {
             shaftBrush.position.set(
                 eFloor.position.x, 
                 yPosition,  // Y-position at this level
-                eFloor.position.z - escalationCooridorDim / 2
+                eFloor.position.z - elevatorWidth / 2
             )
             shaftBrush.updateMatrixWorld();
 
@@ -709,7 +611,7 @@ class Castle {
             doorBrush.position.set(
                 eFloor.position.x, 
                 floorYPosition + this.offsetY + 1,  // Y-position at this level
-                eFloor.position.z - escalationCooridorDim / 2
+                eFloor.position.z - elevatorWidth / 2
             );
             doorBrush.updateMatrixWorld();
 
@@ -718,18 +620,18 @@ class Castle {
             const result = evaluator.evaluate(shaftBrush, doorBrush, SUBTRACTION);
 
             // Create a mesh from the updated geometry for this shaft segment
-            const elevatorShaftLeftI = new THREE.Mesh(result.geometry, new THREE.MeshStandardMaterial({
+            elevatorShaftInnerLeft = new THREE.Mesh(result.geometry, new THREE.MeshStandardMaterial({
                 map: texture,
                 transparent: false,
                 side: THREE.DoubleSide
             }));
 
             // Add to scene and store the shaft segment
-            elevatorShaftLeftI.receiveShadow = true;
-            elevatorShaftLeftI.castShadow = true;
-            elevatorShaftLeftI.geometry.computeVertexNormals();
-            scene.add(elevatorShaftLeftI);
-            this.parts.push(elevatorShaftLeftI);
+            elevatorShaftInnerLeft.receiveShadow = true;
+            elevatorShaftInnerLeft.castShadow = true;
+            elevatorShaftInnerLeft.geometry.computeVertexNormals();
+            scene.add(elevatorShaftInnerLeft);
+            this.parts.push(elevatorShaftInnerLeft);
 
 
 
@@ -748,7 +650,7 @@ class Castle {
             buttonPlate.position.set(
                 eFloor.position.x - 1, 
                 floorYPosition + this.offsetY + 1,  // Y-position at this level
-                eFloor.position.z - escalationCooridorDim / 2 - .12
+                eFloor.position.z - elevatorWidth / 2 - .12
             );
             buttonPlate.geometry.computeVertexNormals();
             
@@ -772,7 +674,7 @@ class Castle {
             button.position.set(
                 eFloor.position.x - 1, 
                 floorYPosition + this.offsetY + 1,  // Y-position at this level
-                eFloor.position.z - escalationCooridorDim / 2 - .13
+                eFloor.position.z - elevatorWidth / 2 - .13
             );
             button.floorZero = plateCenterY - plateHeight / 2 + i * buttonSpacing
             // button.rotation.y = Math.PI / 2
@@ -787,7 +689,7 @@ class Castle {
             elevatorPointLight.position.set(
                 eFloor.position.x - 1, 
                 floorYPosition + this.offsetY + 2,  // Y-position at this level
-                eFloor.position.z - escalationCooridorDim / 2 - .3
+                eFloor.position.z - elevatorWidth / 2 - .3
             )
             scene.add(elevatorPointLight)
             var elevatorLightViz = new THREE.Mesh(
@@ -816,7 +718,7 @@ class Castle {
                 
             } 
             var eWall = new THREE.Mesh(
-                new THREE.BoxGeometry(escalationCooridorDim, elevatorHeight, 0.1),
+                new THREE.BoxGeometry(elevatorWidth, elevatorHeight, 0.1),
                 new THREE.MeshBasicMaterial(meshOptions)
             );
             
@@ -824,17 +726,17 @@ class Castle {
             if (i == 0) {
                 eWall.position.set(
                     eFloor.position.x, 
-                    this.centerPoint.y + elevatorHeight / 2 + this.offsetY, 
-                    eFloor.position.z + escalationCooridorDim / 2
+                    castleBaseCenter.y + elevatorHeight / 2 + this.offsetY, 
+                    eFloor.position.z + elevatorWidth / 2
                 ); // Front wall
             }
             if (i == 1) {
-                const wallGeometry = new THREE.BoxGeometry(escalationCooridorDim, elevatorHeight, 0.1);
+                const wallGeometry = new THREE.BoxGeometry(elevatorWidth, elevatorHeight, 0.1);
                 const wallBrush = new Brush(wallGeometry);
                 wallBrush.position.set(
                     eFloor.position.x, 
-                    this.centerPoint.y + elevatorHeight / 2 + this.offsetY, 
-                    eFloor.position.z - escalationCooridorDim / 2 + .1
+                    castleBaseCenter.y + elevatorHeight / 2 + this.offsetY, 
+                    eFloor.position.z - elevatorWidth / 2 + .1
                 );
                 wallBrush.updateMatrixWorld();
 
@@ -843,8 +745,8 @@ class Castle {
                 const doorBrush = new Brush(doorGeometry);
                 doorBrush.position.set(
                     eFloor.position.x, 
-                    this.centerPoint.y + this.wallHeight / 2, 
-                    eFloor.position.z - escalationCooridorDim / 2 + .1
+                    castleBaseCenter.y + this.wallHeight / 2, 
+                    eFloor.position.z - elevatorWidth / 2 + .1
                 );
                 doorBrush.updateMatrixWorld();
 
@@ -859,16 +761,16 @@ class Castle {
             }
             if (i == 2) {
                 eWall.position.set(
-                    eFloor.position.x - escalationCooridorDim / 2 + .1, 
-                    this.centerPoint.y + elevatorHeight / 2 + this.offsetY, 
+                    eFloor.position.x - elevatorWidth / 2 + .1, 
+                    castleBaseCenter.y + elevatorHeight / 2 + this.offsetY, 
                     eFloor.position.z
                 ); // Left wall
                 eWall.rotation.y = Math.PI / 2; // Rotate left wall by 90 degrees
             }
             if (i == 3) {
                 eWall.position.set(
-                    eFloor.position.x + escalationCooridorDim / 2, 
-                    this.centerPoint.y + elevatorHeight / 2 + this.offsetY, 
+                    eFloor.position.x + elevatorWidth / 2, 
+                    castleBaseCenter.y + elevatorHeight / 2 + this.offsetY, 
                     eFloor.position.z
                 ); // Right wall
                 eWall.rotation.y = Math.PI / 2; // Rotate right wall by 90 degrees
@@ -889,7 +791,7 @@ class Castle {
             })
         );
 
-        buttonPlate.position.set(eFloor.position.x - escalationCooridorDim / 2 + .19, this.centerPoint.y + 2.5, eFloor.position.z)
+        buttonPlate.position.set(eFloor.position.x - elevatorWidth / 2 + .19, castleBaseCenter.y + 2.5, eFloor.position.z)
         buttonPlate.rotation.y = Math.PI / 2;
 
         this.elevator.push(buttonPlate);
@@ -898,9 +800,9 @@ class Castle {
         var elevatorPointLight = new THREE.PointLight(0xffffff, 25, 5);
         this.elevator.push(elevatorPointLight)
         elevatorPointLight.position.set(
-            this.houseDim[0] / 2 - escalationCooridorDim / 2, 
-            this.centerPoint.y + elevatorHeight + 1,  // Y position (at ceiling height)
-            this.houseDim[1] / 2 - escalationCooridorDim / 2
+            this.houseDim[0] / 2 - elevatorWidth / 2, 
+            castleBaseCenter.y + elevatorHeight + 1,  // Y position (at ceiling height)
+            this.houseDim[1] / 2 - elevatorWidth / 2
         )
         scene.add(elevatorPointLight)
         var elevatorLightViz = new THREE.Mesh(
@@ -935,7 +837,7 @@ class Castle {
             button.position.set(
                 buttonPlate.position.x + .01,  // x position, you can adjust it if needed
                 plateCenterY - plateHeight / 2 + i * buttonSpacing,  // y position, spacing the buttons evenly
-                this.houseDim[1] / 2 - escalationCooridorDim / 2      // z position
+                this.houseDim[1] / 2 - elevatorWidth / 2      // z position
             );
             button.floorZero = plateCenterY - plateHeight / 2 + i * buttonSpacing
             button.rotation.y = Math.PI / 2
@@ -1122,7 +1024,7 @@ class Terrain {
             this.surroundingCenters = [];
             this.currentMesh = 0;
             this.center = new THREE.Vector3(0, 0, 0);
-            this.generate();
+            this.go();
             break;
         default:
             return;
@@ -1130,10 +1032,61 @@ class Terrain {
     }
 
     init() {
-        this.generate();
+        this.go();
     }
 
-    generate(centerX = 0, centerY = 0, centerZ = 0) {
+    setGrandCentralPillar() {
+        // Set up the axis object to define colors for positive and negative directions
+        var axis = {
+            x: {
+                neg: 'blue',  // Negative X direction (left)
+                pos: 'red'    // Positive X direction (right)
+            },
+            z: {
+                neg: 'green',  // Negative Z direction (backward)
+                pos: 'yellow'  // Positive Z direction (forward)
+            }
+        };
+
+        var cylinderLength = VM.map[VM.user.level].quadrant * 2;
+
+        for (var xyz in axis) {
+            for (var polarity in axis[xyz]) {
+                var cylinderHelperGeometry = new THREE.CylinderGeometry(0.15, 0.5, cylinderLength, 32); // Radius 0.5, length 20 (horizontal)
+                var cylinderMaterialArgs = xyz == 'y' ? {
+                    map: new THREE.TextureLoader().load("/images/door10.jpg")
+                } : { 
+                    color: axis[xyz][polarity] 
+                }
+                var cylinderMaterial = new THREE.MeshStandardMaterial(cylinderMaterialArgs);
+
+                // Create the cylinder mesh
+                var cylinder = new THREE.Mesh(cylinderHelperGeometry, cylinderMaterial);
+
+                // Position the cylinder based on the axis and polarity
+                if (xyz === 'x') {
+                    // For the X-axis, move the cylinder along the X-axis and rotate it to be horizontal
+                    cylinder.position.x = polarity === 'pos' ? cylinderLength / 2 : -cylinderLength / 2; // Positive or negative X
+                    cylinder.position.z = 0; // Keep it centered on the Z-axis
+                    cylinder.rotation.z = Math.PI / 2; // Rotate to lie horizontally along X
+                } else if (xyz === 'z') {
+                    // For the Z-axis, move the cylinder along the Z-axis and rotate it to be horizontal
+                    cylinder.position.z = polarity === 'pos' ? cylinderLength / 2 : -cylinderLength / 2; // Positive or negative Z
+                    cylinder.position.x = 0; // Keep it centered on the X-axis
+                    cylinder.rotation.x = Math.PI / 2; // Rotate to lie horizontally along Z
+                }
+
+                // Set the Y-position to an appropriate height (like a grid on the roof)
+                cylinder.position.y = 15;
+
+                // Add the cylinder to the scene
+                scene.add(cylinder);
+                pillars.push(cylinder)
+            }
+        }
+    }
+
+    go(centerX = 0, centerY = 0, centerZ = 0) {
         const centerKey = `${centerX}_${centerZ}`;
         this.terrainType = 'dense'//['sparse', 'dense', 'half'][Math.floor(Math.random() * 3)];
         for (var i = 0; i < this.meshes.length; i++) {
@@ -1179,6 +1132,8 @@ class Terrain {
 
         // let woodTerrain = this.generateRandomWoodsTerrain();
 
+        var freshwaterPond = [];
+
         // Generate vertices and initial setup
         for (let i = 0; i <= this.segments; i++) {
             for (let j = 0; j <= this.segments; j++) {
@@ -1198,25 +1153,49 @@ class Terrain {
 
                 var inCastle = v.x > -45 && v.x < 45 && v.z > -30 && v.z < 30;
                 if (inCastle) {
-                    v.y = 0;
+                    v.y = 0;  // Flatten the terrain inside the castle
                 }
 
                 var goingDownToRiver = v.x >= 45 && v.z >= -30 && v.z <= 30;
                 if (goingDownToRiver) {
-                    let curveFactor = Math.random(); // Adjust 0.1 to control how smooth the curve is
+                    freshwaterPond.push(v.x, v.y - 13, v.z);
+                    let curveFactor = Math.cos(Math.random() * Math.PI); // Smooth cosine factor
                     let targetHeight = -50;
-                    
+
                     // Blend between current height and target height using cosine curve
                     v.y = curveFactor * (v.y - targetHeight) + targetHeight;
                 }
 
                 if ([v.x, v.y, v.z].some(isNaN)) {
-                    debugger;
+                    debugger; // Debugging to catch any NaN errors
                 }
 
-                vertices.push(v.x, v.y, v.z);
+                vertices.push(v.x, v.y, v.z);  // Add to terrain vertices
             }
         }
+
+        // Create geometry for the pond
+        var freshwaterPondGeometry = new THREE.BufferGeometry();
+        freshwaterPondGeometry.setAttribute(
+            'position', 
+            new THREE.Float32BufferAttribute(new Float32Array(freshwaterPond), 3) // 3 vertices per position
+        );
+
+        // Create mesh for the pond
+        var freshwaterPondMesh = new THREE.Mesh(
+            freshwaterPondGeometry,
+            new THREE.MeshBasicMaterial({
+                color: new THREE.Color(0, .5, 1),  // Color of the pond
+                side: THREE.DoubleSide ,   // Double-sided for visibility from both sides
+                transparent: true,
+                opacity: 0.9
+            })
+        );
+
+        freshwaterPond.receiveShadow = true
+
+        // Add the pond to the scene
+        scene.add(freshwaterPondMesh);
 
 
 
@@ -1298,7 +1277,7 @@ class Terrain {
 
                 var inCastle = v.x > -50 && v.x < 50 && v.z > -35 && v.z < 35
 
-                var isNearGrassPatch = (grassPatches[i][j] || 
+                var isNearGrassPatch = false && (grassPatches[i][j] || 
                                           (i > 0 && grassPatches[i - 1][j]) ||  // Check left
                                           (i < this.segments && grassPatches[i + 1][j]) ||  // Check right
                                           (j > 0 && grassPatches[i][j - 1]) ||  // Check above
@@ -1310,7 +1289,12 @@ class Terrain {
                 );
 
 
-                const isTree = eval(this.treeCondition);
+                const isTree = false && eval(this.treeCondition);
+
+
+
+                
+
 
                 if (a >= 0 && b >= 0 && c >= 0 && d >= 0 && a < vertices.length / 3 && b < vertices.length / 3 && c < vertices.length / 3 && d < vertices.length / 3) {
                     indices.push(a, b, d);
@@ -1321,10 +1305,17 @@ class Terrain {
                     const t2 = Triangle(vertices, b, c, d, this.width, this.height);
 
                     [t1, t2].forEach((triangle) => {
+                        const normal = this.getTriangleNormal(triangle);
+
+                        if (Math.abs(normal.y) < .3 && (Math.abs(normal.x) > .3 || Math.abs(normal.z) > .3)) {
+                            this.cliffs.push(triangle)
+                        }
+
                         this.grounds.push(triangle);
                         
 
-                        if (isNearGrassPatch) {
+                        if (isNearGrassPatch && !inCastle) {
+                            this.grasses.push(this.createGrassResult(indices, vertices, triangle, 211, randomInRange(.1, .3), randomInRange(0.1, .3)))
                             this.groundColorMap[i][j] = Math.random()
                         }
                         //
@@ -1335,6 +1326,7 @@ class Terrain {
                             var tree = this.createTree(triangle.a.x, triangle.a.y, triangle.a.z, 1);
                             VM.map[VM.user.level].trees.push(tree);
                         }
+
                     });
 
                     
@@ -1344,6 +1336,8 @@ class Terrain {
 
         }
 
+
+        this.clusterCliffs()
         
         // Now, let's apply the grass density in groundColorMap to color the vertices
         const colors = [];
@@ -1367,7 +1361,16 @@ class Terrain {
 
                     } else {
                         // No grass means brown soil
-                        colors.push(randomInRange(0.1, 0.3), randomInRange(0.11, 0.15), randomInRange(0, 0.08));  // RGB color for dark brown soil
+                        var color = VM.map[VM.user.level].Grass[Math.floor(Math.random() * VM.map[VM.user.level].Grass.length)];
+
+                        // Remove the '#' and split the color into RGB components
+                        color = color.replace('#', '');
+                        
+                        // Parse the hex string into its RGB components
+                        var r = parseInt(color.substring(0, 2), 16) / 255
+                        var g = parseInt(color.substring(2, 4), 16) / 255 * 1.5
+                        var b = parseInt(color.substring(4, 6), 16) / 255
+                        colors.push(r ,g, b) //colors.push(randomInRange(0.1, 0.3), randomInRange(0.11, 0.15), randomInRange(0, 0.08));  // RGB color for dark brown soil
                     }
                 }
             }
@@ -1406,10 +1409,10 @@ class Terrain {
         const mesh = new THREE.Mesh(planeGeometry, material);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+
         this.mesh = mesh;
-
+        this.mesh.name = "terrain"
         this.mesh.noise = perlinNoise;
-
         this.mesh.centerKey = centerKey;
 
         scene.add(mesh);
@@ -1449,6 +1452,13 @@ class Terrain {
         this.v1 = { x: this.center.x + this.quadrant, y: this.center.y, z: this.center.z + this.quadrant };
         this.v2 = { x: this.center.x + this.quadrant, y: this.center.y, z: this.center.z - this.quadrant };
         this.v3 = { x: this.center.x - this.quadrant, y: this.center.y, z: this.center.z - this.quadrant };
+    }
+
+    getTriangleNormal(triangle) {
+        triangle = triangle.triangle
+        const v0 = new THREE.Vector3().subVectors(triangle.b, triangle.a);
+        const v1 = new THREE.Vector3().subVectors(triangle.c, triangle.a);
+        return new THREE.Vector3().crossVectors(v0, v1).normalize();
     }
     
 
@@ -2142,6 +2152,8 @@ class Terrain {
         const visited = new Array(triangles.length).fill(false);
 
         function shareEdge(triangle1, triangle2) {
+            triangle1 = triangle1.triangle
+            triangle2 = triangle2.triangle
             const edges1 = [
                 [triangle1.a, triangle1.b],
                 [triangle1.b, triangle1.c],
@@ -2187,12 +2199,52 @@ class Terrain {
         return clusters;
     }
 
+
+
+    shareEdge(triangle1, triangle2) {
+        triangle1 = triangle1.triangle
+        triangle2 = triangle2.triangle
+        const edges1 = [
+            [triangle1.a, triangle1.b],
+            [triangle1.b, triangle1.c],
+            [triangle1.c, triangle1.a]
+        ];
+        const edges2 = [
+            [triangle2.a, triangle2.b],
+            [triangle2.b, triangle2.c],
+            [triangle2.c, triangle2.a]
+        ];
+        for (let edge1 of edges1) {
+            for (let edge2 of edges2) {
+                if (
+                    (edge1[0].equals(edge2[0]) && edge1[1].equals(edge2[1])) ||
+                    (edge1[0].equals(edge2[1]) && edge1[1].equals(edge2[0]))
+                ) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    dfs(index, cluster) {
+        this.visited[index] = true;
+        cluster.push(this.cliffs[index]);
+
+        for (let i = 0; i < this.cliffs.length; i++) {
+            if (!this.visited[i] && this.shareEdge(this.cliffs[index], this.cliffs[i])) {
+                this.dfs(i, cluster);
+            }
+        }
+    }
+
     createBufferGeometryFromCluster(cluster) {
         const vertices = [];
         const indices = [];
         const uvs = [];
 
         cluster.forEach((triangle, index) => {
+            triangle = triangle.triangle
             const startIndex = vertices.length / 3;
             vertices.push(
                 triangle.a.x, triangle.a.y, triangle.a.z,
@@ -2209,43 +2261,64 @@ class Terrain {
 
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-                geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
         geometry.setIndex(indices);
         geometry.computeVertexNormals();
+        geometry.computeBoundingBox()
 
         return geometry;
     }
 
     clusterCliffs() {
-        var meshes = []
-        const cliffClusters = this.findClusters(this.cliffs);
-        cliffClusters.forEach(cluster => {
+        const clusters = [];
+
+        this.visited = new Array(this.cliffs.length).fill(false);
+
+         
+
+        for (let i = 0; i < this.cliffs.length; i++) {
+            if (!this.visited[i]) {
+                const cluster = [];
+                this.dfs(i, cluster);
+                clusters.push(cluster);
+            }
+        }
+        clusters.forEach(cluster => {
             const geometry = this.createBufferGeometryFromCluster(cluster);
-            const material = new THREE.MeshBasicMaterial({ 
+
+            const material = new THREE.MeshStandardMaterial({ 
                 // map: rockTexture,
                 color: 'white',
                 side: THREE.DoubleSide,
                 wireframe: false
             });
+
+            console.log("placing cliffs")
                 
             const mesh = new THREE.Mesh(geometry, material);
             mesh.receiveShadow = true;
             mesh.castShadow = true;
-            // moveMeshAlongNormal(mesh, -0.05);
-            meshes.push(mesh);
+            mesh.name = 'cliff...'
+            geometry.computeBoundingBox()
+            geometry.computeVertexNormals();
+            mesh.boundingBox = geometry.boundingBox
+            mesh.position.y += .2
+            scene.add(mesh)
+            scene.add(mesh);
         });
-        return meshes;
+
     }
+
 
     clusterGrounds() {
         var meshes = [];
         const groundClusters = this.findClusters(this.ground);
         groundClusters.forEach(cluster => {
             const geometry = createBufferGeometryFromCluster(cluster);
-                const material = new THREE.MeshStandardMaterial({
-                color: 'lawngreen',
-                    side: THREE.DoubleSide
-                });
+            const material = new THREE.MeshStandardMaterial({
+            color: 'lawngreen',
+                side: THREE.DoubleSide
+            });
             const mesh = new THREE.Mesh(geometry, material);
             mesh.receiveShadow = true;
             mesh.castShadow = true;
@@ -2327,30 +2400,6 @@ class Terrain {
             return distanceSquared <= sopRadius * sopRadius;
         }
 
-
-        // Add triangles within the SOP to the scene
-        // this.grassTriangles.forEach((mesh) => {
-        //     const triangle = mesh.triangle; // Get the triangle representation from the mesh
-        //     const triangleCenter = this.getTriangleCenter(triangle);
-
-        //     if (!mesh.parent && isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
-        //         scene.add(mesh);
-        //     } else if (mesh.parent && !isInSOP(triangleCenter, sopCenter, VM.map[VM.user.level].sop.grasses)) {
-        //         scene.remove(mesh);
-        //     }
-        // });
-
-        // Repeat for cliffs and grounds clusters if needed
-        this.cliffMeshes.forEach((mesh) => {
-            const meshCenter = this.getTriangleCenter(mesh.triangle);
-            if ((meshCenter.x < sopCenter.x - sopRadius || meshCenter.x > sopCenter.x + sopRadius ||
-                meshCenter.z < sopCenter.z - sopRadius || meshCenter.z > sopCenter.z + sopRadius)) {
-                scene.remove(mesh);
-            } else {
-                scene.add(mesh);
-            }
-        });
-
         // Remove triangles outside the SOP from the scene
         VM.map[VM.user.level].trees.forEach((tree) => {
             if (tree.foliage.parent && !isInSOP(tree.foliage.position, sopCenter, VM.map[VM.user.level].sop.trees)) {
@@ -2377,6 +2426,7 @@ class Terrain {
     }
 
     getTriangleCenter(triangle) {
+        triangle = triangle.triangle
         const centerX = (triangle.a.x + triangle.b.x + triangle.c.x) / 3;
         const centerY = (triangle.a.y + triangle.b.y + triangle.c.y) / 3;
         const centerZ = (triangle.a.z + triangle.b.z + triangle.c.z) / 3;
@@ -2511,9 +2561,8 @@ class Terrain {
         return [instancedMesh, bladePositions];
     }
 
-    createGrassResult(indices, vertices, triangleMesh, bladeCount = 11, bladeHeight = 1, bladeWidth = 0.1) {
-        var triangle = triangleMesh.triangle
-        
+    createGrassResult(indices, vertices, triangle, bladeCount = 11, bladeHeight = 1, bladeWidth = 0.1) {
+
         const bladeGeometry = new THREE.PlaneGeometry(bladeWidth, bladeHeight, 1, 4);
         bladeGeometry.computeVertexNormals();
         
@@ -2537,7 +2586,7 @@ class Terrain {
 
         return new GrassPatch({
             mesh: instancedMesh,
-            triangleMesh,
+            triangle,
             bladePositions: bladePositions 
         });
     }
@@ -2571,19 +2620,19 @@ class Terrain {
 }
 
 class UserController {
-    constructor(terrain, bvh) {
+    inersections = []
+    constructor(terrain) {
         this.terrain = terrain;
-        this.bvh = bvh;
         this.isJumping = false;
         this.w = false;
         this.a = false;
         this.s = false;
         this.d = false;
-        this.wS = .15
+        this.wS = .1
         this.aS = .1
         this.sS = .1
         this.dS = .1
-        this.tS = .15
+        this.tS = .075
         this.shift = false
         this.space = false;
         this.ArrowUp = false;
@@ -2595,6 +2644,7 @@ class UserController {
         this.isJumping = false;
         this.jumpVelocity = 0;
         this.centerKey = null;
+        this.cmd = false;
         this.velocity = new THREE.Vector3(); // General velocity
         this.intersectsTerrain = [];
         this.time_held = {
@@ -2605,12 +2655,37 @@ class UserController {
         }
         this.addEventListener();
         this.init();
+        this.objects = []
     }
+
+
+    init() {
+        let position = VM.user.position;
+        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1600);
+        this.camera.near = 0.1;  // Increase this value
+        this.camera.far = 1000;  // Reduce far plane if it's too large
+        this.camera.updateProjectionMatrix();
+        this.camera.touches = new Set()
+        this.camera.foot = null;
+        this.camera.position.set(position.x, position.y + 2, position.z);
+        this.camera.velocity = new THREE.Vector3(0, 0, 0);
+        this.cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
+            this.camera.position,
+            new THREE.Vector3(1, 1, 1) // Adjust size if needed
+        );
+    }
+
 
     addEventListener() {
         window.addEventListener('keydown', (e) => {
             const key = e.key.toUpperCase();
-            if (key == 'W') {
+            if (key == 'META') {
+                this.cmd = true
+            }
+            if (this.cmd && key == 'S') {
+                localStorage.position = JSON.stringify({ x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z })
+                localStorage.rotation = JSON.stringify({ x: this.camera.rotation.x, y: this.camera.rotation.y, z: this.camera.rotation.z })
+            } if (key == 'W') {
                 this.w = true;
                 this.time_held.w = new Date().getTime();
             } else if (key == 'A') {
@@ -2639,6 +2714,9 @@ class UserController {
         
         window.addEventListener('keyup', (e) => {
             const key = e.key.toUpperCase();
+            if (key == 'META') {
+                this.cmd = false
+            }
             if (key == 'W') {
                 user.w = false;
                 this.time_held.w = 0;
@@ -2730,25 +2808,46 @@ class UserController {
                 }
             }
         }, false);
-    }
 
-    init() {
-        let position = VM.user.position;
-        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1600);
-        this.camera.near = 0.1;  // Increase this value
-        this.camera.far = 1000;  // Reduce far plane if it's too large
-        this.camera.updateProjectionMatrix();
-        this.camera.touches = new Set()
-        this.camera.foot = null;
-        this.camera.position.set(position.x, position.y + 2, position.z);
-        this.camera.velocity = new THREE.Vector3(0, 0, 0);
-        this.cameraBoundingBox = new THREE.Box3().setFromCenterAndSize(
-            this.camera.position,
-            new THREE.Vector3(1, 1, 1) // Adjust size if needed
-        );
+
+        this.yaw = 0;   // Rotation around the Y-axis (left/right)
+        this.pitch = 0; // Rotation around the X-axis (up/down)
+        this.maxPitch = Math.PI / 2;
+        this.previous = { movementX: 0, movementY: 0 }
+        this.targetLook = new THREE.Vector3();
+
+        // Define the max angle for the arc (in radians)
+        const maxAngle = THREE.MathUtils.degToRad(45);  // 45 degrees in radians
+        window.addEventListener('mousemove', (event) => {
+            const sensitivity = 0.005;  // Adjust sensitivity
+            this.yaw -= event.movementX * sensitivity;
+            this.pitch -= event.movementY * sensitivity;
+
+            // Clamp the pitch so the camera doesn't flip
+            this.pitch = Math.max(-this.maxPitch, Math.min(this.maxPitch, this.pitch));
+
+            const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');  // Yaw-Pitch-Roll
+            this.camera.quaternion.setFromEuler(euler);  // Apply the rotation to the camera
+        });
+
+
+
+
+        // Optional: Update screen size on resize
+        window.addEventListener('resize', () => {
+          screenWidth = window.innerWidth;
+          screenHeight = window.innerHeight;
+        });
+
+        // Mouse up event
+        // document.addEventListener('mouseup', () => {
+        //   isMouseDown = false;
+        // });
+
     }
 
     handleMovement() {
+        this.intersections = []
         const now = new Date().getTime();
         // Handle gravity and jumping
         if (this.isJumping) {
@@ -2764,42 +2863,47 @@ class UserController {
             var right = new THREE.Vector3();
             var forwardMovement = new THREE.Vector3();
             var rightMovement = new THREE.Vector3();
+            var combinedMovement = new THREE.Vector3();  // To store the final movement result
 
             if (this.w) {
                 var time_held = performance.now() - this.time_held.w;
                 this.time_held.w = performance.now();
-                var MOVE_FORWARD = this.wS;
-
-                if (user.isFalling) {
-                    MOVE_FORWARD *= 2
-                }
-
+                
+                // Forward movement
                 this.camera.getWorldDirection(direction);
-                // Ignore the y component to keep movement on the horizontal plane
-                direction.y = 0;
-                direction.normalize();  // Normalize to ensure the vector length stays consistent
-                forwardMovement.add(direction.multiplyScalar(MOVE_FORWARD));
+                direction.y = 0;  // Ignore vertical movement
+                direction.normalize();  // Ensure consistent vector length
+                forwardMovement.add(direction.multiplyScalar(this.wS));  // Move forward by this.wS
             }
+
             if (this.s) {
                 this.camera.getWorldDirection(direction);
-                // Ignore the y component to keep movement on the horizontal plane
                 direction.y = 0;
-                direction.normalize();
-                forwardMovement.add(direction.multiplyScalar(this.isJumping ? -this.sS * 0.5 : -this.sS));
+                direction.normalize();  // Normalize for consistent movement
+                forwardMovement.sub(direction.multiplyScalar(this.sS));  // Move backward by this.sS
             }
 
-            if (this.a) {
+            if (this.a || this.d) {
+                // Get the right vector only once (cross product of up and direction)
                 this.camera.getWorldDirection(direction);
-                right.crossVectors(this.camera.up, direction).normalize();
-                rightMovement.add(right.multiplyScalar(this.isJumping ? this.aS * 0.5 : this.aS));
-            }
-            if (this.d) {
-                this.camera.getWorldDirection(direction);
-                right.crossVectors(this.camera.up, direction).normalize();
-                rightMovement.add(right.multiplyScalar(this.isJumping ? -this.dS * 0.5 : -this.dS));
+                direction.y = 0;  // Keep movement in the horizontal plane
+                right.crossVectors(this.camera.up, direction).normalize();  // Calculate the right vector
+                
+                if (this.d) {
+                    rightMovement.sub(right.multiplyScalar(this.aS));  // Move left
+                }
+                if (this.a) {
+                    rightMovement.add(right.multiplyScalar(this.dS));  // Move right
+                }
             }
 
+            // Combine forward and sideways movement
             combinedMovement.add(forwardMovement).add(rightMovement);
+
+            // Apply movement to the camera or player object
+            this.camera.position.add(combinedMovement);
+
+
         }
 
         // Handle rotation
@@ -2827,25 +2931,28 @@ class UserController {
             this.camera.quaternion.multiplyQuaternions(quaternionY, this.camera.quaternion);
         }
 
-        // Handle collisions before applying movement
-        this.handleCollision();
 
         // Apply movement after collision handling
         this.camera.position.add(combinedMovement);
 
-        this.updateBoundingBox();
+        this.updateBoundingBox();        
+
+        this.handleCollision();
+
     }
 
     // Main collision handler
     handleCollision() {
         const directions = [
+            // Primary axes
             new THREE.Vector3(1, 0, 0),    // Right
             new THREE.Vector3(-1, 0, 0),   // Left
             new THREE.Vector3(0, 0, 1),    // Forward
             new THREE.Vector3(0, 0, -1),   // Backward
             new THREE.Vector3(0, 1, 0),    // Up
-            new THREE.Vector3(0, -1, 0)    // Down
+            new THREE.Vector3(0, -1, 0),   // Down
         ];
+
 
         const collisionDistance = 0.5; 
         let collisionResponseForce = 0.3; 
@@ -2857,7 +2964,7 @@ class UserController {
             }
 
             // Create a raycaster
-            const raycaster = new THREE.Raycaster(this.camera.position, dir.normalize());
+            const raycaster = new THREE.Raycaster(this.camera.position, dir.normalize(), 10);
 
             // Check for intersections with trees
             const intersectsTrees = raycaster.intersectObjects(this.terrain.trees.flatMap(tree => [tree.trunk, tree.foliage]), true);
@@ -2866,9 +2973,15 @@ class UserController {
             }
 
             // Check for intersections with castle parts
-            const intersectsCastle = raycaster.intersectObjects(window.castle.parts, true);
+            const intersectsCastle = raycaster.intersectObjects(window.castle.parts.filter(p => p), true);
             if (intersectsCastle.length > 0 && intersectsCastle.some(i => i.distance < 0.2)) {
                 this.handleCastleCollision(intersectsCastle[0], dir, collisionResponseForce);
+            }
+
+            const intersectsCliffs = raycaster.intersectObjects(terrain.cliffs.map(c => c.mesh ? c.mesh : c), true);
+            if (intersectsCliffs.length > 0 && intersectsCastle.some(i => i.distance < 1)) {
+                console.log("intersectsCliff", intersectsCliffs)
+                this.handleTreeCollision(intersectsCliffs[0], dir, collisionResponseForce);
             }
         }
     }
@@ -2918,6 +3031,7 @@ class UserController {
 
         // Ground collision detection
         if (downIntersection && downIntersection.distance < 1) {
+            this.intersections.push(downIntersection.object)
             console.log("Camera is above the ground, landing");
 
             // Adjust the camera position to the surface plus a small offset to simulate landing
@@ -2930,6 +3044,7 @@ class UserController {
 
         // Ceiling collision detection
         if (upIntersection && upIntersection.distance < .5) {
+            this.intersections.push(upIntersection.object)
             console.log("Camera hit the ceiling");
 
             // Prevent the camera from going through the ceiling
@@ -2949,60 +3064,42 @@ class UserController {
 
 
     applyGravity() {
-        if (!this.isJumping) {
+        if (this.camera.velocity.y < TERMINAL_VELOCITY) {
+            this.camera.velocity.y = TERMINAL_VELOCITY;
+        } else {
             this.camera.velocity.y += GRAVITY; 
-            if (this.camera.velocity.y < TERMINAL_VELOCITY) {
-                this.camera.velocity.y = TERMINAL_VELOCITY;
-            }
-            this.camera.position.y += this.camera.velocity.y;
+        }
+        this.camera.position.y += this.camera.velocity.y;
 
-            const raycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
-            const intersection = this.findClosestIntersection(raycaster);
+        const raycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
+        const intersection = this.findClosestIntersection(raycaster);
 
-            if (intersection && intersection.distance < 1) {
-                this.camera.position.y = intersection.point.y + 1;
-                this.camera.velocity.y = 0;
-                this.isJumping = false;
+        if (intersection && intersection.distance < 1) {
+            this.intersections.push(intersection)
+            this.camera.position.y = intersection.point.y + 1;
 
-                this.updateTerrain(intersection);
-            }
-            
-            // Cast a ray from the camera downwards to detect the ground
-            const downRaycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
-            const downIntersection = this.findClosestIntersection(downRaycaster);
 
-            // Cast a ray upwards to detect ceilings
-            const upRaycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, 1, 0));
-            const upIntersection = this.findClosestIntersection(upRaycaster);
+            this.camera.velocity.y = 0;
+            this.isJumping = false;
 
-            // Ground collision detection
-            if (downIntersection && downIntersection.distance < 1) {
-                console.log("Camera is above the ground, landing");
+            this.updateTerrain(intersection);
+        }
+        
+        // Cast a ray upwards to detect ceilings
+        const upRaycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, 1, 0));
+        const upIntersection = this.findClosestIntersection(upRaycaster);
 
-                // Adjust the camera position to the surface plus a small offset to simulate landing
-                this.camera.position.y = downIntersection.point.y + 1;
-                this.camera.velocity.y = 0;
-                this.isJumping = false;
 
-                this.updateTerrain(downIntersection);
-            }
+        // Ceiling collision detection
+        if (upIntersection && upIntersection.distance < .5) {
+            console.log("Camera hit the ceiling");
 
-            // Ceiling collision detection
-            if (upIntersection && upIntersection.distance < .5) {
-                console.log("Camera hit the ceiling");
+            // Prevent the camera from going through the ceiling
+            this.camera.position.y = upIntersection.point.y - .5; // Adjust based on how close you want to stop
+            this.camera.velocity.y = 0;
+            this.isJumping = false;
 
-                // Prevent the camera from going through the ceiling
-                this.camera.position.y = upIntersection.point.y - .5; // Adjust based on how close you want to stop
-                this.camera.velocity.y = 0;
-                this.isJumping = false;
-
-                // Optional: handle additional ceiling collision logic here
-            }
-
-            // If neither intersection is detected, continue falling
-            if (!downIntersection && !upIntersection) {
-                console.log("No intersection detected, camera still in the air");
-            }            
+            // Optional: handle additional ceiling collision logic here
         }
     }
 
@@ -3012,7 +3109,16 @@ class UserController {
         let minDistance = 3;
 
         // Check intersections with terrain meshes
-        for (let mesh of this.terrain.meshes) {
+        // for (let mesh of this.terrain.meshes) {
+        //     const intersects = raycaster.intersectObject(mesh, true);
+        //     if (intersects.length > 0 && intersects[0].distance < minDistance) {
+        //         closestIntersection = intersects[0];
+        //         minDistance = intersects[0].distance;
+        //     }
+        // }
+
+        for (let m of scene.children) {
+            var mesh = m.mesh ? m.mesh : m
             const intersects = raycaster.intersectObject(mesh, true);
             if (intersects.length > 0 && intersects[0].distance < minDistance) {
                 closestIntersection = intersects[0];
@@ -3021,13 +3127,18 @@ class UserController {
         }
 
         // Check intersections with castle parts
-        for (let part of window.castle.parts) {
-            const intersects = raycaster.intersectObject(part, true);
-            if (intersects.length > 0 && intersects[0].distance < minDistance) {
-                closestIntersection = intersects[0];
-                minDistance = intersects[0].distance;
-            }
-        }
+        // for (let part of window.castle.parts) {
+        //     if (!part) continue
+        //    try {
+        //      const intersects = raycaster.intersectObject(part, true);
+        //     if (intersects.length > 0 && intersects[0].distance < minDistance) {
+        //         closestIntersection = intersects[0];
+        //         minDistance = intersects[0].distance;
+        //     }
+        //     } catch (e) {
+        //         debugger
+        //     }
+        // }
 
         return closestIntersection;
     }
@@ -3076,7 +3187,6 @@ function isVerticalIntersection(normal) {
 
 
 
-
 class View {
     constructor() {
         window.scene = new THREE.Scene();
@@ -3095,65 +3205,25 @@ class View {
 
         window.terrain = new Terrain(VM);
 
-
-        window.boundingVolumeHierarchy = new BoundingVolumeHierarchy();
-        window.user = new UserController(terrain, boundingVolumeHierarchy);
+        window.user = new UserController(terrain);
         window.sky = new Sky(window.user);
         window.terrain.setSun(window.sky.sun);
         window.terrain.setCamera(window.user.camera);
 
     
-        // Set up the axis object to define colors for positive and negative directions
-        var axis = {
-            x: {
-                neg: 'blue',  // Negative X direction (left)
-                pos: 'red'    // Positive X direction (right)
-            },
-            z: {
-                neg: 'green',  // Negative Z direction (backward)
-                pos: 'yellow'  // Positive Z direction (forward)
-            }
-        };
+        window.terrain.setGrandCentralPillar()
 
-        var cylinderLength = VM.map[VM.user.level].quadrant * 2;
+        var castleBaseCenter = new THREE.Vector3(0, 0, 0)
 
-        // Loop through each axis (x and z) and each polarity (positive and negative)
-        for (var xyz in axis) {
-            for (var polarity in axis[xyz]) {
-                // Create the cylinder geometry for each axis and polarity
-                var cylinderHelperGeometry = new THREE.CylinderGeometry(0.15, 0.5, cylinderLength, 32); // Radius 0.5, length 20 (horizontal)
+        window.castle = new Castle(castleBaseCenter);
 
-                // Create the material with the appropriate color
-                var cylinderMaterial = new THREE.MeshBasicMaterial({ color: axis[xyz][polarity] });
-
-                // Create the cylinder mesh
-                var cylinder = new THREE.Mesh(cylinderHelperGeometry, cylinderMaterial);
-
-                // Position the cylinder based on the axis and polarity
-                if (xyz === 'x') {
-                    // For the X-axis, move the cylinder along the X-axis and rotate it to be horizontal
-                    cylinder.position.x = polarity === 'pos' ? cylinderLength / 2 : -cylinderLength / 2; // Positive or negative X
-                    cylinder.position.z = 0; // Keep it centered on the Z-axis
-                    cylinder.rotation.z = Math.PI / 2; // Rotate to lie horizontally along X
-                } else if (xyz === 'z') {
-                    // For the Z-axis, move the cylinder along the Z-axis and rotate it to be horizontal
-                    cylinder.position.z = polarity === 'pos' ? cylinderLength / 2 : -cylinderLength / 2; // Positive or negative Z
-                    cylinder.position.x = 0; // Keep it centered on the X-axis
-                    cylinder.rotation.x = Math.PI / 2; // Rotate to lie horizontally along Z
-                }
-
-                // Set the Y-position to an appropriate height (like a grid on the roof)
-                cylinder.position.y = 15;
-
-                // Add the cylinder to the scene
-                scene.add(cylinder);
-            }
+        for (var cliffCluster of terrain.cliffs) {
+            
+            window.castle.parts.push(cliffCluster.mesh)
         }
 
 
 
-
-        boundingVolumeHierarchy.init(window.terrain.grassTriangles);
         
         this.addUser();
 
@@ -3217,56 +3287,52 @@ class View {
             createRandomBezierCurve(50)
         ];
 
-        var mapQuadrant = +getComputedStyle(devview.children[0]).width.split('px')[0];
-        var centerTile = devview.children[12];
-        var mapCenter = (+getComputedStyle(centerTile).height.split('px')[0] / 2) + centerTile.offsetTop;
-        let time = 0;
+       
 
+
+     
         // // [Timeline("Start")]
         window.Animate = function() {
             window.requestAnimationFrame(Animate);
             window.sky.update();
             window.user.handleMovement();
+
+            devview.innerHTML = `<pre style="color:white;background: rgba(0,0,0,0.3)">
+    ${JSON.stringify({
+        intersections: user.intersections.map(m => ({
+            name: m.object.name,
+            normal: m.normal
+        }))
+    }, null, 1)}
+            </pre>`
+
             var newTerrain = window.terrain.updateTerrain(window.user.camera.position);
             window.renderer.render(window.scene, window.user.camera);
 
-            // todo - add faeries like those from The Faerie Queene by Edmund Spenser
-            // simulating an infinite mythical environment
-            // movePointLights(pointLights, curves, time);
-            // time += 0.01; // Increment time to move the lights
 
-           
-            
-            // Calculate user position on the 5x5 grid
-            let userPosition = window.user.camera.position;
-            let posIncX = userPosition.x / terrain.quadrant / 2;
-            let posIncZ = userPosition.z / terrain.quadrant / 2;
 
-            if (Number.isNaN(posIncX)) {
-                posIncX = 0;
-            }
-            if (Number.isNaN(posIncZ)) {
-                posIncZ = 0;
-            }
+            const threshold = 1;  // Threshold distance for moving the user
 
-            // Calculate the pixel position relative to the center of the grid
-            var pointerX = posIncX * mapQuadrant + mapCenter;
-            var pointerY = posIncZ * mapQuadrant + mapCenter;
+            user.intersections.forEach(intersection => {
+                // Calculate distance from camera to the intersection point
+                const distance = user.camera.position.distanceTo(intersection.point);
+                
+                // If the distance is smaller than the threshold, move the user
+                if (distance < threshold) {
+                    // Get the intersection normal (the direction to move along)
+                    const normal = intersection.normal//face.normal.clone().normalize();
 
-            // Position the pointer
-            pointer.style.left = `${pointerX}px`;
-            pointer.style.top = `${pointerY}px`;
+                    // Move the user along the normal by the difference
+                    const movementVector = normal.multiplyScalar(threshold - distance);
 
-            // Debugging
+                    // Adjust the user position by adding the movement vector
+                    user.camera.position.add(movementVector);
 
-            var centerKey = `${Math.round(userPosition.x / 128) * 128}_${Math.round(userPosition.z / 128) * 128}`;
-            document.querySelectorAll('.quadrant').forEach(q => {
-                for (var i = 0; i < terrain.meshes.length; i++) {
-                    document.getElementById(terrain.meshes[i].centerKey).classList.add('built');
+                    // Optionally, log for debugging
+                    console.log(`User moved by ${movementVector.length()} units along the normal`);
                 }
-                q.classList.remove("on")
-            });
-            document.getElementById(centerKey).classList.add('on');
+            })
+           
 
         }
 
@@ -3275,6 +3341,8 @@ class View {
 
 
     }
+
+
 
     addUser() {
         // Create a wireframe box to visualize the bounding box
@@ -3306,14 +3374,13 @@ class View {
             }
         }
 
-        window.user.camera.position.set(33.953909365281795, 2.610000001490116, 23.053098469337314);
-        window.user.camera.rotation.set(0, 1.533185307179759, 0)
+        // window.user.camera.position.set(33.953909365281795, 2.610000001490116, 23.053098469337314);
+        window.user.camera.position.set(37.64253652708739,1.5,14.461816303157224)
+        // window.user.camera.rotation.set(0, 1.533185307179759, 0)
+        window.user.camera.rotation.set(0.590, 0.674, -0.396)
 
 
-        var centerPoint = getCenterOfGeometry(mesh.geometry);
-        centerPoint.y -= 4.5
-
-        window.castle = new Castle(centerPoint);
+        
         
     }
 
