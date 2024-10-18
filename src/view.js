@@ -1044,7 +1044,7 @@ class Castle {
 
     buildWalls(wall_instructions = ['decorative wall with cutout windows at 1 - 2 levels of varying sizes','a wall of glass','a castle wall','a mossy wall with circular window cutouts']) {
         var createDecorativeWall = (foundation, width, times = 1, wall_instructions) => {
-            console.log("Building decorative wall...");
+            // console.log("Building decorative wall...");
 
             // Define the wall dimensions
             const wallHeight = this.area.wall.height * 3 * times; // Example: 3 floors tall
@@ -1105,7 +1105,7 @@ class Castle {
             const positions = finalWallGeometry.geometry.attributes.position.array;
             for (let i = 0; i < positions.length; i++) {
                 if (isNaN(positions[i])) {
-                    console.log(`NaN found at index ${i}`);
+                    // console.log(`NaN found at index ${i}`);
                 }
             }
 
@@ -1492,7 +1492,7 @@ class Terrain {
         for (let i = 0; i < this.segments; i++) {
             if (new Number(i / this.segments).toFixed(1) != start_i) {
                 start_i = new Number((i + 1) / this.segments).toFixed(2);
-                console.log(start_i)
+                // console.log(start_i)
             }
             for (let j = 0; j < this.segments; j++) {
                 let a = i + j * (this.segments + 1);
@@ -1752,7 +1752,7 @@ class Terrain {
                     new THREE.SphereGeometry(0.1, 32, 32),
                     new THREE.MeshBasicMaterial({ color: 0xff0000 })
                 );
-                console.log('neighbor below', x, y, z);
+                // console.log('neighbor below', x, y, z);
                 sphere.position.set(x, y, z);
                 scene.add(sphere);
             }
@@ -1768,7 +1768,7 @@ class Terrain {
                     new THREE.MeshBasicMaterial({ color: 0x00ff00 })
                 );
     
-                console.log('neighbor above', x, y, z);
+                // console.log('neighbor above', x, y, z);
                 sphere.position.set(x, y, z);
                 scene.add(sphere);
             }
@@ -1783,7 +1783,7 @@ class Terrain {
                     new THREE.SphereGeometry(0.1, 32, 32),
                     new THREE.MeshBasicMaterial({ color: 0x0000ff })
                 );
-                console.log('neighbor left', x, y, z);
+                // console.log('neighbor left', x, y, z);
                 sphere.position.set(x, y, z);
                 scene.add(sphere);
             }
@@ -1798,7 +1798,7 @@ class Terrain {
                     new THREE.SphereGeometry(0.1, 32, 32),
                     new THREE.MeshBasicMaterial({ color: 0xffff00 })
                 );
-                console.log('neighbor right', x, y, z);
+                // console.log('neighbor right', x, y, z);
                 sphere.position.set(x, y, z);
                 scene.add(sphere);
             }
@@ -2506,8 +2506,7 @@ class Terrain {
 
         this.visited = new Array(this.cliffs.length).fill(false);
 
-         
-
+        
         for (let i = 0; i < this.cliffs.length; i++) {
             if (!this.visited[i]) {
                 const cluster = [];
@@ -2519,11 +2518,8 @@ class Terrain {
         this.cliffs = []
 
         clusters.forEach(cluster => {
-            // Loop through each item in the cluster
             cluster.forEach(item => {
-                const triangle = item.triangle;  // Get the triangle
-
-                // Extract vertex positions using the indices
+                const triangle = item.triangle;
                 const index0 = item.indices[0];
                 const index1 = item.indices[1];
                 const index2 = item.indices[2];
@@ -2552,9 +2548,9 @@ class Terrain {
                     c.x, c.y, c.z
                 ]);
 
-                // Calculate the normal for the triangle using the cross product
-                const edge1 = new THREE.Vector3().subVectors(b, a);  // b - a
-                const edge2 = new THREE.Vector3().subVectors(c, a);  // c - a
+                // Fix: Reverse the order of the cross product to flip the normal
+                const edge1 = new THREE.Vector3().subVectors(c, a);  // Use c - a instead of b - a
+                const edge2 = new THREE.Vector3().subVectors(b, a);  // Use b - a instead of c - a
                 const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();  // Cross product for normal
 
                 // Create the normal array (same normal for all 3 vertices in this flat triangle)
@@ -2567,6 +2563,8 @@ class Terrain {
                 // Set position and normal attributes for the geometry
                 geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
                 geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+
+                geometry.computeVertexNormals();
 
                 // Load the texture for the cliff triangle
                 const texture = new THREE.TextureLoader().load("/images/rockwall-2.jpg", (texture) => {
@@ -2586,19 +2584,20 @@ class Terrain {
                 const mesh = new THREE.Mesh(geometry, material);
                 mesh.receiveShadow = true;
                 mesh.castShadow = true;
-                mesh.position.y += .1
+                mesh.position.y += .2;
 
                 // Store triangle for later use if needed
                 mesh.triangle = triangle;
 
-                triangle.normal = normal
+                triangle.normal = normal;
 
-                this.cliffs.push(triangle)
+                this.cliffs.push(triangle);
 
                 // Add the triangle mesh to the scene
                 scene.add(mesh);
             });
         });
+
 
 
 
@@ -3066,7 +3065,7 @@ class UserController {
                         var arrived = false
                         var targetFloor = intersects[i].object.floor
                         var targetHeight = eFloor.interval * targetFloor + castle.offsetY;
-                        console.log(targetFloor, targetHeight);
+                        // console.log(targetFloor, targetHeight);
                         function riseElevator() {
                             if (arrived) return
                             castle.elevator.forEach(m => {
@@ -3089,7 +3088,7 @@ class UserController {
                                     }
                                 } else if (m.name == 'elevator-floor' && (up ? m.position.y >= targetHeight : m.position.y <= targetHeight)) {
                                     m.position.y = targetHeight;
-                                    console.log('reaching targetHeight', m.position.y)
+                                    // console.log('reaching targetHeight', m.position.y)
                                     arrived = true
                                 }
                             });
@@ -3147,7 +3146,7 @@ class UserController {
     handleMovement() {
         this.intersections = []
         const now = new Date().getTime();
-        // Handle gravity and jumping
+
         if (this.isJumping) {
             this.handleJumping();
         } else {
@@ -3195,10 +3194,8 @@ class UserController {
                 rightMovement.sub(right.multiplyScalar(this.dS)); 
             }
 
-            // Combine forward and sideways movement
-            combinedMovement.add(forwardMovement).add(rightMovement);
 
-            // Apply movement to the camera or player object
+            combinedMovement.add(forwardMovement).add(rightMovement);
             this.camera.position.add(combinedMovement);
 
 
@@ -3297,23 +3294,15 @@ class UserController {
 
             // If a closest intersection was found, adjust the camera's position
             if (closestIntersection) {
-                console.log('Intersection detected:', closestIntersection);
+                // console.log('Intersection detected:', closestIntersection);
 
                 // Check if the camera is on the negative side of the normal
                 const cameraToIntersection = new THREE.Vector3().subVectors(closestIntersection.point, this.camera.position);
                 const dotProduct = cameraToIntersection.dot(closestIntersection.normal);
                 const offset = user.wS * 2;  // Adjust based on your needs
 
-                if (dotProduct < 0) {
-                    // Camera is on the negative side of the normal, move it to the positive side
-                    
-                    const normalOffset = closestIntersection.normal.clone().multiplyScalar(offset);
-                    this.camera.position.add(normalOffset);
-                    console.log('Camera moved to the positive side of the normal.');
-                } else {
-                    // Camera is on the positive side, handle the normal case (like preventing it from falling through terrain)
-                    this.camera.position.y = Math.max(this.camera.position.y, closestIntersection.point.y + offset);
-                }
+                const normalOffset = closestIntersection.normal.clone().multiplyScalar(offset);
+                this.camera.position.add(normalOffset);
 
                 // Stop vertical movement if it's a ground or ceiling collision
                 this.camera.velocity.y = 0;
@@ -3390,7 +3379,7 @@ class UserController {
 
             // If a closest intersection was found, adjust the camera's position
             if (closestIntersection.point && closestIntersection.normal) {
-                console.log('Intersection detected:', closestIntersection.point);
+                // console.log('Intersection detected:', closestIntersection.point);
 
                 // Check if the camera is on the negative side of the normal
                 const cameraToIntersection = new THREE.Vector3().subVectors(closestIntersection.point, this.camera.position);
@@ -3401,7 +3390,7 @@ class UserController {
                     
                     const normalOffset = intersectionNormal.clone().multiplyScalar(offset);
                     this.camera.position.add(normalOffset);
-                    console.log('Camera moved to the positive side of the normal.');
+                    // console.log('Camera moved to the positive side of the normal.');
                 } else {
                     // Camera is on the positive side, handle the normal case (like preventing it from falling through terrain)
                     this.camera.position.y = Math.max(this.camera.position.y, closestIntersection.y + offset);
@@ -3491,7 +3480,7 @@ class UserController {
         // Ground collision detection
         if (downIntersection && downIntersection.distance < 1) {
             this.intersections.push(downIntersection.object)
-            console.log("Camera is above the ground, landing");
+            // console.log("Camera is above the ground, landing");
 
             // Adjust the camera position to the surface plus a small offset to simulate landing
             this.camera.position.y = downIntersection.point.y + 1;
@@ -3504,7 +3493,7 @@ class UserController {
         // Ceiling collision detection
         if (upIntersection && upIntersection.distance < .5) {
             this.intersections.push(upIntersection.object)
-            console.log("Camera hit the ceiling");
+            // console.log("Camera hit the ceiling");
 
             // Prevent the camera from going through the ceiling
             this.camera.position.y = upIntersection.point.y - .5; // Adjust based on how close you want to stop
@@ -3516,7 +3505,7 @@ class UserController {
 
         // If neither intersection is detected, continue falling
         if (!downIntersection && !upIntersection) {
-            console.log("No intersection detected, camera still in the air");
+            // console.log("No intersection detected, camera still in the air");
         }
     }
 
@@ -3552,7 +3541,7 @@ class UserController {
 
         // Ceiling collision detection
         if (upIntersection && upIntersection.distance < .5) {
-            console.log("Camera hit the ceiling");
+            // console.log("Camera hit the ceiling");
 
             // Prevent the camera from going through the ceiling
             this.camera.position.y = upIntersection.point.y - .5; // Adjust based on how close you want to stop
@@ -3661,7 +3650,7 @@ class View {
         document.body.appendChild(window.renderer.domElement);
 
 
-        console.log(VM);
+        // console.log(VM);
 
         window.terrain = new Terrain(VM);
 
