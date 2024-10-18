@@ -273,7 +273,7 @@ class Sky {
 
     }
 
-     createDome() {
+    createDome() {
         var gridSize = 90; // Larger grid size for more detail at the horizon
         var radius = this.sceneRadius;
         var maxdist = 0;
@@ -336,10 +336,10 @@ class Sky {
 
         this.sun.position.y = highestY
         this.sphere.position.y = highestY
-     }   
+    }   
 
 
-     MakeCloud() {
+    MakeCloud() {
         // Create a group to hold the cloud's spheres
         const cloud = new THREE.Group();
 
@@ -400,7 +400,7 @@ class Sky {
 
         // Return the cloud group, which now contains all the clusters and spheres
         return cloud;
-     }
+    }
 
 
 
@@ -603,7 +603,7 @@ class Castle {
         const foundationStuff = createBox(
             {
                 x: 0, 
-                y: this.foundationHeight / 2, 
+                y: -this.foundationHeight, 
                 z: 0
             },
             this.houseDim[0], 3 , this.houseDim[1],
@@ -619,30 +619,38 @@ class Castle {
             this.parts.push(f)
             scene.add(f)
         }
-        // const foundation = new THREE.Mesh(
-        //     new THREE.BoxGeometry(this.houseDim[0], this.foundationHeight, this.houseDim[1]),
-        //     new THREE.MeshStandardMaterial({
-        //         color: 'gray',
-        //         map: new THREE.TextureLoader().load("/images/concrete")
-        //     })
-        // );
-        // foundation.geometry.computeBoundingBox()
-        // foundation.geometry.computeVertexNormals()
-        // foundation.castShadow = true;
-        // foundation.receiveShadow = true;
-        // foundation.position.set(0, castleBaseCenter.y, 0); // Position the foundation
 
 
 
-        // this.parts.push(foundation);
-        // this.foundation = foundation
-        // this.foundation.name = "foundation"
+        const intensity = .1;
+        const light_foundation = new THREE.RectAreaLight( 0xffffff, intensity,  this.houseDim[0], this.houseDim[1] );
+        light_foundation.position.set( 0, 5, 0 );
+        light_foundation.lookAt( 0, 0, 0 );
+        scene.add( light_foundation )
 
 
-
-        // scene.add(foundation);
-
-        this.placeTile()
+        const boardwalk = new THREE.TextureLoader().load("/images/floor18.jpg")
+        const floor = new THREE.TextureLoader().load("/images/floor114.jpg")
+        var startX = -this.houseDim[0] / 2
+        var endX = this.houseDim[0] / 2
+        var startZ = -this.houseDim[1] / 2
+        var endZ = this.houseDim[1] / 2
+        var stepX = (this.houseDim[0] + 10) / 50
+        var stepZ = this.houseDim[1] / 50
+        for (var x = (this.houseDim[0] / 2) + (stepX / 2); x < (this.houseDim[0] + 10) / 2; x += stepX) {
+            for (var z = -this.houseDim[0] / 2; z < this.houseDim[1] / 2; z += stepZ) {
+                var opts = {}
+                opts.map = boardwalk;
+                var tilePlane = new THREE.Mesh(
+                    new THREE.PlaneGeometry(stepX, stepZ),
+                    new THREE.MeshStandardMaterial(opts)
+                );
+                tilePlane.receiveShadow = true;
+                tilePlane.rotation.x = -Math.PI / 2
+                tilePlane.position.set(x, castleBaseCenter.y, z);
+                scene.add(tilePlane)
+            }
+        }
 
         
         const floorHeight = 11
@@ -655,7 +663,7 @@ class Castle {
             const floorStuff = createBox(
                 {x: 0, y: floorHeight * i, z: 0},
                 this.houseDim[0], 
-                3,
+                this.foundationHeight,
                 this.houseDim[1], 
                 null,
                 Math.floor(Math.random() * 3),
@@ -670,6 +678,13 @@ class Castle {
 
 
 
+        
+
+
+
+    }
+
+    buildElevator() {
         // Elevator floor
         var eFloor = new THREE.Mesh(
             new THREE.BoxGeometry(elevatorWidth, 0.2, elevatorWidth),
@@ -687,8 +702,6 @@ class Castle {
         this.elevator.push(eFloor)
         scene.add(eFloor);
         // this.parts.push(eFloor)
-
-
 
         // Elevator ceiling
         var eCeiling = new THREE.Mesh(
@@ -1151,35 +1164,6 @@ class Castle {
     }
 
 
-    placeTile() {
-        const forestFloor = new THREE.TextureLoader().load("/images/floor18.jpg")
-        const floor = new THREE.TextureLoader().load("/images/floor119.jpg")
-        var startX = -this.houseDim[0] / 2
-        var endX = this.houseDim[0] / 2
-        var startZ = -this.houseDim[1] / 2
-        var endZ = this.houseDim[1] / 2
-        var stepX = (this.houseDim[0] + 10) / 50
-        var stepZ = this.houseDim[1] / 50
-        for (var x = startX; x < (this.houseDim[0] + 10) / 2; x += stepX) {
-            for (var z = -this.houseDim[0] / 2; z < this.houseDim[1] / 2; z += stepZ) {
-                var opts = {}
-                if (x >= this.houseDim[0] / 2) {
-                    opts.map = forestFloor;
-                } else {
-                    opts.map = floor
-                }
-                var tilePlane = new THREE.Mesh(
-                    new THREE.PlaneGeometry(stepX, stepZ),
-                    new THREE.MeshStandardMaterial(opts)
-                );
-                tilePlane.receiveShadow = true;
-                tilePlane.rotation.x = -Math.PI / 2
-                tilePlane.position.set(x, .1, z);
-                scene.add(tilePlane)
-            }
-        }
-    }
-
 }
 
 
@@ -1190,6 +1174,7 @@ class Terrain {
     constructor(options) {
         switch (options.user.level) {
         case LEVEL[1]:
+            this.grassTexture = new THREE.TextureLoader().load("/images/nasturtiums1.jpg")
             this.Grass = [
                 new THREE.Color(0x00ff00),
                 new THREE.Color(0x00ff00),
@@ -1346,7 +1331,7 @@ class Terrain {
 
                 var inCastle = v.x > -45 && v.x < 45 && v.z > -30 && v.z < 30;
                 if (inCastle) {
-                    v.y = 0;  // Flatten the terrain inside the castle
+                    v.y = -1;  // Flatten the terrain inside the castle
                 }
 
                 var goingDownToRiver = v.x >= 45 && v.z >= -30 && v.z <= 30;
@@ -1509,7 +1494,7 @@ class Terrain {
 
                 var inCastle = v.x > -50 && v.x < 50 && v.z > -35 && v.z < 35
 
-                var isNearGrassPatch = false && (grassPatches[i][j] || 
+                var isNearGrassPatch = (grassPatches[i][j] || 
                                           (i > 0 && grassPatches[i - 1][j]) ||  // Check left
                                           (i < this.segments && grassPatches[i + 1][j]) ||  // Check right
                                           (j > 0 && grassPatches[i][j - 1]) ||  // Check above
@@ -1521,7 +1506,7 @@ class Terrain {
                 );
 
 
-                const isTree = false && eval(this.treeCondition);
+                const isTree = eval(this.treeCondition);
 
 
 
@@ -1555,7 +1540,7 @@ class Terrain {
                         //
 
                         if (isTree) {
-                            var tree = this.createTree(triangle.a.x, triangle.a.y, triangle.a.z, 1);
+                            var tree = this.createTree(triangle.triangle.a.x, triangle.triangle.a.y, triangle.triangle.a.z, 1);
                             VM.map[VM.user.level].trees.push(tree);
                         }
 
@@ -1659,23 +1644,23 @@ class Terrain {
     }
 
     updateTerrain() {
-        for (var center of this.surroundingCenters) {
-            var centerKey = `${center.center.x}_${center.center.z}`;
-            if (center.center.distanceTo(user.camera.position) < 75) {
-                center.pillar.material.color.set(0xff0000);
-                var terrainCreated = false;
-                for (var j = 0; j < this.meshes.length; j++) {
-                    if (this.meshes[j].centerKey == centerKey) {
-                        terrainCreated = true;
-                    }
-                }
-                if (!terrainCreated) {
-                    this.generate(center.center.x, center.center.y, center.center.z);
-                }
-            } else {
-                center.pillar.material.color.set(0xffffff);
-            }
-        }
+        // for (var center of this.surroundingCenters) {
+        //     var centerKey = `${center.center.x}_${center.center.z}`;
+        //     if (center.center.distanceTo(user.camera.position) < 75) {
+        //         center.pillar.material.color.set(0xff0000);
+        //         var terrainCreated = false;
+        //         for (var j = 0; j < this.meshes.length; j++) {
+        //             if (this.meshes[j].centerKey == centerKey) {
+        //                 terrainCreated = true;
+        //             }
+        //         }
+        //         if (!terrainCreated) {
+        //             this.generate(center.center.x, center.center.y, center.center.z);
+        //         }
+        //     } else {
+        //         center.pillar.material.color.set(0xffffff);
+        //     }
+        // }
         
         this.updateVisibleTrianglesAndClusters(window.user.camera.position);
     
@@ -2658,15 +2643,15 @@ class Terrain {
         ];
 
         for (var i = 0; i < centers.length; i++) {
-            var pillarGeometry = new THREE.CylinderGeometry(1, 1, 32, 32);
-            var pillarMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-            var pillar = new THREE.Mesh(pillarGeometry, pillarMaterial);
-            pillar.position.set(centers[i].x, centers[i].y, centers[i].z);
-            centers[i] = { 
-                center: new THREE.Vector3(centers[i].x, centers[i].y, centers[i].z), 
-                pillar 
-            }
-            scene.add(pillar);
+            // var pillarGeometry = new THREE.CylinderGeometry(1, 1, 32, 32);
+            // var pillarMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            // var pillar = new THREE.Mesh(pillarGeometry, pillarMaterial);
+            // pillar.position.set(centers[i].x, centers[i].y, centers[i].z);
+            // centers[i] = { 
+            //     center: new THREE.Vector3(centers[i].x, centers[i].y, centers[i].z), 
+            //     pillar 
+            // }
+            // scene.add(pillar);
            
         }
 
@@ -2834,7 +2819,7 @@ class Terrain {
     }
 
     createGrassBlade(instancedMesh, triangle, bladePositions, i) {
-
+        triangle = triangle.triangle
         const dummy = new THREE.Object3D();
         const u = Math.random();
         const v = Math.random() * (1 - u);
@@ -2860,8 +2845,11 @@ class Terrain {
         bladeGeometry.computeVertexNormals();
         
         const material = new THREE.MeshStandardMaterial({
-            color: new THREE.Color("lawngreen"),
+            // color: new THREE.Color("lawngreen"),
+            map: this.grassTexture,
             side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 1,
             roughness: 0.8,  // Makes the surface more diffuse
             metalness: 0.0,  // Non-metallic surface
         });
@@ -2876,6 +2864,7 @@ class Terrain {
 
         instancedMesh.castShadow = true;
         instancedMesh.receiveShadow = true;
+        instancedMesh.position.y += bladeHeight / 2
 
         return new GrassPatch({
             mesh: instancedMesh,
@@ -2890,7 +2879,7 @@ class Terrain {
             vertices,
             mesh,
             VM.map[VM.user.level].grassBladeDensity,
-            randomInRange(0.05, 0.2),
+            randomInRange(0.1, 0.9),
             randomInRange(0.1, 0.5)
         );
 
