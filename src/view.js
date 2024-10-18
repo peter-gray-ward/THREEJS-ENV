@@ -2519,36 +2519,88 @@ class Terrain {
         this.cliffs = []
 
         clusters.forEach(cluster => {
-            const geometry = this.createBufferGeometryFromCluster(cluster);
-            const texture = new THREE.TextureLoader().load("/images/rockwall-2.jpg", (texture) => {
-                texture.wrapS = THREE.RepeatWrapping;
-                texture.wrapT = THREE.RepeatWrapping;
-                texture.repeat.set(4, 4); // Adjust the 4, 4 values to control the tiling amount
+            // Loop through each item in the cluster
+            cluster.forEach(item => {
+                const triangle = item.triangle;  // Get the triangle
+
+                // Extract vertex positions using the indices
+                const index0 = item.indices[0];
+                const index1 = item.indices[1];
+                const index2 = item.indices[2];
+
+                const a = new THREE.Vector3(
+                    item.vertexPositions[index0 * 3],
+                    item.vertexPositions[index0 * 3 + 1],
+                    item.vertexPositions[index0 * 3 + 2]
+                );
+                const b = new THREE.Vector3(
+                    item.vertexPositions[index1 * 3],
+                    item.vertexPositions[index1 * 3 + 1],
+                    item.vertexPositions[index1 * 3 + 2]
+                );
+                const c = new THREE.Vector3(
+                    item.vertexPositions[index2 * 3],
+                    item.vertexPositions[index2 * 3 + 1],
+                    item.vertexPositions[index2 * 3 + 2]
+                );
+
+                // Create geometry for this triangle
+                const geometry = new THREE.BufferGeometry();
+                const vertices = new Float32Array([
+                    a.x, a.y, a.z,
+                    b.x, b.y, b.z,
+                    c.x, c.y, c.z
+                ]);
+
+                // Calculate the normal for the triangle using the cross product
+                const edge1 = new THREE.Vector3().subVectors(b, a);  // b - a
+                const edge2 = new THREE.Vector3().subVectors(c, a);  // c - a
+                const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();  // Cross product for normal
+
+                // Create the normal array (same normal for all 3 vertices in this flat triangle)
+                const normals = new Float32Array([
+                    normal.x, normal.y, normal.z,
+                    normal.x, normal.y, normal.z,
+                    normal.x, normal.y, normal.z
+                ]);
+
+                // Set position and normal attributes for the geometry
+                geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+                geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+
+                // Load the texture for the cliff triangle
+                const texture = new THREE.TextureLoader().load("/images/rockwall-2.jpg", (texture) => {
+                    texture.wrapS = THREE.RepeatWrapping;
+                    texture.wrapT = THREE.RepeatWrapping;
+                    texture.repeat.set(4, 4); // Adjust the tiling for the texture
+                });
+
+                // Create the material with the texture
+                const material = new THREE.MeshStandardMaterial({
+                    map: texture,
+                    side: THREE.DoubleSide,
+                    wireframe: false
+                });
+
+                // Create the mesh for the triangle
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.receiveShadow = true;
+                mesh.castShadow = true;
+                mesh.position.y += .1
+
+                // Store triangle for later use if needed
+                mesh.triangle = triangle;
+
+                triangle.normal = normal
+
+                this.cliffs.push(triangle)
+
+                // Add the triangle mesh to the scene
+                scene.add(mesh);
             });
-
-            const material = new THREE.MeshStandardMaterial({ 
-                map: texture,
-                side: THREE.DoubleSide,
-                wireframe: false
-            });
-
-
-            for (var j = 0; j < cluster.length; j++) {
-                this.cliffs.push(cluster[j].triangle)
-            }
-                
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.receiveShadow = true;
-            mesh.castShadow = true;
-            mesh.name = 'cliff...'
-            geometry.computeBoundingBox()
-            geometry.computeVertexNormals();
-            mesh.boundingBox = geometry.boundingBox
-            mesh.position.y += .2
-            mesh.triangle = cluster
-            scene.add(mesh)
-            
         });
+
+
 
     }
 
@@ -3238,39 +3290,57 @@ class UserController {
                     // Keep track of the closest intersection
                     if (distance < minDistance) {
                         minDistance = distance;
-                        closestIntersection = intersectionPoint.clone();
-
-                        // Calculate the normal of the triangle
-                        const edge1 = new THREE.Vector3().subVectors(b, a);
-                        const edge2 = new THREE.Vector3().subVectors(c, a);
-                        intersectionNormal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
+                        closestIntersection = { normal: cliffTriangle.normal, point: intersects }
                     }
                 }
             });
 
             // If a closest intersection was found, adjust the camera's position
-            if (closestIntersection && intersectionNormal) {
+            if (closestIntersection) {
                 console.log('Intersection detected:', closestIntersection);
 
                 // Check if the camera is on the negative side of the normal
-                const cameraToIntersection = new THREE.Vector3().subVectors(closestIntersection, this.camera.position);
-                const dotProduct = cameraToIntersection.dot(intersectionNormal);
-                const offset = user.wS;  // Adjust based on your needs
+                const cameraToIntersection = new THREE.Vector3().subVectors(closestIntersection.point, this.camera.position);
+                const dotProduct = cameraToIntersection.dot(closestIntersection.normal);
+                const offset = user.wS * 2;  // Adjust based on your needs
 
                 if (dotProduct < 0) {
                     // Camera is on the negative side of the normal, move it to the positive side
                     
-                    const normalOffset = intersectionNormal.clone().multiplyScalar(offset);
+                    const normalOffset = closestIntersection.normal.clone().multiplyScalar(offset);
                     this.camera.position.add(normalOffset);
                     console.log('Camera moved to the positive side of the normal.');
                 } else {
                     // Camera is on the positive side, handle the normal case (like preventing it from falling through terrain)
-                    this.camera.position.y = Math.max(this.camera.position.y, closestIntersection.y + offset);
+                    this.camera.position.y = Math.max(this.camera.position.y, closestIntersection.point.y + offset);
                 }
 
                 // Stop vertical movement if it's a ground or ceiling collision
                 this.camera.velocity.y = 0;
                 this.isJumping = false;
+
+
+
+               // Call asdwFromNormalAndDistance with the correct parameters
+                const asdw = asdwFromNormalAndDistance(
+                    closestIntersection.normal, 
+                    this.camera.position.clone,  // Use the first normal (assuming a flat surface)
+                    closestIntersection.point       // Intersection point
+                );
+
+                // Reset other keys not in the result
+                const allKeys = ['a', 's', 'd', 'w'];
+                for (let key of allKeys) {
+                    if (asdw.includes(key.toUpperCase())) {
+                        user['_' + key] = true;  // Set movement flag to false if the key is not in asdw
+                        setTimeout(() => {
+                            user['_' + key] = false
+                        }, 300)
+                    } else {
+                        user['_' + key] = false
+                    }
+                }
+
 
                 // Break after handling the closest intersection for this direction
                 break;
@@ -3340,9 +3410,9 @@ class UserController {
 
                // Call asdwFromNormalAndDistance with the correct parameters
                 const asdw = asdwFromNormalAndDistance(
-                    closestIntersection.normal,  // Use the first normal (assuming a flat surface)
-                    closestIntersection.point,
-                    this.camera.position            // Intersection point
+                    closestIntersection.normal,
+                    this.camera.position.clone(),
+                    closestIntersection.point
                 );
 
                 // Reset other keys not in the result
