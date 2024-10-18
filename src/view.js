@@ -67,6 +67,64 @@ function getPositionFromVertexArray(array) {
     return positions;
 }
 
+function asdwFromNormalAndDistance(normal, cameraPosition, intersectionPoint) {
+    const movementKeys = [];
+
+    // Calculate the vector from the camera to the intersection point
+    const directionToIntersection = [
+        intersectionPoint[0] - cameraPosition[0],
+        intersectionPoint[1] - cameraPosition[1],
+        intersectionPoint[2] - cameraPosition[2]
+    ];
+
+    // Normalize the directionToIntersection vector
+    const magnitude = Math.sqrt(
+        directionToIntersection[0] ** 2 +
+        directionToIntersection[1] ** 2 +
+        directionToIntersection[2] ** 2
+    );
+    const normalizedDirection = [
+        directionToIntersection[0] / magnitude,
+        directionToIntersection[1] / magnitude,
+        directionToIntersection[2] / magnitude
+    ];
+
+    // Dot product of the normal and the direction from the camera
+    const dotProduct = 
+        normalizedDirection[0] * normal[0] +
+        normalizedDirection[1] * normal[1] +
+        normalizedDirection[2] * normal[2];
+
+    // Determine if the intersection is in front (forward) or behind (backward)
+    if (dotProduct > 0) {
+        movementKeys.push('W'); // Move forward (W) toward the surface
+    } else if (dotProduct < 0) {
+        movementKeys.push('S'); // Move backward (S) away from the surface
+    }
+
+    // Cross product for determining left (A) or right (D)
+    const rightVector = [
+        cameraPosition[1] * normal[2] - cameraPosition[2] * normal[1],
+        cameraPosition[2] * normal[0] - cameraPosition[0] * normal[2],
+        cameraPosition[0] * normal[1] - cameraPosition[1] * normal[0]
+    ];
+
+    // Dot product of the right vector and the direction to the intersection
+    const dotRight = 
+        normalizedDirection[0] * rightVector[0] +
+        normalizedDirection[1] * rightVector[1] +
+        normalizedDirection[2] * rightVector[2];
+
+    // Determine left (A) or right (D) movement
+    if (dotRight > 0) {
+        movementKeys.push('D'); // Move right (D)
+    } else {
+        movementKeys.push('A'); // Move left (A)
+    }
+
+    return movementKeys;
+}
+
 
 
 function mapToRange(normalizedValue, minNew, maxNew) {
@@ -136,6 +194,27 @@ function getInstancePosition(instancedMesh, index) {
     return position;
 }
 
+function colorshade(rgb) {
+    if (rgb === 0) {
+        // Random shade of red
+        const red = Math.floor(Math.random() * 256);  // Generate a random value for red (0-255)
+        return `rgb(${red}, 0, 0)`;  // Full red, no green, no blue
+    } else if (rgb === 1) {
+        // Random shade of green
+        const green = Math.floor(Math.random() * 256);
+        return `rgb(0, ${green}, 0)`;  // Full green, no red, no blue
+    } else if (rgb === 2) {
+        // Random shade of blue
+        const blue = Math.floor(Math.random() * 256);
+        return `rgb(0, 0, ${blue})`;  // Full blue, no red, no green
+    } else {
+        // Random color (any shade of RGB)
+        const red = Math.floor(Math.random() * 256);
+        const green = Math.floor(Math.random() * 256);
+        const blue = Math.floor(Math.random() * 256);
+        return `rgb(${red}, ${green}, ${blue})`;
+    }
+}
 
 
 class Sky {
@@ -394,7 +473,9 @@ class Sky {
 
 
 }
-function createBox(center, width, height, depth, map) {
+
+
+function createBox(center, width, height, depth, map, rgb, meshkind) {
     const meshes = [];
     const halfWidth = width / 2;
     const halfHeight = height / 2;
@@ -430,35 +511,28 @@ function createBox(center, width, height, depth, map) {
     ];
 
     // Manually defined normals for each face (one normal per triangle)
-    const normals = [
-        // Front face
-        0, 0, 1,  0, 0, 1,  0, 0, 1,  // All normals point outward from the front face
-        0, 0, 1,  0, 0, 1,  0, 0, 1,
+    const normals = {
+        front: [0, 0, 1],    // Front face normal
+        back: [0, 0, -1],    // Back face normal
+        left: [-1, 0, 0],    // Left face normal
+        right: [1, 0, 0],    // Right face normal
+        top: [0, 1, 0],      // Top face normal
+        bottom: [0, -1, 0]   // Bottom face normal
+    };
 
-        // Back face
-        0, 0, -1,  0, 0, -1,  0, 0, -1,
-        0, 0, -1,  0, 0, -1,  0, 0, -1,
-
-        // Left face
-        -1, 0, 0,  -1, 0, 0,  -1, 0, 0,
-        -1, 0, 0,  -1, 0, 0,  -1, 0, 0,
-
-        // Right face
-        1, 0, 0,  1, 0, 0,  1, 0, 0,
-        1, 0, 0,  1, 0, 0,  1, 0, 0,
-
-        // Top face
-        0, 1, 0,  0, 1, 0,  0, 1, 0,
-        0, 1, 0,  0, 1, 0,  0, 1, 0,
-
-        // Bottom face
-        0, -1, 0,  0, -1, 0,  0, -1, 0,
-        0, -1, 0,  0, -1, 0,  0, -1, 0
+    // Associate each triangle with its normal vector based on the face
+    const faceNormals = [
+        normals.front, normals.front,  // Front face (2 triangles)
+        normals.back, normals.back,    // Back face (2 triangles)
+        normals.left, normals.left,    // Left face (2 triangles)
+        normals.right, normals.right,  // Right face (2 triangles)
+        normals.top, normals.top,      // Top face (2 triangles)
+        normals.bottom, normals.bottom // Bottom face (2 triangles)
     ];
 
     for (let i = 0; i < indices.length; i += 3) {
         const triangleGeometry = new THREE.BufferGeometry();
-        
+
         // Extract the vertices for this triangle
         const triangleVertices = [
             vertices[indices[i] * 3], vertices[indices[i] * 3 + 1], vertices[indices[i] * 3 + 2],
@@ -466,41 +540,42 @@ function createBox(center, width, height, depth, map) {
             vertices[indices[i + 2] * 3], vertices[indices[i + 2] * 3 + 1], vertices[indices[i + 2] * 3 + 2]
         ];
 
-        const triangleNormals = [
-            normals[i * 3], normals[i * 3 + 1], normals[i * 3 + 2],
-            normals[i * 3 + 3], normals[i * 3 + 4], normals[i * 3 + 5],
-            normals[i * 3 + 6], normals[i * 3 + 7], normals[i * 3 + 8]
-        ];
+        // Use the corresponding normal for this triangle
+        const normal = faceNormals[Math.floor(i / 6)];  // Each face has 2 triangles
 
+        // Create buffer attributes for vertices and normals
         triangleGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(triangleVertices), 3));
-        triangleGeometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(triangleNormals), 3));
+        triangleGeometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array([...normal, ...normal, ...normal]), 3));
 
+        // Configure material with color and/or texture
+        const args = { side: THREE.DoubleSide };
+        if (map) args.map = map;  // Apply texture if provided
+        if (rgb !== null) args.color = colorshade(rgb);  // Apply color if RGB is provided
 
-        var args = { 
-            side: THREE.DoubleSide // Ensure both sides of triangles are visible
-        }
-        if (map) {
-            args.map = map
-        } else {
-            args.color = new THREE.Color(Math.random(), Math.random(), Math.random()) // Random color for each triangle
-        }
-        const material = new THREE.MeshStandardMaterial(args);
+        // Choose the material type (basic or standard)
+        const material = meshkind === 'basic' 
+            ? new THREE.MeshBasicMaterial(args) 
+            : new THREE.MeshStandardMaterial(args);
+
         const triangleMesh = new THREE.Mesh(triangleGeometry, material);
         triangleMesh.castShadow = true;
         triangleMesh.receiveShadow = true;
 
-        // Store triangle data on the mesh
+        // Store triangle data on the mesh (vertices and normal)
         const a = new THREE.Vector3(triangleVertices[0], triangleVertices[1], triangleVertices[2]);
         const b = new THREE.Vector3(triangleVertices[3], triangleVertices[4], triangleVertices[5]);
         const c = new THREE.Vector3(triangleVertices[6], triangleVertices[7], triangleVertices[8]);
-        
-        triangleMesh.triangle = new THREE.Triangle(a, b, c); // Save triangle for later use if needed
 
-        meshes.push(triangleMesh);  // Store mesh in array for later manipulation
-        scene.add(triangleMesh);    // Add each triangle to the scene
+        // Store the triangle and its normal for future reference
+        triangleMesh.triangle = new THREE.Triangle(a, b, c);
+        triangleMesh.normal = new THREE.Vector3(normal[0], normal[1], normal[2]);
+
+        // Add the triangle mesh to the scene and store it for later use
+        meshes.push(triangleMesh);
+        scene.add(triangleMesh);
     }
 
-    return meshes;  // Return all triangle meshes
+    return meshes;  // Return all created triangle meshes
 }
 
 
@@ -525,11 +600,23 @@ class Castle {
 
         // Create the foundation
         this.foundationHeight = 1.5;
-        const foundationStuff = createBox({x: 0, y: this.foundationHeight / 2, z: 0},
-            this.houseDim[0], 3 , this.houseDim[1], new THREE.TextureLoader().load("/images/concrete")
+        const foundationStuff = createBox(
+            {
+                x: 0, 
+                y: this.foundationHeight / 2, 
+                z: 0
+            },
+            this.houseDim[0], 3 , this.houseDim[1],
+            new THREE.TextureLoader().load("/images/concrete", texture => {
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+                texture.repeat.set(11, 11);
+            }),
+            0,
+            'basic'
         )
         for (var f of foundationStuff) {
-            this.parts.push(f.triangle)
+            this.parts.push(f)
             scene.add(f)
         }
         // const foundation = new THREE.Mesh(
@@ -565,8 +652,14 @@ class Castle {
             let length = this.houseDim[0];
 
             this.foundationHeight = 1.5;
-            const floorStuff = createBox({x: 0, y: floorHeight * i, z: 0},
-                this.houseDim[0], 3 , this.houseDim[1], new THREE.TextureLoader().load("/images/concrete")
+            const floorStuff = createBox(
+                {x: 0, y: floorHeight * i, z: 0},
+                this.houseDim[0], 
+                3,
+                this.houseDim[1], 
+                null,
+                Math.floor(Math.random() * 3),
+                'basic'
             )
             for (var f of floorStuff) {
                 this.parts.push(f.triangle)
@@ -2777,6 +2870,10 @@ class UserController {
         this.a = false;
         this.s = false;
         this.d = false;
+        this._w = false;
+        this._a = false;
+        this._s = false;
+        this._d = false;
         this.wS = .1
         this.aS = .1
         this.sS = .1
@@ -3014,7 +3111,7 @@ class UserController {
             var rightMovement = new THREE.Vector3();
             var combinedMovement = new THREE.Vector3();  // To store the final movement result
 
-            if (this.w) {
+            if (this.w && !this._w) {
                 var time_held = performance.now() - this.time_held.w;
                 this.time_held.w = performance.now();
                 
@@ -3025,25 +3122,25 @@ class UserController {
                 forwardMovement.add(direction.multiplyScalar(this.wS));  // Move forward by this.wS
             }
 
-            if (this.s) {
+            if (this.s && !this._s) {
                 this.camera.getWorldDirection(direction);
                 direction.y = 0;
                 direction.normalize();  // Normalize for consistent movement
                 forwardMovement.sub(direction.multiplyScalar(this.sS));  // Move backward by this.sS
             }
 
-            if (this.a || this.d) {
-                // Get the right vector only once (cross product of up and direction)
+            if ((this.a && !this._a)) {
                 this.camera.getWorldDirection(direction);
                 direction.y = 0;  // Keep movement in the horizontal plane
                 right.crossVectors(this.camera.up, direction).normalize();  // Calculate the right vector
-                
-                if (this.d) {
-                    rightMovement.sub(right.multiplyScalar(this.aS));  // Move left
-                }
-                if (this.a) {
-                    rightMovement.add(right.multiplyScalar(this.dS));  // Move right
-                }
+                rightMovement.add(right.multiplyScalar(this.aS));  // Move right
+            } 
+
+            if ((this.d && !this._d)) {
+                this.camera.getWorldDirection(direction);
+                direction.y = 0;  // Keep movement in the horizontal plane
+                right.crossVectors(this.camera.up, direction).normalize();  // Calculate the right vector
+                rightMovement.sub(right.multiplyScalar(this.dS)); 
             }
 
             // Combine forward and sideways movement
@@ -3086,11 +3183,10 @@ class UserController {
 
         this.updateBoundingBox();        
 
-        this.handleCollision();
-
     }
 
         // Main collision handler
+    
     handleCollision() {
         // Define the camera's bounding box (assuming the camera has a width, height, and depth)
         const cameraBox = new THREE.Box3().setFromCenterAndSize(
@@ -3113,111 +3209,6 @@ class UserController {
         ];
 
 
-
-        // Iterate through all the directions to check for collisions
-//         for (const direction of directions) {
-//             // Create a ray from the camera's position in the given direction
-//             const ray = new THREE.Ray(this.camera.position.clone(), direction.clone().normalize());
-            
-//             let closestIntersection = null;
-//             let minDistance = 1;
-
-//             // Loop through all the terrain cliffs (assuming `terrain.cliffs` holds the geometries)
-//             terrain.cliffs.forEach(cliffTriangle => {
-
-//                 // Each cliffTriangle already contains vertices a, b, c
-//                 const a = cliffTriangle.a;
-//                 const b = cliffTriangle.b;
-//                 const c = cliffTriangle.c;
-
-//                 // Create the intersection point vector
-//                 const intersectionPoint = new THREE.Vector3();
-
-//                 // Use intersectTriangle to test for intersection
-//                 const intersects = ray.intersectTriangle(a, b, c, false, intersectionPoint);
-
-//                 if (intersects) {
-//                     // Calculate the distance from the camera to the intersection point
-//                     const distance = this.camera.position.distanceTo(intersectionPoint);
-
-//                     // Keep track of the closest intersection
-//                     if (distance < minDistance) {
-//                         minDistance = distance;
-//                         closestIntersection = intersectionPoint.clone();
-//                     }
-//                 }
-//             });
-
-//             // If a closest intersection was found, adjust the camera's position
-//             if (closestIntersection) {
-//                 console.log('Intersection detected:', closestIntersection);
-
-//                 // Move the camera to prevent falling through the terrain
-//                 const offset = 1;  // Adjust based on your needs
-//                 this.camera.position.y = Math.max(this.camera.position.y, closestIntersection.y + offset);
-
-//                 // Stop vertical movement if it's a ground or ceiling collision
-//                 this.camera.velocity.y = 0;
-//                 this.isJumping = false;
-
-//                 // Break after handling the closest intersection for this direction
-//                 break;
-//             }
-// //  
-            
-            
-
-//             ////////
-
-
-
-//             closestIntersection = null;
-//             minDistance = 1;
-
-//             // Loop through all the terrain cliffs (assuming `terrain.cliffs` holds the geometries)
-//             castle.parts.forEach(partTriangle => {
-
-//                 // Each partTriangle already contains vertices a, b, c
-//                 const a = partTriangle.a;
-//                 const b = partTriangle.b;
-//                 const c = partTriangle.c;
-
-//                 // Create the intersection point vector
-//                 const intersectionPoint = new THREE.Vector3();
-
-//                 // Use intersectTriangle to test for intersection
-//                 const intersects = ray.intersectTriangle(a, b, c, false, intersectionPoint);
-
-//                 if (intersects) {
-//                     // Calculate the distance from the camera to the intersection point
-//                     const distance = this.camera.position.distanceTo(intersectionPoint);
-
-//                     // Keep track of the closest intersection
-//                     if (distance < minDistance) {
-//                         minDistance = distance;
-//                         closestIntersection = intersectionPoint.clone();
-//                     }
-//                 }
-//             });
-
-//             // If a closest intersection was found, adjust the camera's position
-//             if (closestIntersection) {
-//                 console.log('Intersection detected:', closestIntersection);
-
-//                 // Move the camera to prevent falling through the terrain
-//                 const offset = 1;  // Adjust based on your needs
-//                 this.camera.position.y = Math.max(this.camera.position.y, closestIntersection.y + offset);
-
-//                 // Stop vertical movement if it's a ground or ceiling collision
-//                 this.camera.velocity.y = 0;
-//                 this.isJumping = false;
-
-//                 // Break after handling the closest intersection for this direction
-//                 break;
-//             }
-// //  
-
-//         }
         for (const direction of directions) {
             // Create a ray from the camera's position in the given direction
             const ray = new THREE.Ray(this.camera.position.clone(), direction.clone().normalize());
@@ -3264,7 +3255,7 @@ class UserController {
                 // Check if the camera is on the negative side of the normal
                 const cameraToIntersection = new THREE.Vector3().subVectors(closestIntersection, this.camera.position);
                 const dotProduct = cameraToIntersection.dot(intersectionNormal);
-                const offset = 2;  // Adjust based on your needs
+                const offset = user.wS;  // Adjust based on your needs
 
                 if (dotProduct < 0) {
                     // Camera is on the negative side of the normal, move it to the positive side
@@ -3287,17 +3278,18 @@ class UserController {
 
             //////// Additional check for castle parts
 
-            closestIntersection = null;
+            closestIntersection = { point: null };
             minDistance = 1;
             intersectionNormal = null;
 
             // Loop through all the terrain cliffs (assuming `terrain.cliffs` holds the geometries)
-            castle.parts.forEach(partTriangle => {
+            castle.parts.forEach(part => {
+                if (!part.triangle) return
 
                 // Each partTriangle already contains vertices a, b, c
-                const a = partTriangle.a;
-                const b = partTriangle.b;
-                const c = partTriangle.c;
+                const a = part.triangle.a;
+                const b = part.triangle.b;
+                const c = part.triangle.c;
 
                 // Create the intersection point vector
                 const intersectionPoint = new THREE.Vector3();
@@ -3311,25 +3303,29 @@ class UserController {
 
                     // Keep track of the closest intersection
                     if (distance < minDistance) {
-                        minDistance = distance;
-                        closestIntersection = intersectionPoint.clone();
-
                         // Calculate the normal of the triangle
                         const edge1 = new THREE.Vector3().subVectors(b, a);
                         const edge2 = new THREE.Vector3().subVectors(c, a);
                         intersectionNormal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
+
+                        minDistance = distance;
+                        closestIntersection.point = intersectionPoint.clone();
+                        closestIntersection.triangle = part.triangle
+                        closestIntersection.normal = intersectionNormal
+
+                        
                     }
                 }
             });
 
             // If a closest intersection was found, adjust the camera's position
-            if (closestIntersection && intersectionNormal) {
-                console.log('Intersection detected:', closestIntersection);
+            if (closestIntersection.point && closestIntersection.normal) {
+                console.log('Intersection detected:', closestIntersection.point);
 
                 // Check if the camera is on the negative side of the normal
-                const cameraToIntersection = new THREE.Vector3().subVectors(closestIntersection, this.camera.position);
-                const dotProduct = cameraToIntersection.dot(intersectionNormal);
-                const offset = 1;  // Adjust based on your needs
+                const cameraToIntersection = new THREE.Vector3().subVectors(closestIntersection.point, this.camera.position);
+                const dotProduct = cameraToIntersection.dot(closestIntersection.normal);
+                const offset = user.wS * 1.5;  // Adjust based on your needs
                 if (dotProduct < 0) {
                     // Camera is on the negative side of the normal, move it to the positive side
                     
@@ -3341,11 +3337,28 @@ class UserController {
                     this.camera.position.y = Math.max(this.camera.position.y, closestIntersection.y + offset);
                 }
 
-                // Stop vertical movement if it's a ground or ceiling collision
-                this.camera.velocity.y = 0;
-                this.isJumping = false;
 
-                // Break after handling the closest intersection for this direction
+               // Call asdwFromNormalAndDistance with the correct parameters
+                const asdw = asdwFromNormalAndDistance(
+                    closestIntersection.normal,  // Use the first normal (assuming a flat surface)
+                    closestIntersection.point,
+                    this.camera.position            // Intersection point
+                );
+
+                // Reset other keys not in the result
+                const allKeys = ['a', 's', 'd', 'w'];
+                for (let key of allKeys) {
+                    if (asdw.includes(key.toUpperCase())) {
+                        user['_' + key] = true;  // Set movement flag to false if the key is not in asdw
+                        setTimeout(() => {
+                            user['_' + key] = false
+                        }, 300)
+                    } else {
+                        user['_' + key] = false
+                    }
+                }
+
+
                 break;
             }
 
@@ -3353,7 +3366,7 @@ class UserController {
 
     }
 
-     getClosestPointOnBox(box, point) {
+    getClosestPointOnBox(box, point) {
         const clampedX = Math.max(box.min.x, Math.min(point.x, box.max.x));
         const clampedY = Math.max(box.min.y, Math.min(point.y, box.max.y));
         const clampedZ = Math.max(box.min.z, Math.min(point.z, box.max.z));
@@ -3600,83 +3613,27 @@ class View {
         
         this.addUser();
 
-        function createRandomBezierCurve(heightLimit = 10) {
-            // Calculate the bounding box of all meshes
-            const boundingBox = new THREE.Box3();
-            terrain.meshes.forEach(mesh => boundingBox.expandByObject(mesh));
-        
-            // Get the bounds of the bounding box
-            const min = boundingBox.min;
-            const max = boundingBox.max;
-        
-            // Function to generate a random point within the bounding box and height limit
-            function randomPoint() {
-                return new THREE.Vector3(
-                    THREE.MathUtils.randFloat(min.x, max.x),
-                    THREE.MathUtils.randFloat(min.y, max.y + heightLimit),
-                    THREE.MathUtils.randFloat(min.z, max.z)
-                );
-            }
-        
-            // Create control points for the Bezier curve
-            const p0 = randomPoint();
-            const p1 = randomPoint();
-            const p2 = randomPoint();
-            const p3 = randomPoint();
-        
-            return new THREE.CubicBezierCurve3(p0, p1, p2, p3);
-        }
-
-        // Function to create a point light with a helper
-        function createPointLight(color, intensity, distance) {
-            const pointLight = new THREE.PointLight(color, intensity, distance);
-            const pointLightHelper = new THREE.PointLightHelper(pointLight);
-            return { pointLight, pointLightHelper };
-        }
-
-        function movePointLights(pointLights, curves, time) {
-            pointLights.forEach((light, index) => {
-                const t = (time % 1) * 0.1; // Slow down the movement
-                const position = curves[index].getPoint(t);
-                light.pointLight.position.copy(position);
-            });
-        }
-
-        // Create point lights
-        const pointLights = [
-            createPointLight(0xffffff, 1, 100),
-            createPointLight(0xffffff, 1, 100)
-        ];
-
-        // Add point lights and helpers to the scene
-        pointLights.forEach(({ pointLight, pointLightHelper }) => {
-            scene.add(pointLight);
-            scene.add(pointLightHelper);
-        });
-
-        // Create random Bezier curves for the point lights
-        const curves = [
-            createRandomBezierCurve(50),
-            createRandomBezierCurve(50)
-        ];
-
-       
-
-
      
         // // [Timeline("Start")]
         window.Animate = function() {
             window.requestAnimationFrame(Animate);
-            window.sky.update();
-            window.user.handleMovement();
-
+            window.sky.update()
+            window.user.handleCollision()
+            window.user.handleMovement()
            
 
             var newTerrain = window.terrain.updateTerrain(window.user.camera.position);
             window.renderer.render(window.scene, window.user.camera);
 
 
-           
+           devview.innerHTML = `<pre style="background: rgba(0,0,0,0.6); color: white">
+                a: ${user.a}
+                s: ${user.s}
+                d: ${user.d}
+                w: ${user.w}
+           </pre>`
+
+
 
            UndulateWater() 
 
