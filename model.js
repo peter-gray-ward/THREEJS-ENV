@@ -30,7 +30,7 @@ class Model {
         segments: 50,
         sop: {
             trees: t / 2,
-            grasses: t * .15,
+            grasses: t * .1,
             grounds: 0,
             cliffs: t / 2
         },

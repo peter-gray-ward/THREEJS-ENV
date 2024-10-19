@@ -1,12 +1,19 @@
 import * as THREE from '/lib/three.module.min.js';
+import { UnrealBloomPass } from '/lib/UnrealBloomPass.js';
+import { EffectComposer } from '/lib/EffectComposer.js';
+import { RenderPass } from '/lib/RenderPass.js';
+
 import { SUBTRACTION, Brush, Evaluator } from '/lib/three-bvh-csg.js';
 import ViewModel from "/src/view-model.js";
 
 const evaluator = new Evaluator();
 
 var pillars = []
+var composer
 
 window.THREE = THREE;
+
+const rockwallTexture = new THREE.TextureLoader().load("/images/painting.jpg");
 
 const LEVEL = [
     null,
@@ -220,9 +227,9 @@ class Sky {
         this.full_circle = 2 * Math.PI;
         this.time = 0;
 
-        // this.hemisphereLight = new THREE.HemisphereLight(0xfefeff, 0x444444, .00015); // Sky and ground color
-        // this.hemisphereLight.position.set(0, 0, 0);
-        // scene.add(this.hemisphereLight);
+        this.hemisphereLight = new THREE.HemisphereLight(0xfefeff, 0x444444, .15); // Sky and ground color
+        this.hemisphereLight.position.set(0, 0, 0);
+        scene.add(this.hemisphereLight);
 
 
         this.sun = new THREE.DirectionalLight(0xffffff, 3);
@@ -245,14 +252,30 @@ class Sky {
         this.sun.shadow.camera.bottom = -1200;
         this.sky = [];
         this.sphere = new THREE.Mesh(
-            new THREE.SphereGeometry(20, 30, 30), 
+            new THREE.SphereGeometry(11, 30, 30), 
             new THREE.MeshBasicMaterial({ 
                 side: THREE.DoubleSide, 
                 color: 'white' 
             })
         );
-        this.sphere.position.set(0, this.sun.y - 150, 0);
+        this.sphere.position.copy(this.sun.position)
         scene.add(this.sphere)
+
+        // Set up the composer for postprocessing
+        composer = new EffectComposer(renderer);
+        const renderPass = new RenderPass(scene, user.camera);
+        composer.addPass(renderPass);
+
+        // Set up the UnrealBloomPass
+        const bloomPass = new UnrealBloomPass(
+            new THREE.Vector2(window.innerWidth, window.innerHeight),
+            1.5,    // Strength of bloom
+            0.4,    // Bloom radius
+            0.85    // Threshold
+        );
+        composer.addPass(bloomPass);
+
+
 
         this.createDome();
 
@@ -334,7 +357,7 @@ class Sky {
 
 
     update() {
-        this.time += 0.0005;  // Control the speed of the sun's movement
+        this.time += 0.00005;  // Control the speed of the sun's movement
 
         // Sun's position: moving along the x and y axes while keeping z fixed at 0
         var sunX = this.sceneRadius * Math.cos(this.time);  // Sun moves along the x-axis
@@ -346,7 +369,7 @@ class Sky {
         this.sphere.position.set(sunX, sunY, sunZ);  // Optional sphere for visualizing the sun
 
         // Define the maximum distance from the sun where sunrise/sunset colors will be applied
-        var influenceRadius = this.sceneRadius * 0.3;  // Adjust this value to change how localized the effect is
+        var influenceRadius = this.sceneRadius;  // Adjust this value to change how localized the effect is
 
         // Define sunrise/sunset gradient colors
         var sunriseColors = [
@@ -400,13 +423,14 @@ class Sky {
                 var middayColor = new THREE.Color(0xffffff);  // Bright white for noon
 
                 var blendedColor;
+                var horizonMargin = 50
 
                 // **Sun is above the horizon**
                 if (this.sun.position.y > 0) {
                     // Apply sunrise/sunset effect if the point is within the sun's influence radius
 
                     // AND the sun is near the horizon (y-position close to 0)
-                    if (distanceToSun < influenceRadius && Math.abs(this.sun.position.y) < 20) {
+                    if (distanceToSun < influenceRadius && Math.abs(this.sun.position.y) < horizonMargin) {
                         // The sun is close to the horizon and we're near the sun, apply sunrise/sunset colors
                         var horizonBlendFactor = distanceToSun / influenceRadius;  // Strongest effect near the sun
                         var horizonBlendIndex = Math.floor(horizonBlendFactor * (sunriseColors.length - 1));
@@ -416,10 +440,10 @@ class Sky {
                         var colorEnd = sunriseColors[Math.min(horizonBlendIndex + 1, sunriseColors.length - 1)];
                         blendedColor = new THREE.Color().lerpColors(colorStart, colorEnd, horizonBlendFactor * intensity);
 
-                    } else if (Math.abs(this.sun.position.y) < 20) {
+                    } else if (Math.abs(this.sun.position.y) < horizonMargin) {
                         // The sun is near the horizon but we're outside the influence radius
-                        var sunBlendFactor = Math.abs(sunY / 20);  // Strongest effect at horizon (y = 0)
-                        blendedColor = new THREE.Color().lerpColors(sunriseColors[0], dayColor, sunBlendFactor * intensity);
+                        var sunBlendFactor = Math.abs(sunY / horizonMargin);  // Strongest effect at horizon (y = 0)
+                        blendedColor = new THREE.Color().lerpColors(sunriseColors[4], dayColor, sunBlendFactor * intensity);
 
                     } else {
                         // Daytime sky: Bright white during noon, transitioning to blue
@@ -507,10 +531,7 @@ class Sky {
 
         // Return the cloud group, which now contains all the clusters and spheres
         return cloud;
-    }
-
-
-  
+    }  
 }
 
 // Array to store each triangle's specific sine wave parameters for rotation
@@ -540,213 +561,119 @@ function rotateAroundPoint(v, center, angle) {
     return new THREE.Vector3(rotatedX + center.x, v.y, rotatedZ + center.z);
 }
 
+var uw = 0
 function UndulateWater(sunPositionX, sunPositionY, sunPositionZ) {
-    
-    var previousWaterColors = terrain.water.geometry.attributes.color.array;
+    if (uw++ % 5 !== 0) return
+    if (uw > 100) uw = 0
     var originalWaterPosition = terrain.water.geometry.attributes.position.array;
     var time = performance.now() * 0.001;  // Time factor for animating the waves
-
-    // Update the y position of the water vertices (not moving them but keeping the rotation separate)
     var waterVertices = terrain.water.geometry.attributes.position.array;
-    var colorVertices = terrain.water.geometry.attributes.color.array;
     var sunPosition = new THREE.Vector3(sunPositionX, sunPositionY, sunPositionZ);
 
-    for (let i = 0; i < originalWaterPosition.length; i += 9) { // Loop over every triangle (3 vertices per triangle)
-        // Get the three vertices of the triangle
+    // Define the number of sine waves and their properties
+    const numWaves = 9;  // Number of sine waves
+    const waveDirections = [];
+    const waveFrequencies = [];
+    const waveAmplitudes = [];
+    
+    // Set a base Y offset for stabilization
+    const baseY = -5;  // Stabilize around this Y value
+
+    // Generate random directions, frequencies, and smaller amplitudes for each wave
+    for (let i = 0; i < numWaves; i++) {
+        waveDirections.push(new THREE.Vector3(
+            Math.random() * 2 - 1,  // Random X direction
+            0,                      // No Y movement in the direction vector
+            Math.random() * 2 - 1   // Random Z direction
+        ).normalize());  // Normalize to ensure consistent direction
+
+        waveFrequencies.push(randomInRange(0.05, 0.1));  // Random frequency for each wave
+        waveAmplitudes.push(randomInRange(0.01, 0.2));  // Subtle random amplitude for each wave
+    }
+
+    // Apply waves to the water vertices
+    for (let i = 0; i < originalWaterPosition.length; i += 9) {  // Loop over every triangle (3 vertices per triangle)
+
         var v0 = new THREE.Vector3(originalWaterPosition[i], originalWaterPosition[i + 1], originalWaterPosition[i + 2]);
         var v1 = new THREE.Vector3(originalWaterPosition[i + 3], originalWaterPosition[i + 4], originalWaterPosition[i + 5]);
         var v2 = new THREE.Vector3(originalWaterPosition[i + 6], originalWaterPosition[i + 7], originalWaterPosition[i + 8]);
 
-        // Calculate the triangle center (used for rotation)
-        var triangleCenter = new THREE.Vector3().addVectors(v0, v1).add(v2).divideScalar(3);
+        // Initialize displacement values
+        var displacementV0 = 0;
+        var displacementV1 = 0;
+        var displacementV2 = 0;
 
-        // // Get the personal sine wave journey for rotation for this triangle
-        // let triangleIndex = i / 9;
-        // let rotationParams = triangleRotationWaves.get(triangleIndex);
+        // Apply all waves to each vertex
+        for (let w = 0; w < numWaves; w++) {
+            const direction = waveDirections[w];
+            const frequency = waveFrequencies[w];
+            const amplitude = waveAmplitudes[w];
 
-        // // Calculate the rotation angle for this triangle (based on its personal sine wave)
-        // var rotationAngle = Math.sin(time * rotationParams.frequency + rotationParams.phase) * Math.PI * randomInRange(0.0005, 0.05);  // Small rotation angle
+            // Project the position onto the wave direction
+            const waveV0 = v0.dot(direction);
+            const waveV1 = v1.dot(direction);
+            const waveV2 = v2.dot(direction);
 
-        // // Rotate the triangle vertices around their center
-        // v0 = rotateAroundPoint(v0, triangleCenter, rotationAngle);
-        // v1 = rotateAroundPoint(v1, triangleCenter, rotationAngle);
-        // v2 = rotateAroundPoint(v2, triangleCenter, rotationAngle);
-
-        // Recalculate the triangle normal after rotation
-        var edge1 = new THREE.Vector3().subVectors(v1, v0);
-        var edge2 = new THREE.Vector3().subVectors(v2, v0);
-        var newNormal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
-
-        // Calculate the direction to the sun
-        var sunDirection = new THREE.Vector3().subVectors(sunPosition, triangleCenter).normalize();
-
-        // Calculate the dot product to get the angle between the new normal and the sun direction
-        var dotProduct = newNormal.dot(sunDirection);
-        var colorFactor = (dotProduct + 1) / 2;  // Normalize to range 0 to 1
-
-        // Map colorFactor to a color (e.g., blue to white)
-        var color = new THREE.Color().setHSL(0.6, 1, colorFactor);  // HSL with hue 0.6 for blue
-
-        // Set the vertex color for each vertex in the triangle
-        for (let j = 0; j < 3; j++) {
-            var vertexIndex = i + (j * 3);  // Get the index of the vertex
-            colorVertices[vertexIndex] = color.r;
-            colorVertices[vertexIndex + 1] = color.g;
-            colorVertices[vertexIndex + 2] = color.b;
+            // Apply sine wave displacement based on the projection
+            displacementV0 += Math.sin(waveV0 * frequency + time) * amplitude;
+            displacementV1 += Math.sin(waveV1 * frequency + time) * amplitude;
+            displacementV2 += Math.sin(waveV2 * frequency + time) * amplitude;
         }
 
-        // Update the new rotated vertices in the waterVertices array
+        // Stabilize around baseY and add subtle displacements
+        v0.y = baseY + displacementV0;
+        v1.y = baseY + displacementV1;
+        v2.y = baseY + displacementV2;
+
+        // Update the vertex positions in the waterVertices array
         waterVertices[i] = v0.x; waterVertices[i + 1] = v0.y; waterVertices[i + 2] = v0.z;
         waterVertices[i + 3] = v1.x; waterVertices[i + 4] = v1.y; waterVertices[i + 5] = v1.z;
         waterVertices[i + 6] = v2.x; waterVertices[i + 7] = v2.y; waterVertices[i + 8] = v2.z;
     }
 
-    terrain.water.geometry.attributes.position.needsUpdate = true;
-    terrain.water.geometry.attributes.color.needsUpdate = true;
+    terrain.water.geometry.attributes.position.needsUpdate = true;  // Ensure the geometry updates
 }
 
-function createBox(center, width, height, depth, map, rgb, meshkind) {
-    const meshes = [];
-    const halfWidth = width / 2;
-    const halfHeight = height / 2;
-    const halfDepth = depth / 2;
 
-    const vertices = new Float32Array([
-        // Front face
-        center.x - halfWidth, center.y - halfHeight, center.z + halfDepth,  // 0: Bottom-left front
-        center.x + halfWidth, center.y - halfHeight, center.z + halfDepth,  // 1: Bottom-right front
-        center.x + halfWidth, center.y + halfHeight, center.z + halfDepth,  // 2: Top-right front
-        center.x - halfWidth, center.y + halfHeight, center.z + halfDepth,  // 3: Top-left front
 
-        // Back face
-        center.x - halfWidth, center.y - halfHeight, center.z - halfDepth,  // 4: Bottom-left back
-        center.x + halfWidth, center.y - halfHeight, center.z - halfDepth,  // 5: Bottom-right back
-        center.x + halfWidth, center.y + halfHeight, center.z - halfDepth,  // 6: Top-right back
-        center.x - halfWidth, center.y + halfHeight, center.z - halfDepth   // 7: Top-left back
-    ]);
 
-    const indices = [
-        // Front face
-        0, 1, 2, 0, 2, 3,
-        // Back face
-        5, 4, 7, 5, 7, 6,
-        // Left face
-        4, 0, 3, 4, 3, 7,
-        // Right face
-        1, 5, 6, 1, 6, 2,
-        // Top face
-        3, 2, 6, 3, 6, 7,
-        // Bottom face
-        4, 5, 1, 4, 1, 0
-    ];
 
-    // Manually defined normals for each face (one normal per triangle)
-    const normals = {
-        front: [0, 0, 1],    // Front face normal
-        back: [0, 0, -1],    // Back face normal
-        left: [-1, 0, 0],    // Left face normal
-        right: [1, 0, 0],    // Right face normal
-        top: [0, 1, 0],      // Top face normal
-        bottom: [0, -1, 0]   // Bottom face normal
-    };
-
-    // Associate each triangle with its normal vector based on the face
-    const faceNormals = [
-        normals.front, normals.front,  // Front face (2 triangles)
-        normals.back, normals.back,    // Back face (2 triangles)
-        normals.left, normals.left,    // Left face (2 triangles)
-        normals.right, normals.right,  // Right face (2 triangles)
-        normals.top, normals.top,      // Top face (2 triangles)
-        normals.bottom, normals.bottom // Bottom face (2 triangles)
-    ];
-
-    for (let i = 0; i < indices.length; i += 3) {
-        const triangleGeometry = new THREE.BufferGeometry();
-
-        // Extract the vertices for this triangle
-        const triangleVertices = [
-            vertices[indices[i] * 3], vertices[indices[i] * 3 + 1], vertices[indices[i] * 3 + 2],
-            vertices[indices[i + 1] * 3], vertices[indices[i + 1] * 3 + 1], vertices[indices[i + 1] * 3 + 2],
-            vertices[indices[i + 2] * 3], vertices[indices[i + 2] * 3 + 1], vertices[indices[i + 2] * 3 + 2]
-        ];
-
-        // Use the corresponding normal for this triangle
-        const normal = faceNormals[Math.floor(i / 6)];  // Each face has 2 triangles
-
-        // Create buffer attributes for vertices and normals
-        triangleGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(triangleVertices), 3));
-        triangleGeometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array([...normal, ...normal, ...normal]), 3));
-
-        // Configure material with color and/or texture
-        const args = { side: THREE.DoubleSide };
-        if (map) args.map = map;  // Apply texture if provided
-        if (rgb !== null) args.color = colorshade(rgb);  // Apply color if RGB is provided
-
-        // Choose the material type (basic or standard)
-        const material = meshkind === 'basic' 
-            ? new THREE.MeshBasicMaterial(args) 
-            : new THREE.MeshStandardMaterial(args);
-
-        const triangleMesh = new THREE.Mesh(triangleGeometry, material);
-        triangleMesh.castShadow = true;
-        triangleMesh.receiveShadow = true;
-
-        // Store triangle data on the mesh (vertices and normal)
-        const a = new THREE.Vector3(triangleVertices[0], triangleVertices[1], triangleVertices[2]);
-        const b = new THREE.Vector3(triangleVertices[3], triangleVertices[4], triangleVertices[5]);
-        const c = new THREE.Vector3(triangleVertices[6], triangleVertices[7], triangleVertices[8]);
-
-        // Store the triangle and its normal for future reference
-        triangleMesh.triangle = new THREE.Triangle(a, b, c);
-        triangleMesh.normal = new THREE.Vector3(normal[0], normal[1], normal[2]);
-
-        // Add the triangle mesh to the scene and store it for later use
-        meshes.push(triangleMesh);
-        scene.add(triangleMesh);
-    }
-
-    return meshes;  // Return all created triangle meshes
-}
 
 class Castle {
     offsetY = 1.5
     elevatorSpeed = 0.2
 
     constructor(castleBaseCenter) {
-
-
-
         for (var key in VM.map[VM.user.level].structures[0]) {
             this[key] = VM.map[VM.user.level].structures[0][key]
         }
-        this.houseDim = [70, 50]; // Width and Length of the house
+        this.houseDim = [70, 50];
         this.parts = [];
         this.elevator = []
         this.wallHeight = 5;
+        this.foundationHeight = 1.5;
+
         var buildingHeight = 300
         var elevatorHeight = 3
+        const floorHeight = 10
+        var floorY = 0 - (this.foundationHeight / 2)
 
-        // Create the foundation
-        this.foundationHeight = 1.5;
-        const foundationStuff = createBox(
-            {
-                x: 0, 
-                y: -this.foundationHeight, 
-                z: 0
-            },
-            this.houseDim[0], 3 , this.houseDim[1],
-            new THREE.TextureLoader().load("/images/concrete", texture => {
-                texture.wrapS = THREE.RepeatWrapping;
-                texture.wrapT = THREE.RepeatWrapping;
-                texture.repeat.set(11, 11);
-            }),
-            0,
-            'basic'
+        const foundation = new THREE.Mesh(
+            new THREE.BoxGeometry(this.houseDim[0], this.foundationHeight, this.houseDim[1]),
+                new THREE.MeshStandardMaterial({
+                    map: new THREE.TextureLoader().load("/images/concrete", texture => {
+                        texture.wrapS = THREE.RepeatWrapping;
+                        texture.wrapT = THREE.RepeatWrapping;
+                        texture.repeat.set(11, 11);
+                    }),
+                    side: THREE.DoubleSide
+                }),
+                
         )
-        for (var f of foundationStuff) {
-            this.parts.push(f)
-            scene.add(f)
-        }
+        foundation.position.set(0, floorY, 0)
+        floorY += floorHeight
+        this.parts.push(foundation)
+        scene.add(foundation)
 
 
 
@@ -781,34 +708,55 @@ class Castle {
         }
 
         
-        const floorHeight = 11
         var elevatorWidth = this.houseDim[0] * .05;
-        for (var i = 1, j = 0; i < 13; i++, j++) {
-            let width = this.houseDim[1];
-            let length = this.houseDim[0];
-
-            this.foundationHeight = 1.5;
-            const floorStuff = createBox(
-                {x: 0, y: floorHeight * i, z: 0},
-                this.houseDim[0], 
-                this.foundationHeight,
-                this.houseDim[1], 
-                null,
-                Math.floor(Math.random() * 3),
-                'basic'
+        for (var i = 1; i < 2; i++) {
+            const floor = new THREE.Mesh(
+                new THREE.BoxGeometry(this.houseDim[0], this.foundationHeight * 2, this.houseDim[1]),
+                new THREE.MeshStandardMaterial({
+                    map: new THREE.TextureLoader().load("/images/concrete", texture => {
+                        texture.wrapS = THREE.RepeatWrapping;
+                        texture.wrapT = THREE.RepeatWrapping;
+                        texture.repeat.set(11, 11);
+                    }),
+                    side: THREE.DoubleSide
+                }) 
             )
-            for (var f of floorStuff) {
-                this.parts.push(f.triangle)
-                scene.add(f)
-            }
+            floor.position.set(0, floorY, 0)
+            floorY += floorHeight
+            this.parts.push(floor)
+            scene.add(floor)
         }
 
 
+        floorY = 0 - (this.foundationHeight / 2)
+        var SlidingGlassDoor = {
+            height: 5
+        }
+        var slidingGlassDoorGeometry = new THREE.BoxGeometry(5, SlidingGlassDoor.height, .1)
+        slidingGlassDoorGeometry.rotateY(Math.PI / 2)
+        slidingGlassDoorGeometry.computeVertexNormals()
+        var slidingGlassDoor = new THREE.Mesh(
+            slidingGlassDoorGeometry,
+            new THREE.MeshPhysicalMaterial({
+                color: 0xfff0ff,
+                transparent: true,
+                opacity: 0.95,
+                roughness: 0.1,  // Glass is smooth
+                metalness: 0.0,  // No metalness
+                reflectivity: 0.9,  // High reflectivity for glass effect
+                clearcoat: 1.0,  // Extra glossiness
+                clearcoatRoughness: 0.05  // Very smooth
+            })
 
+        )
+        slidingGlassDoor.position.set(
+            this.houseDim[0] / 2, 
+            floorY + SlidingGlassDoor.height / 2, 
+            this.houseDim[1] / 2 - 7
+        )
 
-        
-
-
+        this.parts.push(slidingGlassDoor)
+        scene.add(slidingGlassDoor)
 
     }
 
@@ -829,9 +777,7 @@ class Castle {
         eFloor.name = "elevator-floor"
         this.elevator.push(eFloor)
         scene.add(eFloor);
-        // this.parts.push(eFloor)
 
-        // Elevator ceiling
         var eCeiling = new THREE.Mesh(
             new THREE.BoxGeometry(elevatorWidth, 0.2, elevatorWidth),
             new THREE.MeshStandardMaterial({ color: 'maroon' })
@@ -844,7 +790,6 @@ class Castle {
         eCeiling.geometry.computeVertexNormals()
         this.elevator.push(eCeiling)
         scene.add(eCeiling);
-        // this.parts.push(eCeiling)
 
         let texture = new THREE.TextureLoader().load('/images/wall12.jpg')
 
@@ -862,7 +807,7 @@ class Castle {
         elevatorShaftInnerRight.rotation.y = Math.PI / 2;
         elevatorShaftInnerRight.geometry.computeVertexNormals()
         scene.add(elevatorShaftInnerRight)
-        // this.parts.push(elevatorShaftInnerRight)
+
 
         var elevatorShaftOuterLeft = new THREE.Mesh(
             new THREE.BoxGeometry(
@@ -1300,18 +1245,18 @@ class Terrain {
         case LEVEL[1]:
             this.grassTexture = new THREE.TextureLoader().load("/images/nasturtiums1.jpg")
             this.Grass = [
-                new THREE.Color(0x00ff00),
-                new THREE.Color(0x00ff00),
-                new THREE.Color(0x00ff00),
-                new THREE.Color(0x00ff00),
-                new THREE.Color(0x00ff00),
-                new THREE.Color(0x00ff00),
-                new THREE.Color(0x00ff00),
+                '#33462d', //
+                '#435c3a', //
+                '#4e5e3e', //
+                '#53634c', //
+                '#536c46', //
+                '#5d6847', //
             ]
             let _textures = options.map[options.user.level].textures;
             for (var key in _textures) {
                 _textures[key] = _textures[key].map(t => new THREE.TextureLoader().load(t));
             }
+            this.sop = VM.map[VM.user.level].sop
             this.textures =  _textures;
             this.vertices = new Map();
             this.meshes = [];
@@ -1427,7 +1372,7 @@ class Terrain {
 
         // let woodTerrain = this.generateRandomWoodsTerrain();
 
-        var freshwaterPond = [];
+        var theCove = [];
         var maxX = -Infinity
         var maxZ = -Infinity
         var minX = Infinity
@@ -1458,7 +1403,7 @@ class Terrain {
                     v.y = -1;  // Flatten the terrain inside the castle
                 }
 
-                var goingDownToRiver = v.x >= 45 && v.z >= -30 && v.z <= 30;
+                var goingDownToRiver = v.x >= 35 && v.z >= -30 && v.z <= 30;
                 if (goingDownToRiver) {
 
 
@@ -1479,62 +1424,88 @@ class Terrain {
                     }
 
 
-                    let curveFactor = Math.cos(Math.random() * Math.PI); // Smooth cosine factor
+                    let curveFactor = .1 * Math.cos(Math.random() * Math.PI); // Smooth cosine factor
                     let targetHeight = -50;
 
                     // Blend between current height and target height using cosine curve
-                    v.y = curveFactor * (v.y - targetHeight) + targetHeight;
+                    if (Math.random() < 0.7) {
+                        v.y = curveFactor * (v.y - targetHeight) + targetHeight;
+                    }
+
+                } else {
+                    if (eval(this.treeCondition)) {
+                        var tree = this.createTree(v.x, v.y, v.z, 1);
+                        VM.map[VM.user.level].trees.push(tree);
+                    }
                 }
 
                 vertices.push(v.x, v.y, v.z);  // Add to terrain vertices
             }
         }
 
-        // var yLength = averageY.length
-        // averageY = averageY.reduce((a, b) => a + b) / yLength
+        var theCove = [];
+        var theCoveIndices = [];  // For storing triangle theCoveIndices
 
-        var xStep = (maxX - minX) / 300
-        var zStep = (maxZ - minZ) / 300
+        minZ -= 1000
+        maxZ += 1000
+        minX -= 1000
+        maxX += 1000
 
-        // var theCove = []
-        var theCovesColors = []
-        for (var x = minX - 10; x < maxX; x += xStep) {
-            for (var z = minZ - 2; z < maxZ + 2; z += zStep) {
-                theCovesColors.push(0, randomInRange(0, 0.05), Math.random())
+        var xStep = (maxX - minX) / this.segments;
+        var zStep = (maxZ - minZ) / this.segments;
+
+        // Generate vertices and ensure they are properly connected
+        for (let i = 0; i <= this.segments; i++) {
+            for (let j = 0; j <= this.segments; j++) {
+                let x = minX + i * xStep;
+                let z = minZ + j * zStep;
+                let y = -5;  // Random Y for variation
+
+                // Store each vertex position
+                theCove.push(x, y, z);
+
+                // Create two triangles for each square of the grid (except the last row/column)
+                if (i < this.segments && j < this.segments) {
+                    let topLeft = i * (this.segments + 1) + j;
+                    let topRight = (i + 1) * (this.segments + 1) + j;
+                    let bottomLeft = i * (this.segments + 1) + (j + 1);
+                    let bottomRight = (i + 1) * (this.segments + 1) + (j + 1);
+
+                    // Push two triangles for this square (top left, bottom left, bottom right)
+                    theCoveIndices.push(topLeft, bottomLeft, bottomRight);  // First triangle
+                    theCoveIndices.push(topLeft, bottomRight, topRight);    // Second triangle
+                }
             }
         }
 
-        // var theCovesGeometry = new THREE.BufferGeometry();
-        // theCovesGeometry.setAttribute(
-        //     'position', 
-        //     new THREE.Float32BufferAttribute(new Float32Array(theCove), 3) // 3 vertices per position
-        // )
-       
-        var theCovesGeometry = new THREE.PlaneGeometry(maxX - minX, maxZ - minZ, 100, 100)
+        // Create geometry and assign the vertices and theCoveIndices
+        var theCovesGeometry = new THREE.BufferGeometry();
         theCovesGeometry.setAttribute(
-            'color',
-            new THREE.Float32BufferAttribute(new Float32Array(theCovesColors), 3)
-        )
-
-        // Create mesh for the pond
-        var TheCove = new THREE.Mesh(
-            theCovesGeometry,
-            new THREE.MeshStandardMaterial({
-                // vertexColors: true,
-                color: 'royalblue',
-                side: THREE.DoubleSide ,   // Double-sided for visibility from both sides
-                transparent: true,
-                opacity: 0.85
-            })
+            'position', 
+            new THREE.Float32BufferAttribute(new Float32Array(theCove), 3)
         );
 
-        TheCove.rotation.x = Math.PI / 2
-        TheCove.position.set((maxX - minX) / 2, -5, 0)
+        // Set theCoveIndices to connect vertices and form triangles
+        theCovesGeometry.setIndex(theCoveIndices);
+        theCovesGeometry.computeVertexNormals();  // Ensure proper lighting/shading
 
-        TheCove.receiveShadow = true
+        // Create material (water-like material)
+        var waterMaterial = new THREE.MeshStandardMaterial({
+            color: 'royalblue',
+            side: THREE.DoubleSide,
+            opacity: 0.9,
+            transparent: true
+        });
+
+        // Create the mesh
+        var TheCove = new THREE.Mesh(theCovesGeometry, waterMaterial);
+
+        // Add to scene
         scene.add(TheCove);
 
-        this.water = TheCove
+
+        // Store reference to the water mesh
+        this.water = TheCove;
 
 
 
@@ -1565,7 +1536,7 @@ class Terrain {
                 for (let i = 0; i < this.segments; i++) {
                     for (let j = 0; j < this.segments; j++) {
                         for (var k = 0; k < 3; k++) {
-                            grassPatches[i][j] = Math.random() < 0.09;
+                            grassPatches[i][j] = Math.random() < 0.9;
                         }
                     }
                 }
@@ -1574,7 +1545,7 @@ class Terrain {
                 for (let i = 0; i < this.segments; i++) {
                     for (let j = 0; j < this.segments; j++) {
                         for (var k = 0; k < 3; k++) {
-                            grassPatches[i][j] = Math.random() < 0.009;
+                            grassPatches[i][j] = Math.random() < 0.09;
                         }
                     }
                 }
@@ -1583,7 +1554,7 @@ class Terrain {
                 for (let i = 0; i < this.segments; i++) {
                     for (let j = 0; j < this.segments; j++) {
                         for (var k = 0; k < 3; k++) {
-                            grassPatches[i][j] = Math.random() < 0.05;
+                            grassPatches[i][j] = Math.random() < 0.5;
                         }
                     }
                 }
@@ -1612,6 +1583,7 @@ class Terrain {
                 v.z = (1 - x) * (1 - y) * v0.z + x * (1 - y) * v1.z + x * y * v2.z + (1 - x) * y * v3.z;
 
                 var inCastle = v.x > -50 && v.x < 50 && v.z > -35 && v.z < 35
+                var inCove = v.x >= 35 && v.z >= -30 && v.z <= 30;
 
                 var isNearGrassPatch = false && (grassPatches[i][j] || 
                                           (i > 0 && grassPatches[i - 1][j]) ||  // Check left
@@ -1623,13 +1595,6 @@ class Terrain {
                                           (i > 0 && j < this.segments && grassPatches[i - 1][j + 1]) ||  // Check bottom-left diagonal
                                           (i < this.segments && j < this.segments && grassPatches[i + 1][j + 1])  // Check bottom-right diagonal
                 );
-
-
-                const isTree = false && eval(this.treeCondition);
-
-
-
-                
 
 
                 if (a >= 0 && b >= 0 && c >= 0 && d >= 0 && a < vertices.length / 3 && b < vertices.length / 3 && c < vertices.length / 3 && d < vertices.length / 3) {
@@ -1651,16 +1616,10 @@ class Terrain {
                         
 
                         if (isNearGrassPatch && !inCastle) {
-                            this.grasses.push(this.createGrassResult(indices, vertices, triangle, 211, randomInRange(.1, .3), randomInRange(0.1, .3)))
+                            this.grasses.push(
+                                this.createGrassResult(indices, vertices, triangle, 1000, randomInRange(.1, .3), randomInRange(0.1, .3))
+                            )
                             this.groundColorMap[i][j] = Math.random()
-                        }
-                        //
-                        // Trees!
-                        //
-
-                        if (isTree) {
-                            var tree = this.createTree(triangle.triangle.a.x, triangle.triangle.a.y, triangle.triangle.a.z, 1);
-                            VM.map[VM.user.level].trees.push(tree);
                         }
 
                     });
@@ -1762,33 +1721,6 @@ class Terrain {
         return this;
     }
 
-    updateTerrain() {
-        // for (var center of this.surroundingCenters) {
-        //     var centerKey = `${center.center.x}_${center.center.z}`;
-        //     if (center.center.distanceTo(user.camera.position) < 75) {
-        //         center.pillar.material.color.set(0xff0000);
-        //         var terrainCreated = false;
-        //         for (var j = 0; j < this.meshes.length; j++) {
-        //             if (this.meshes[j].centerKey == centerKey) {
-        //                 terrainCreated = true;
-        //             }
-        //         }
-        //         if (!terrainCreated) {
-        //             this.generate(center.center.x, center.center.y, center.center.z);
-        //         }
-        //     } else {
-        //         center.pillar.material.color.set(0xffffff);
-        //     }
-        // }
-        
-        this.updateVisibleTrianglesAndClusters(window.user.camera.position);
-    
-        // Update the terrain vertices
-        this.v0 = { x: this.center.x - this.quadrant, y: this.center.y, z: this.center.z + this.quadrant };
-        this.v1 = { x: this.center.x + this.quadrant, y: this.center.y, z: this.center.z + this.quadrant };
-        this.v2 = { x: this.center.x + this.quadrant, y: this.center.y, z: this.center.z - this.quadrant };
-        this.v3 = { x: this.center.x - this.quadrant, y: this.center.y, z: this.center.z - this.quadrant };
-    }
 
     getTriangleNormal(triangle) {
         triangle = triangle.triangle
@@ -1796,119 +1728,9 @@ class Terrain {
         const v1 = new THREE.Vector3().subVectors(triangle.c, triangle.a);
         return new THREE.Vector3().crossVectors(v0, v1).normalize();
     }
-    
+   
 
-    getRootSlices(centerKey, neighbors) {
-        let q = this.quadrant * 2;
-        const slices = [];
-        const [currentX, currentZ] = centerKey.split("_").map(Number);
-    
-        neighbors.forEach(neighbor => {
-            const neighborNoise = neighbor.noise; // Assuming noise is stored in a property
-            const [neighborX, neighborZ] = neighbor.centerKey.split("_").map(Number);
-            const width = q; 
-            const height = q;
-    
-            if (neighborX === currentX && neighborZ === currentZ - q) { // Neighbor is above
-                const slice = [];
-                for (let col = 0; col < width; col++) {
-                    slice.push(neighborNoise[col]); // Top row of neighbor
-                }
-                slices.push({ slice, direction: new THREE.Vector3(0, 0, 1) }); // Direction from neighbor to center
-            } else if (neighborX === currentX && neighborZ === currentZ + q) { // Neighbor is below
-                const slice = [];
-                for (let col = 0; col < width; col++) {
-                    slice.push(neighborNoise[(height - 1) * width + col]); // Bottom row of neighbor
-                }
-                slices.push({ slice, direction: new THREE.Vector3(0, 0, -1) }); // Direction from neighbor to center
-            } else if (neighborX === currentX + q && neighborZ === currentZ) { // Neighbor is to the left
-                const slice = [];
-                for (let row = 0; row < height; row++) {
-                    slice.push(neighborNoise[row * width]); // Left column of neighbor
-                }
-                slices.push({ slice, direction: new THREE.Vector3(1, 0, 0) }); // Direction from neighbor to center
-            } else if (neighborX === currentX - q && neighborZ === currentZ) { // Neighbor is to the right
-                const slice = [];
-                for (let row = 0; row < height; row++) {
-                    slice.push(neighborNoise[row * width + (width - 1)]); // Right column of neighbor
-                }
-                slices.push({ slice, direction: new THREE.Vector3(-1, 0, 0) }); // Direction from neighbor to center
-            }
-        });
-    
-        return slices;
-    }
  
-
-    renderNoiseSlice({ slice, direction }, width, height, center) {
-        const segmentSize = 1; // Adjust based on your grid spacing
-        const centerX = center.x;
-        const centerZ = center.z;
-    
-        if (direction.equals(new THREE.Vector3(0, 0, -1))) { // Neighbor is below
-            for (let col = 0; col < width; col++) {
-                const noiseValue = slice[col];
-                const x = (centerX * width + col - this.quadrant) * segmentSize;
-                const y = noiseValue * this.altitudeVariance; // Assuming noiseValue represents height
-                const z = centerZ + this.quadrant; // Top row
-    
-                const sphere = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.1, 32, 32),
-                    new THREE.MeshBasicMaterial({ color: 0xff0000 })
-                );
-                // console.log('neighbor below', x, y, z);
-                sphere.position.set(x, y, z);
-                scene.add(sphere);
-            }
-        } else if (direction.equals(new THREE.Vector3(0, 0, 1))) { // Neighbor is above
-            for (let col = 0; col < width; col++) {
-                const noiseValue = slice[col];
-                const x = (centerX * width + col - this.quadrant) * segmentSize;
-                const y = noiseValue * this.altitudeVariance; // Assuming noiseValue represents height
-                const z = centerZ - this.quadrant; // Bottom row
-    
-                const sphere = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.1, 32, 32),
-                    new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-                );
-    
-                // console.log('neighbor above', x, y, z);
-                sphere.position.set(x, y, z);
-                scene.add(sphere);
-            }
-        } else if (direction.equals(new THREE.Vector3(1, 0, 0))) { // Neighbor is to the left
-            for (let row = 0; row < height; row++) {
-                const noiseValue = slice[row];
-                const x = (centerX + this.quadrant) * segmentSize;
-                const y = noiseValue * this.altitudeVariance; // Assuming noiseValue represents height
-                const z = (centerZ * height + row - this.quadrant) * segmentSize;
-    
-                const sphere = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.1, 32, 32),
-                    new THREE.MeshBasicMaterial({ color: 0x0000ff })
-                );
-                // console.log('neighbor left', x, y, z);
-                sphere.position.set(x, y, z);
-                scene.add(sphere);
-            }
-        } else if (direction.equals(new THREE.Vector3(-1, 0, 0))) { // Neighbor is to the right
-            for (let row = 0; row < height; row++) {
-                const noiseValue = slice[row];
-                const x = (centerX - this.quadrant) * segmentSize;
-                const y = noiseValue * this.altitudeVariance; // Assuming noiseValue represents height
-                const z = (centerZ * height + row - this.quadrant) * segmentSize;
-    
-                const sphere = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.1, 32, 32),
-                    new THREE.MeshBasicMaterial({ color: 0xffff00 })
-                );
-                // console.log('neighbor right', x, y, z);
-                sphere.position.set(x, y, z);
-                scene.add(sphere);
-            }
-        }
-    }
-    
     determineGrassClusters() {
         const clusters = [];
         const visited = new Set();
@@ -2013,6 +1835,7 @@ class Terrain {
         return closestIndex;
     }
 
+
     findClosestVertex(position, vertices) {
         let closestIndex = -1;
         let closestDistance = Infinity;
@@ -2029,15 +1852,7 @@ class Terrain {
 
         return closestIndex;
     }
-    
-    updateGroundMaterial() {
-        // Implement this method to update the ground material based on the new groundColorMap values
-        // This might involve updating a texture or shader parameter
-    }
 
-    setSun(sun) {
-        this.sun = sun;
-    }
 
     generateRollingPerlinNoise() {
         const map = VM.map[VM.user.level];
@@ -2069,53 +1884,6 @@ class Terrain {
         }
 
         return perlinNoise;
-    }
-
-    generatePerlinNoiseV1(options = {}) {
-        const map = VM.map[VM.user.level];
-
-        let octaveCount = options.octaveCount || 4;
-        let amplitude = options.amplitude || 0.05;
-        let persistence = options.persistence || 0.1;
-        let width = map.width;
-        let height = map.height;
-        let offsetX = 0;
-        let offsetY = 0;
-        let whiteNoise = this.generateWhiteNoise(width, height, offsetX, offsetY);
-        let smoothNoiseList = new Array(octaveCount);
-
-        for (let i = 0; i < octaveCount; ++i) {
-            smoothNoiseList[i] = this.generateSmoothNoise(i, whiteNoise, width, height);
-        }
-    
-        let perlinNoise = new Array(width * height);
-        let totalAmplitude = 0;
-    
-        for (let i = octaveCount - 1; i >= 0; --i) {
-            amplitude *= persistence;
-            totalAmplitude += amplitude;
-    
-            for (let y = 0; y < height; ++y) {
-                for (let x = 0; x < width; ++x) {
-                    let index = y * width + x;
-                    perlinNoise[index] = perlinNoise[index] || 0;
-                    perlinNoise[index] += smoothNoiseList[i][index] * amplitude;
-                }
-            }
-        }
-    
-        for (let i = 0; i < perlinNoise.length; ++i) {
-            perlinNoise[i] /= totalAmplitude;
-        }
-    
-        return perlinNoise;
-    }
-
-    isNeighbor(centerKey1, centerKey2) {
-        var q = this.quadrant * 2;
-        const [x1, y1] = centerKey1.split("_").map(Number);
-        const [x2, y2] = centerKey2.split("_").map(Number);
-        return Math.abs(x1 - x2) <= q && Math.abs(y1 - y2) <= q;
     }
 
     generatePerlinNoise(options) {
@@ -2266,166 +2034,6 @@ class Terrain {
         return noise.map(v => v * Math.random());
     }
 
-    generateRandomWoodsTerrain() {
-        const width = VM.map[VM.user.level].width;
-        const height = VM.map[VM.user.level].height;
-        const terrain = new Array(width * height).fill(0);
-        
-        // Step 1: Initialize with random seeds for groves
-        const numSeeds = Math.floor(width * height * 0.005); // 0.5% of the area for fewer, larger groves
-        for (let i = 0; i < numSeeds; i++) {
-            const x = Math.floor(Math.random() * width);
-            const y = Math.floor(Math.random() * height);
-            terrain[y * width + x] = 1;
-        }
-        
-        // Step 2: Grow groves using cellular automata
-        const iterations = 6; // Increased iterations for larger groves
-        for (let iter = 0; iter < iterations; iter++) {
-            const newTerrain = [...terrain];
-            for (let y = 0; y < height; y++) {
-                for (let x = 0; x < width; x++) {
-                    const neighbors = this.countNeighbors(terrain, x, y, width, height);
-                    const i = y * width + x;
-                    if (terrain[i] === 0 && neighbors >= 1 && Math.random() < 0.6) {
-                        newTerrain[i] = 1;
-                    }
-                }
-            }
-            terrain.splice(0, terrain.length, ...newTerrain);
-        }
-        
-        // Step 3: Create distance field for smooth transitions
-        const distanceField = this.createDistanceField(terrain, width, height);
-        
-        // Step 4: Generate final terrain values with rolling hills
-        const maxDistance = Math.max(...distanceField);
-        return terrain.map((value, i) => {
-            const normalizedDistance = distanceField[i] / maxDistance;
-            
-            // Use a sine function to create rolling hills
-            const baseElevation = 0.3 + 0.4 * Math.sin(normalizedDistance * Math.PI);
-            
-            if (value === 1) {
-                // Grove: Higher elevation with some variation
-                return baseElevation + 0.2 + Math.random() * 0.1;
-            } else {
-                // Meadow: Lower elevation with gentle slopes
-                return baseElevation + Math.random() * 0.05;
-            }
-        });
-    }
-
-    generateStructuredTerrain(centerX = 0, centerZ = 0, edges = null) {
-        const width = VM.map[VM.user.level].width;
-        const height = VM.map[VM.user.level].height;
-        const terrain = new Array(width * height);
-        
-        // Step 1: Divide the terrain into regions
-        const regions = this.divideIntoRegions(width, height);
-        
-        // Step 2: Assign base elevations to regions
-        const baseElevations = {
-            'high': 0.7,
-            'medium': 0.5,
-            'low': 0.3
-        };
-        
-        // Step 3: Generate Perlin noise
-        const noise = this.generatePerlinNoise(width, height);
-        
-        // Step 4: Combine regions with Perlin noise
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                const i = y * width + x;
-                const region = regions[y][x];
-                const baseElevation = baseElevations[region];
-                const noiseValue = noise[i];
-                
-                // Combine base elevation with noise
-                terrain[i] = baseElevation + noiseValue * 0.2; // Adjust 0.2 to control noise influence
-            }
-        }
-        
-        return terrain;
-    }
-    
-    divideIntoRegions(width, height) {
-        const regions = Array(height).fill().map(() => Array(width).fill('medium'));
-        
-        // Simple division into three vertical strips
-        const thirdWidth = Math.floor(width / 3);
-        
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                if (x < thirdWidth) {
-                    regions[y][x] = 'low';
-                } else if (x >= 2 * thirdWidth) {
-                    regions[y][x] = 'high';
-                }
-            }
-        }
-        
-        return regions;
-    }
-    
-    generateValleyTerrain() {
-        const width = VM.map[VM.user.level].width;
-        const height = VM.map[VM.user.level].height;
-        const terrain = new Array(width * height).fill(0);
-        
-        // Step 1: Initialize with random seeds for groves
-        const numSeeds = Math.floor(width * height * 0.005); // 0.5% of the area for fewer, larger groves
-        for (let i = 0; i < numSeeds; i++) {
-            const x = Math.floor(Math.random() * width);
-            const y = Math.floor(Math.random() * height);
-            terrain[y * width + x] = 1;
-        }
-        
-        // Step 2: Grow groves using cellular automata
-        const iterations = 6;
-        for (let iter = 0; iter < iterations; iter++) {
-            const newTerrain = [...terrain];
-            for (let y = 0; y < height; y++) {
-                for (let x = 0; x < width; x++) {
-                    const neighbors = this.countNeighbors(terrain, x, y, width, height);
-                    const i = y * width + x;
-                    if (terrain[i] === 0 && neighbors >= 1 && Math.random() < 0.6) {
-                        newTerrain[i] = 1;
-                    }
-                }
-            }
-            terrain.splice(0, terrain.length, ...newTerrain);
-        }
-        
-        // Step 3: Create distance field for smooth transitions
-        const distanceField = this.createDistanceField(terrain, width, height);
-        
-        // Step 4: Generate final terrain values with rolling hills and valley incline
-        const maxDistance = Math.max(...distanceField);
-        return terrain.map((value, i) => {
-            const x = i % width;
-            const y = Math.floor(i / width);
-            const normalizedDistance = distanceField[i] / maxDistance;
-            
-            // Create valley incline using sine waves
-            const valleyIncline = Math.sin(x / width * Math.PI) * Math.sin(y / height * Math.PI);
-            
-            // Use a sine function to create rolling hills
-            const baseElevation = 0.3 + 0.4 * Math.sin(normalizedDistance * Math.PI);
-            
-            // Combine rolling hills with valley incline
-            const combinedElevation = baseElevation + 0.3 * valleyIncline;
-            
-            if (value === 1) {
-                // Grove: Higher elevation with some variation
-                return combinedElevation + 0.2 + Math.random() * 0.1;
-            } else {
-                // Meadow: Lower elevation with gentle slopes
-                return combinedElevation + Math.random() * 0.05;
-            }
-        });
-    }
 
     countNeighbors(grid, x, y, width, height) {
         let count = 0;
@@ -2440,103 +2048,12 @@ class Terrain {
         return count;
     }
     
-    createDistanceField(terrain, width, height) {
-        const distanceField = new Array(width * height).fill(Infinity);
-        const queue = [];
-        
-        // Initialize distance field
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                const i = y * width + x;
-                if (terrain[i] === 1) {
-                    distanceField[i] = 0;
-                    queue.push([x, y]);
-                }
-            }
-        }
-        
-        // Flood fill to calculate distances
-        while (queue.length > 0) {
-            const [x, y] = queue.shift();
-            const currentDist = distanceField[y * width + x];
-            
-            for (let dy = -1; dy <= 1; dy++) {
-                for (let dx = -1; dx <= 1; dx++) {
-                    if (dx === 0 && dy === 0) continue;
-                    const nx = (x + dx + width) % width;
-                    const ny = (y + dy + height) % height;
-                    const ni = ny * width + nx;
-                    const newDist = currentDist + Math.sqrt(dx*dx + dy*dy);
-                    
-                    if (newDist < distanceField[ni]) {
-                        distanceField[ni] = newDist;
-                        queue.push([nx, ny]);
-                    }
-                }
-            }
-        }
-        
-        return distanceField;
-    }
-
+  
     interpolate(x0, x1, alpha) {
         return x0 * (1 - alpha) + alpha * x1;
     }
     
-    findClusters(triangles = []) {
-        const clusters = [];
-        const visited = new Array(triangles.length).fill(false);
-
-        function shareEdge(triangle1, triangle2) {
-            triangle1 = triangle1.triangle
-            triangle2 = triangle2.triangle
-            const edges1 = [
-                [triangle1.a, triangle1.b],
-                [triangle1.b, triangle1.c],
-                [triangle1.c, triangle1.a]
-            ];
-            const edges2 = [
-                [triangle2.a, triangle2.b],
-                [triangle2.b, triangle2.c],
-                [triangle2.c, triangle2.a]
-            ];
-            for (let edge1 of edges1) {
-                for (let edge2 of edges2) {
-                    if (
-                        (edge1[0].equals(edge2[0]) && edge1[1].equals(edge2[1])) ||
-                        (edge1[0].equals(edge2[1]) && edge1[1].equals(edge2[0]))
-                    ) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        function dfs(index, cluster) {
-            visited[index] = true;
-            cluster.push(triangles[index]);
-
-            for (let i = 0; i < triangles.length; i++) {
-                if (!visited[i] && shareEdge(triangles[index], triangles[i])) {
-                    dfs(i, cluster);
-                }
-            }
-        }
-
-        for (let i = 0; i < triangles.length; i++) {
-            if (!visited[i]) {
-                const cluster = [];
-                dfs(i, cluster);
-                clusters.push(cluster);
-            }
-        }
-
-        return clusters;
-    }
-
-
-
+ 
     shareEdge(triangle1, triangle2) {
         triangle1 = triangle1.triangle
         triangle2 = triangle2.triangle
@@ -2574,36 +2091,6 @@ class Terrain {
         }
     }
 
-    createBufferGeometryFromCluster(cluster) {
-        const vertices = [];
-        const indices = [];
-        const uvs = [];
-
-        cluster.forEach((triangle, index) => {
-            triangle = triangle.triangle
-            const startIndex = vertices.length / 3;
-            vertices.push(
-                triangle.a.x, triangle.a.y, triangle.a.z,
-                triangle.b.x, triangle.b.y, triangle.b.z,
-                triangle.c.x, triangle.c.y, triangle.c.z
-            );
-            uvs.push(
-                0, 0,
-                1, 0,
-                1, 1
-            );
-            indices.push(startIndex, startIndex + 1, startIndex + 2);
-        });
-
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-        geometry.setIndex(indices);
-        geometry.computeVertexNormals();
-        geometry.computeBoundingBox()
-
-        return geometry;
-    }
 
     clusterCliffs() {
         const clusters = [];
@@ -2651,6 +2138,12 @@ class Terrain {
                     b.x, b.y, b.z,
                     c.x, c.y, c.z
                 ]);
+                const uvs = new Float32Array([
+                    0, 0,  // UV for vertex a
+                    1, 0,  // UV for vertex b
+                    0.5, 1 // UV for vertex c (or adjust to your triangle size)
+                ]);
+
 
                 // Fix: Reverse the order of the cross product to flip the normal
                 const edge1 = new THREE.Vector3().subVectors(c, a);  // Use c - a instead of b - a
@@ -2667,19 +2160,17 @@ class Terrain {
                 // Set position and normal attributes for the geometry
                 geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
                 geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+                geometry.setAttribute('uvs', new THREE.BufferAttribute(uvs, 3));
 
                 geometry.computeVertexNormals();
 
                 // Load the texture for the cliff triangle
-                const texture = new THREE.TextureLoader().load("/images/rockwall-2.jpg", (texture) => {
-                    texture.wrapS = THREE.RepeatWrapping;
-                    texture.wrapT = THREE.RepeatWrapping;
-                    texture.repeat.set(4, 4); // Adjust the tiling for the texture
-                });
+                
 
                 // Create the material with the texture
                 const material = new THREE.MeshStandardMaterial({
-                    map: texture,
+                    // map: rockwallTexture,
+                    color: 'gray',
                     side: THREE.DoubleSide,
                     wireframe: false
                 });
@@ -2701,93 +2192,10 @@ class Terrain {
                 scene.add(mesh);
             });
         });
-
-
-
-
     }
 
-
-    clusterGrounds() {
-        var meshes = [];
-        const groundClusters = this.findClusters(this.ground);
-        groundClusters.forEach(cluster => {
-            const geometry = createBufferGeometryFromCluster(cluster);
-            const material = new THREE.MeshStandardMaterial({
-            color: 'lawngreen',
-                side: THREE.DoubleSide
-            });
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.receiveShadow = true;
-            mesh.castShadow = true;
-            meshes.push(mesh);
-        });
-        return meshes;
-    }
-
-    getBarycentricCoordinates(p, triangle) {
-        const v0 = new THREE.Vector3().subVectors(triangle.b, triangle.a);
-        const v1 = new THREE.Vector3().subVectors(triangle.c, triangle.a);
-        const v2 = new THREE.Vector3().subVectors(p, triangle.a);
-
-        const d00 = v0.dot(v0);
-        const d01 = v0.dot(v1);
-        const d11 = v1.dot(v1);
-        const d20 = v2.dot(v0);
-        const d21 = v2.dot(v1);
-
-        const denom = d00 * d11 - d01 * d01;
-        const v = (d11 * d20 - d01 * d21) / denom;
-        const w = (d00 * d21 - d01 * d20) / denom;
-        const u = 1.0 - v - w;
-
-        return [u, v, w];  // Return the barycentric weights for the three vertices
-    }  
-
-    findNearestTerrainCenters(position) {
-        const roundedX = Math.round(position.x / this.quadrant) * this.quadrant;
-        const roundedZ = Math.round(position.z / this.quadrant) * this.quadrant;
-        
-        // Calculate distances to the 4 nearest centers
-        const centers = [
-            {x: roundedX, y: 0, z: roundedZ},                           // Center
-            {x: roundedX - this.quadrant * 2, y: 0, z: roundedZ},       // Left
-            {x: roundedX + this.quadrant * 2, y: 0, z: roundedZ},       // Right
-            {x: roundedX, y: 0, z: roundedZ - this.quadrant * 2},       // Top
-            {x: roundedX, y: 0, z: roundedZ + this.quadrant * 2},       // Bottom
-            {x: roundedX - this.quadrant * 2, y: 0, z: roundedZ - this.quadrant * 2}, // Top-Left
-            {x: roundedX + this.quadrant * 2, y: 0, z: roundedZ - this.quadrant * 2}, // Top-Right
-            {x: roundedX - this.quadrant * 2, y: 0, z: roundedZ + this.quadrant * 2}, // Bottom-Left
-            {x: roundedX + this.quadrant * 2, y: 0, z: roundedZ + this.quadrant * 2}  // Bottom-Right
-        ];
-
-        for (var i = 0; i < centers.length; i++) {
-            // var pillarGeometry = new THREE.CylinderGeometry(1, 1, 32, 32);
-            // var pillarMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-            // var pillar = new THREE.Mesh(pillarGeometry, pillarMaterial);
-            // pillar.position.set(centers[i].x, centers[i].y, centers[i].z);
-            // centers[i] = { 
-            //     center: new THREE.Vector3(centers[i].x, centers[i].y, centers[i].z), 
-            //     pillar 
-            // }
-            // scene.add(pillar);
-           
-        }
-
-        this.surroundingCenters = centers;
-        
-        return centers;
-    }
-    
-    getDirectionFromCurrent(current, target) {
-        if (target.x > current.x) return 'right';
-        if (target.x < current.x) return 'left';
-        if (target.z > current.z) return 'top';
-        if (target.z < current.z) return 'bottom';
-        return 'none'; // Should never happen if current !== target
-    }
-
-    updateVisibleTrianglesAndClusters(sopCenter) {
+    updateTerrain() {
+        var sopCenter = user.camera.position
         // Helper function to determine if a point is within the SOP
         function isInSOP(point, sopCenter, sopRadius) {
             const dx = point.x - sopCenter.x;
@@ -2798,24 +2206,24 @@ class Terrain {
         }
 
         // Remove triangles outside the SOP from the scene
-        VM.map[VM.user.level].trees.forEach((tree) => {
-            if (tree.foliage.parent && !isInSOP(tree.foliage.position, sopCenter, VM.map[VM.user.level].sop.trees)) {
+        this.trees.forEach((tree) => {
+            if (tree.foliage.parent && !isInSOP(tree.foliage.position, sopCenter, this.sop.trees)) {
                 scene.remove(tree.trunk);
                 scene.remove(tree.foliage);
-            } else if (!tree.foliage.parent && isInSOP(tree.foliage.position, sopCenter, VM.map[VM.user.level].sop.trees)) {
+            } else if (!tree.foliage.parent && isInSOP(tree.foliage.position, sopCenter, this.sop.trees)) {
                 scene.add(tree.trunk);
                 scene.add(tree.foliage);
             }
         });
 
         // Remove triangles outside the SOP from the scene
-        VM.map[VM.user.level].grasses.forEach((grass) => {
+        this.grasses.forEach((grass) => {
             var mesh = grass.mesh
             var pos = getInstancePosition(mesh, 0);
 
-            if (mesh.parent && !isInSOP(pos, sopCenter, VM.map[VM.user.level].sop.grasses)) {
+            if (mesh.parent && !isInSOP(pos, sopCenter, this.sop.grasses)) {
                 scene.remove(mesh);
-            } else if (!mesh.parent && isInSOP(pos, sopCenter, VM.map[VM.user.level].sop.grasses)) {
+            } else if (!mesh.parent && isInSOP(pos, sopCenter, this.sop.grasses)) {
                 scene.add(mesh);
             }
         });
@@ -2964,13 +2372,12 @@ class Terrain {
         bladeGeometry.computeVertexNormals();
         
         const material = new THREE.MeshStandardMaterial({
-            // color: new THREE.Color("lawngreen"),
-            map: this.grassTexture,
+            color: 'lawngreen',
+            // color: new THREE.Color(this.Grass[Math.floor(Math.random() * this.Grass.length)]),
+            // map: this.grassTexture,
             side: THREE.DoubleSide,
-            transparent: true,
-            opacity: 1,
-            roughness: 0.8,  // Makes the surface more diffuse
-            metalness: 0.0,  // Non-metallic surface
+            transparent: false,
+            opacity: 1
         });
         
 
@@ -3343,21 +2750,16 @@ class UserController {
 
         // Apply movement after collision handling
         this.camera.position.add(combinedMovement);
-
-        this.updateBoundingBox();        
+     
 
     }
-
-        // Main collision handler
     
     handleCollision() {
-        // Define the camera's bounding box (assuming the camera has a width, height, and depth)
         const cameraBox = new THREE.Box3().setFromCenterAndSize(
             this.camera.position.clone(),
             new THREE.Vector3(.5, 1.2, .2)  // Adjust based on camera size
         );
 
-        // Define the list of directions (down, up, forward, backward, left, right, and diagonals)
         const directions = [
             new THREE.Vector3(0, -1, 0),   // Down
             new THREE.Vector3(0, 1, 0),    // Up
@@ -3372,15 +2774,20 @@ class UserController {
         ];
 
 
+
+
         for (const direction of directions) {
-            // Create a ray from the camera's position in the given direction
             const ray = new THREE.Ray(this.camera.position.clone(), direction.clone().normalize());
+            const raycaster = new THREE.Raycaster();
+
+            // Set the raycaster's origin to the camera's position and direction
+            raycaster.set(this.camera.position.clone(), direction.clone().normalize());
+
 
             let closestIntersection = null;
-            let minDistance = 1;
+            let minDistance = .5;
             let intersectionNormal = null;
 
-            // Loop through all the terrain cliffs (assuming `terrain.cliffs` holds the geometries)
             terrain.cliffs.forEach(cliffTriangle => {
 
                 // Each cliffTriangle already contains vertices a, b, c
@@ -3406,11 +2813,7 @@ class UserController {
                 }
             });
 
-            // If a closest intersection was found, adjust the camera's position
             if (closestIntersection) {
-                // console.log('Intersection detected:', closestIntersection);
-
-                // Check if the camera is on the negative side of the normal
                 const cameraToIntersection = new THREE.Vector3().subVectors(closestIntersection.point, this.camera.position);
                 const dotProduct = cameraToIntersection.dot(closestIntersection.normal);
                 const offset = user.wS * 2;  // Adjust based on your needs
@@ -3422,69 +2825,26 @@ class UserController {
                 this.camera.velocity.y = 0;
                 this.isJumping = false;
 
-
-
-               // Call asdwFromNormalAndDistance with the correct parameters
-                const asdw = asdwFromNormalAndDistance(
-                    closestIntersection.normal, 
-                    this.camera.position.clone,  // Use the first normal (assuming a flat surface)
-                    closestIntersection.point       // Intersection point
-                );
-
-                // Reset other keys not in the result
-                const allKeys = ['a', 's', 'd', 'w'];
-                for (let key of allKeys) {
-                    if (asdw.includes(key.toUpperCase())) {
-                        user['_' + key] = true;  // Set movement flag to false if the key is not in asdw
-                        setTimeout(() => {
-                            user['_' + key] = false
-                        }, 300)
-                    } else {
-                        user['_' + key] = false
-                    }
-                }
-
-
                 // Break after handling the closest intersection for this direction
                 break;
             }
 
-            //////// Additional check for castle parts
-
             closestIntersection = { point: null };
-            minDistance = 1;
             intersectionNormal = null;
-
-            // Loop through all the terrain cliffs (assuming `terrain.cliffs` holds the geometries)
             castle.parts.forEach(part => {
-                if (!part.triangle) return
-
-                // Each partTriangle already contains vertices a, b, c
-                const a = part.triangle.a;
-                const b = part.triangle.b;
-                const c = part.triangle.c;
-
-                // Create the intersection point vector
-                const intersectionPoint = new THREE.Vector3();
-
+                
                 // Use intersectTriangle to test for intersection
-                const intersects = ray.intersectTriangle(a, b, c, false, intersectionPoint);
+                const intersects = raycaster.intersectObject(part, true);
 
-                if (intersects) {
+                if (intersects.length) {
                     // Calculate the distance from the camera to the intersection point
-                    const distance = this.camera.position.distanceTo(intersectionPoint);
+                    const distance = this.camera.position.distanceTo(intersects[0].point);
 
                     // Keep track of the closest intersection
                     if (distance < minDistance) {
-                        // Calculate the normal of the triangle
-                        const edge1 = new THREE.Vector3().subVectors(b, a);
-                        const edge2 = new THREE.Vector3().subVectors(c, a);
-                        intersectionNormal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
-
                         minDistance = distance;
-                        closestIntersection.point = intersectionPoint.clone();
-                        closestIntersection.triangle = part.triangle
-                        closestIntersection.normal = intersectionNormal
+                        closestIntersection.point = intersects[0].point.clone();
+                        closestIntersection.normal = intersects[0].normal
 
                         
                     }
@@ -3493,44 +2853,30 @@ class UserController {
 
             // If a closest intersection was found, adjust the camera's position
             if (closestIntersection.point && closestIntersection.normal) {
-                // console.log('Intersection detected:', closestIntersection.point);
+                // Add a small helper line to visualize the normal at the point of intersection
+                const normalHelper = new THREE.ArrowHelper(
+                    closestIntersection.normal.clone(),  // Direction
+                    closestIntersection.point.clone(),   // Starting point
+                    1,  // Length of arrow
+                    0xff0000  // Color (red)
+                );
+                scene.add(normalHelper);
+
 
                 // Check if the camera is on the negative side of the normal
                 const cameraToIntersection = new THREE.Vector3().subVectors(closestIntersection.point, this.camera.position);
                 const dotProduct = cameraToIntersection.dot(closestIntersection.normal);
-                const offset = user.wS * 1.5;  // Adjust based on your needs
+                const offset = user.wS * 2;  // Adjust based on your needs
                 if (dotProduct < 0) {
                     // Camera is on the negative side of the normal, move it to the positive side
                     
-                    const normalOffset = intersectionNormal.clone().multiplyScalar(offset);
+                    const normalOffset = closestIntersection.normal.clone().multiplyScalar(offset);
                     this.camera.position.add(normalOffset);
                     // console.log('Camera moved to the positive side of the normal.');
                 } else {
                     // Camera is on the positive side, handle the normal case (like preventing it from falling through terrain)
-                    this.camera.position.y = Math.max(this.camera.position.y, closestIntersection.y + offset);
+                    this.camera.position.y = Math.max(this.camera.position.y, closestIntersection.point.y + offset);
                 }
-
-
-               // Call asdwFromNormalAndDistance with the correct parameters
-                const asdw = asdwFromNormalAndDistance(
-                    closestIntersection.normal,
-                    this.camera.position.clone(),
-                    closestIntersection.point
-                );
-
-                // Reset other keys not in the result
-                const allKeys = ['a', 's', 'd', 'w'];
-                for (let key of allKeys) {
-                    if (asdw.includes(key.toUpperCase())) {
-                        user['_' + key] = true;  // Set movement flag to false if the key is not in asdw
-                        setTimeout(() => {
-                            user['_' + key] = false
-                        }, 300)
-                    } else {
-                        user['_' + key] = false
-                    }
-                }
-
 
                 break;
             }
@@ -3600,8 +2946,6 @@ class UserController {
             this.camera.position.y = downIntersection.point.y + 1;
             this.camera.velocity.y = 0;
             this.isJumping = false;
-
-            this.updateTerrain(downIntersection);
         }
 
         // Ceiling collision detection
@@ -3645,7 +2989,6 @@ class UserController {
             this.camera.velocity.y = 0;
             this.isJumping = false;
 
-            this.updateTerrain(intersection);
         }
         
         // Cast a ray upwards to detect ceilings
@@ -3669,16 +3012,7 @@ class UserController {
     // Helper function to find the closest intersection with terrain
     findClosestIntersection(raycaster) {
         let closestIntersection = null;
-        let minDistance = 3;
-
-        // Check intersections with terrain meshes
-        // for (let mesh of this.terrain.meshes) {
-        //     const intersects = raycaster.intersectObject(mesh, true);
-        //     if (intersects.length > 0 && intersects[0].distance < minDistance) {
-        //         closestIntersection = intersects[0];
-        //         minDistance = intersects[0].distance;
-        //     }
-        // }
+        let minDistance = 1;
 
         for (let m of scene.children) {
             var mesh = m.mesh ? m.mesh : m
@@ -3689,54 +3023,7 @@ class UserController {
             }
         }
 
-        // Check intersections with castle parts
-        // for (let part of window.castle.parts) {
-        //     if (!part) continue
-        //    try {
-        //      const intersects = raycaster.intersectObject(part, true);
-        //     if (intersects.length > 0 && intersects[0].distance < minDistance) {
-        //         closestIntersection = intersects[0];
-        //         minDistance = intersects[0].distance;
-        //     }
-        //     } catch (e) {
-        //         debugger
-        //     }
-        // }
-
         return closestIntersection;
-    }
-
-
-    // Update terrain after collision or landing
-    updateTerrain(intersection) {
-        const terrainKey = intersection.object.centerKey; // Assuming each terrain mesh has a centerKey
-
-        if (terrainKey && this.centerKey !== terrainKey) {
-            let center = terrainKey.split("_").map(Number);
-            this.centerKey = terrainKey;
-            this.terrain.center = new THREE.Vector3(center[0], 0, center[1]);
-            this.terrain.surroundingCenters = [];
-            this.terrain.findNearestTerrainCenters(this.terrain.center);
-        }
-    }
-
-
-
-    // Ensure the wireframe stays in sync with the bounding box
-    updateBoundingBox() {
-        // // Set the bounding box based on the this.camera's current position
-        // this.cameraBoundingBox.setFromCenterAndSize(
-        //     this.camera.position,
-        //     new THREE.Vector3(1, 2, 1) // Adjust size if needed
-        // );
-        
-        // // Update the wireframe box position and size to match the bounding box
-        // const center = this.cameraBoundingBox.getCenter(new THREE.Vector3());
-        // const size = this.cameraBoundingBox.getSize(new THREE.Vector3());
-
-        // wireframeBox.position.copy(center);
-        // wireframeBox.rotation.copy(this.camera.rotation);
-        // wireframeBox.scale.set(size.x, size.y, size.z);
     }
 }
 
@@ -3765,7 +3052,7 @@ class View {
 
         window.user = new UserController(terrain);
         window.sky = new Sky(window.user);
-        window.terrain.setSun(window.sky.sun);
+
         window.terrain.setCamera(window.user.camera);
 
         // Call this once to initialize wave parameters for all triangles
@@ -3788,21 +3075,24 @@ class View {
         // // [Timeline("Start")]
         window.Animate = function() {
             window.requestAnimationFrame(Animate);
+
             window.sky.update()
+            window.terrain.updateTerrain(window.user.camera.position.clone)
+
             window.user.handleCollision()
             window.user.handleMovement()
            
-
-            var newTerrain = window.terrain.updateTerrain(window.user.camera.position);
+            composer.render();
 
             window.renderer.render(window.scene, window.user.camera);
 
 
            devview.innerHTML = `<pre style="background: rgba(0,0,0,0.6); color: white">
-                a: ${user.a}
-                s: ${user.s}
-                d: ${user.d}
-                w: ${user.w}
+    x: ${user.camera.position.x.toFixed(2)}, y: ${user.camera.position.y.toFixed(2)}, z: ${user.camera.position.z.toFixed(2)}
+    a: ${user.a}
+    s: ${user.s}
+    d: ${user.d}
+    w: ${user.w}
            </pre>`
 
 
@@ -3828,7 +3118,6 @@ class View {
         });
         window.wireframeBox = new THREE.Mesh(boxGeometry, wireframeMaterial);
 
-        window.terrain.findNearestTerrainCenters(terrain.center);
 
         // Add the wireframe to the scene
         window.scene.add(wireframeBox);
