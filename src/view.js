@@ -125,12 +125,9 @@ function asdwFromNormalAndDistance(normal, cameraPosition, intersectionPoint) {
     return movementKeys;
 }
 
-
-
 function mapToRange(normalizedValue, minNew, maxNew) {
     return minNew + normalizedValue * (maxNew - minNew);
 }
-
 
 function randomInRange(from, to, startDistance = 0) {
    const min = Math.min(from, to) + startDistance;
@@ -138,7 +135,6 @@ function randomInRange(from, to, startDistance = 0) {
    const val = Math.random() * (max - min) + min;
    return val;
 }
-
 
 class GrassPatch {
     constructor(initobject) {
@@ -183,7 +179,6 @@ function Triangle(vertices, a, b, c, terrainWidth, terrainHeight) {
     };
 }
 
-
 function getInstancePosition(instancedMesh, index) {
     const matrix = new THREE.Matrix4();
     instancedMesh.getMatrixAt(index, matrix);  // Get the transformation matrix for the instance
@@ -215,7 +210,6 @@ function colorshade(rgb) {
         return `rgb(${red}, ${green}, ${blue})`;
     }
 }
-
 
 class Sky {
 
@@ -262,22 +256,35 @@ class Sky {
 
         this.createDome();
 
-        for (var i = 0; i < 29; i++) {
-            var cloud = this.MakeCloud()
-            cloud.position.y += randomInRange(50, 250)
-            cloud.position.x -= randomInRange(-50, 50)
-            cloud.position.z -= randomInRange(-50, 50)
+        // for (var i = 0; i < 29; i++) {
+        //     var cloud = this.MakeCloud()
+        //     cloud.position.y += randomInRange(50, 250)
+        //     cloud.position.x -= randomInRange(-50, 50)
+        //     cloud.position.z -= randomInRange(-50, 50)
 
-            scene.add(cloud)
-        }
+        //     scene.add(cloud)
+        // }
 
     }
 
     createDome() {
-        var gridSize = 90; // Larger grid size for more detail at the horizon
+        var gridSize = 90;  // Larger grid size for more detail at the horizon
         var radius = this.sceneRadius;
+        var points = [];  // Array to hold positions for all points in the dome
+        var colors = [];  // Array to store color for each point
+        var thetaPhiArray = [];  // Array to store the theta and phi angles for each point
         var maxdist = 0;
-        var highestY = 0
+        var highestY = 0;
+
+        // Material for the points
+        var pointMaterial = new THREE.PointsMaterial({
+            size: 50,  // Size of each point
+            vertexColors: true,  // Allow different colors per vertex (point)
+            transparent: false,
+            opacity: 0.8  // Set initial opacity for points
+        });
+
+        // Loop through to calculate points in spherical coordinates
         for (var i = 0; i < gridSize; i++) {
             for (var j = 0; j < gridSize; j++) {
                 // Calculate spherical coordinates
@@ -289,54 +296,154 @@ class Sky {
                 var z = radius * Math.cos(phi);
                 var y = radius * Math.sin(phi) * Math.sin(theta);
 
-                if (y > highestY) highestY = y
+                if (y > highestY) highestY = y;
 
-                // For the horizon, create smaller tiles and blend colors
-                var tileSize = 150; // Smaller tiles
-                if (y <= 1) { // Near horizon
-                    tileSize /= 3
-                }
-                var planeGeometry = new THREE.PlaneGeometry(tileSize, tileSize);
-                
                 // Lerp colors from sky blue to white based on the height (closer to horizon = more white)
-                var horizonFactor = Math.abs(y / radius); // 0 at horizon, 1 at top
-                var skyColor = new THREE.Color(0x00f0ff); // Sky blue color
-                var white = new THREE.Color(0xffffff); // White at horizon
-                var color = new THREE.Color().lerpColors(white, skyColor, horizonFactor); // Interpolate
+                var horizonFactor = Math.abs(y / radius);  // 0 at horizon, 1 at top
+                var skyColor = new THREE.Color(0x00f0ff);  // Sky blue color
+                var white = new THREE.Color(0xffffff);  // White at horizon
+                var color = new THREE.Color().lerpColors(white, skyColor, horizonFactor);  // Interpolate color
 
-                var planeMaterial = new THREE.MeshBasicMaterial({
-                    color: color,
-                    transparent: true,
-                    opacity: 0.7,
-                    side: THREE.DoubleSide
-                });
+                // Add position to points array
+                points.push(x, y, z);
 
-                // If near the horizon, add cloud texture
-                // if (y < radius * 0.08) { // Near horizon
-                //     planeMaterial.map = new THREE.TextureLoader().load('/images/cloud_texture.png'); // Cloud texture
-                //     planeMaterial.transparent = true;
-                // }
+                // Add color to the colors array (r, g, b values)
+                colors.push(color.r, color.g, color.b);
 
-                var plane = new THREE.Mesh(planeGeometry, planeMaterial);
-                plane.position.set(x, y , z);
-                plane.rotation.y = plane.rotation.y >= this.full_circle ? 0 : plane.rotation.y += 0.05;
-                plane.lookAt(window.user.camera.position.x, user.camera.position.y, user.camera.position.z);
-                
-                // Store theta and phi for further use in lighting updates
-                plane.theta = theta;
-                plane.phi = phi;
+                // Store theta and phi for use in lighting updates later
+                thetaPhiArray.push({ theta: theta, phi: phi });
 
-                this.sky.push(plane);
-
-                if (z > maxdist) z = maxdist;
-
-                scene.add(plane);
+                if (z > maxdist) maxdist = z;
             }
         }
 
-        this.sun.position.y = highestY
-        this.sphere.position.y = highestY
-    }   
+        // Create buffer geometries to hold the positions and colors for the points
+        var geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+        // Store the theta and phi for each point inside the geometry
+        geometry.userData = { thetaPhiArray: thetaPhiArray };
+
+        // Create the points cloud and add it to the scene
+        var pointCloud = new THREE.Points(geometry, pointMaterial);
+        this.sky.push(pointCloud);  // Add the point cloud to the sky array for updates
+        scene.add(pointCloud);  // Add the point cloud to the scene
+    }
+
+
+
+    update() {
+        this.time += 0.0005;  // Control the speed of the sun's movement
+
+        // Sun's position: moving along the x and y axes while keeping z fixed at 0
+        var sunX = this.sceneRadius * Math.cos(this.time);  // Sun moves along the x-axis
+        var sunY = this.sceneRadius * Math.sin(this.time);  // Sun rises and falls along the y-axis
+        var sunZ = 0;  // Sun remains at z = 0
+
+        // Update sun and sphere positions based on this movement
+        this.sun.position.set(sunX, sunY, sunZ);
+        this.sphere.position.set(sunX, sunY, sunZ);  // Optional sphere for visualizing the sun
+
+        // Define the maximum distance from the sun where sunrise/sunset colors will be applied
+        var influenceRadius = this.sceneRadius * 0.3;  // Adjust this value to change how localized the effect is
+
+        // Define sunrise/sunset gradient colors
+        var sunriseColors = [
+            new THREE.Color(0xff4500),  // Red
+            new THREE.Color(0xffa500),  // Orange
+            new THREE.Color(0xffc0cb),  // Pink
+            new THREE.Color(0xffdab9),  // Peach/Sunset
+            new THREE.Color(0xdda0dd),  // Pale Violet
+            new THREE.Color(0xf0e68c)   // Light Yellow/Salmon
+        ];
+
+        // Loop through the sky (point cloud)
+        for (var i = 0; i < this.sky.length; i++) {
+            var pointCloud = this.sky[i];
+            var colors = pointCloud.geometry.attributes.color.array;
+            var thetaPhiArray = pointCloud.geometry.userData.thetaPhiArray;
+
+            // Loop through all points in the point cloud
+            for (var j = 0; j < thetaPhiArray.length; j++) {
+                var theta = thetaPhiArray[j].theta;
+                var phi = thetaPhiArray[j].phi;
+
+                // Convert theta/phi to Cartesian coordinates
+                var pointX = this.sceneRadius * Math.sin(phi) * Math.cos(theta);
+                var pointY = this.sceneRadius * Math.sin(phi) * Math.sin(theta);
+                var pointZ = this.sceneRadius * Math.cos(phi);
+
+                // Calculate the distance between the sun and the current point
+                var distanceToSun = Math.sqrt(
+                    Math.pow(pointX - sunX, 2) +
+                    Math.pow(pointY - sunY, 2) +
+                    Math.pow(pointZ - sunZ, 2)
+                );
+
+                // Calculate the angular difference between the sun and the point
+                var thetaDifference = Math.abs(theta);
+                var phiDifference = Math.abs(phi - Math.atan2(sunY, sunX));  // Adjusted for x-axis/y-axis movement
+
+                // Normalize the differences (wrap around at full circle)
+                thetaDifference = Math.min(thetaDifference, this.full_circle - thetaDifference);
+                phiDifference = Math.min(phiDifference, Math.PI - phiDifference);
+
+                // Calculate angular distance and intensity based on proximity to the sun
+                var angularDistance = thetaDifference + phiDifference;
+                var maxAngularDistance = Math.PI;
+                var intensity = 1 - (angularDistance / maxAngularDistance);  // Closer to the sun = higher intensity
+
+                // Define base sky colors
+                var nightColor = new THREE.Color(0x001a33);  // Dark blue for night sky
+                var dayColor = new THREE.Color(0x87ceeb);  // Light blue for day sky
+                var middayColor = new THREE.Color(0xffffff);  // Bright white for noon
+
+                var blendedColor;
+
+                // **Sun is above the horizon**
+                if (this.sun.position.y > 0) {
+                    // Apply sunrise/sunset effect if the point is within the sun's influence radius
+
+                    // AND the sun is near the horizon (y-position close to 0)
+                    if (distanceToSun < influenceRadius && Math.abs(this.sun.position.y) < 20) {
+                        // The sun is close to the horizon and we're near the sun, apply sunrise/sunset colors
+                        var horizonBlendFactor = distanceToSun / influenceRadius;  // Strongest effect near the sun
+                        var horizonBlendIndex = Math.floor(horizonBlendFactor * (sunriseColors.length - 1));
+
+                        // Interpolate between two sunrise/sunset colors based on horizon factor
+                        var colorStart = sunriseColors[horizonBlendIndex];
+                        var colorEnd = sunriseColors[Math.min(horizonBlendIndex + 1, sunriseColors.length - 1)];
+                        blendedColor = new THREE.Color().lerpColors(colorStart, colorEnd, horizonBlendFactor * intensity);
+
+                    } else if (Math.abs(this.sun.position.y) < 20) {
+                        // The sun is near the horizon but we're outside the influence radius
+                        var sunBlendFactor = Math.abs(sunY / 20);  // Strongest effect at horizon (y = 0)
+                        blendedColor = new THREE.Color().lerpColors(sunriseColors[0], dayColor, sunBlendFactor * intensity);
+
+                    } else {
+                        // Daytime sky: Bright white during noon, transitioning to blue
+                        blendedColor = new THREE.Color().lerpColors(middayColor, dayColor, intensity);
+                    }
+
+                } else {
+                    // **Sun is below the horizon (night or early morning)**
+                    var nightBlendFactor = Math.max(0, 1 - (Math.abs(sunY / 20)));  // Strongest effect near horizon
+
+                    // Apply night sky colors, blending to sunrise/sunset colors if near the horizon
+                    blendedColor = new THREE.Color().lerpColors(nightColor, sunriseColors[0], nightBlendFactor * intensity);
+                }
+
+                // Update colors in the buffer
+                colors[j * 3] = blendedColor.r;
+                colors[j * 3 + 1] = blendedColor.g;
+                colors[j * 3 + 2] = blendedColor.b;
+            }
+
+            // Ensure the color buffer is updated
+            pointCloud.geometry.attributes.color.needsUpdate = true;
+        }
+    }
 
 
     MakeCloud() {
@@ -403,77 +510,100 @@ class Sky {
     }
 
 
-
-
-
-    update() {
-        // this.time += 0.005;
-        var theta = this.full_circle * this.time;
-        var sunTheta = theta;  // Sun's azimuthal angle (around the dome horizontally)
-        var sunPhi = Math.PI / 2;  // Sun stays at the middle of the dome (hemisphere)
-
-        // // Update the sun's position (optional if you want to visualize it)
-        // var sunX = this.sceneRadius * Math.sin(sunPhi) * Math.cos(sunTheta);
-        // var sunY = this.sceneRadius * Math.sin(sunPhi) * Math.sin(sunTheta);
-        // var sunZ = this.sceneRadius * Math.cos(sunPhi);
-
-        // this.sun.position.set(sunX, sunY, sunZ);
-        // this.sphere.position.set(sunX, sunY, sunZ);
-
-        for (var i = 0; i < this.sky.length; i++) {
-            var skyTheta = this.sky[i].theta;  // Azimuthal angle of the plane
-            var skyPhi = this.sky[i].phi;      // Polar angle of the plane
-
-            // Calculate the angular difference between the sun and the plane
-            var thetaDifference = Math.abs(sunTheta - skyTheta);
-            var phiDifference = Math.abs(sunPhi - skyPhi);
-
-            // Normalize the differences (wrap around at full circle)
-            thetaDifference = Math.min(thetaDifference, this.full_circle - thetaDifference);
-            phiDifference = Math.min(phiDifference, Math.PI - phiDifference);
-
-            // Calculate intensity based on angular difference
-            var angularDistance = thetaDifference + phiDifference;
-            var maxAngularDistance = Math.PI;  // Max possible distance on the dome
-            var intensity = 1 - (angularDistance / maxAngularDistance);
-
-            // Clamp intensity between 0 and 1
-            intensity = Math.max(0, Math.min(1, intensity));
-
-            // Define the colors for the gradient (white near the sun, dark blue away)
-            var colorFar = new THREE.Color(0x00f0ff);  // Far color (dark blue)
-            var colorNear = new THREE.Color(0x00f0ff);
-
-            // Interpolate between the colors based on intensity
-            var color = new THREE.Color().lerpColors(colorFar, colorNear, intensity);
-
-
-
-            // Update the material color based on angular proximity to the sun
-            var horizonThreshold = this.sceneRadius * 0.15;  // Adjust based on where the horizon should be
-
-            if (Math.abs(this.sky[i].position.y) <= horizonThreshold) {
-                // Blend the color towards white near the horizon instead of hard-setting it
-                var horizonBlendFactor = Math.abs(this.sky[i].position.y) / horizonThreshold;
-                var blendedColor = new THREE.Color().lerpColors(color, new THREE.Color(0xffffff), 1 - horizonBlendFactor);
-                this.sky[i].material.color.copy(blendedColor);  // Blend towards white near the horizon
-            } else {
-                this.sky[i].material.color.copy(color);  // Use the interpolated color
-                this.sky[i].material.transparent = false;
-            }
-
-            if (this.sun.position.y < 0) {
-                this.sky[i].material.transparent = true;
-                this.sky[i].material.opacity = 0.1;
-            }
-
-            this.sky[i].material.needsUpdate = true;  // Ensure material is updated
-        }
-    }
-
-
+  
 }
 
+// Array to store each triangle's specific sine wave parameters for rotation
+var triangleRotationWaves = new Map();  // Could also use an array if easier
+
+// Initialize each triangle's wave parameters for rotation (frequency, phase)
+function initializeTriangleRotationWaves(triangleCount) {
+    for (let i = 0; i < triangleCount; i++) {
+        triangleRotationWaves.set(i, {
+            frequency: Math.random() * 0.1 + 0.05,  // Random frequency for rotation
+            phase: Math.random() * Math.PI * 2  // Random initial phase
+        });
+    }
+}
+
+function rotateAroundPoint(v, center, angle) {
+    var cosAngle = Math.cos(angle);
+    var sinAngle = Math.sin(angle);
+    var x = v.x - center.x;
+    var z = v.z - center.z;
+
+    // Rotate the vertex around the Y-axis (assuming water is horizontal)
+    var rotatedX = cosAngle * x - sinAngle * z;
+    var rotatedZ = sinAngle * x + cosAngle * z;
+
+    // Return the rotated vertex position, translating it back to the center point
+    return new THREE.Vector3(rotatedX + center.x, v.y, rotatedZ + center.z);
+}
+
+function UndulateWater(sunPositionX, sunPositionY, sunPositionZ) {
+    
+    var previousWaterColors = terrain.water.geometry.attributes.color.array;
+    var originalWaterPosition = terrain.water.geometry.attributes.position.array;
+    var time = performance.now() * 0.001;  // Time factor for animating the waves
+
+    // Update the y position of the water vertices (not moving them but keeping the rotation separate)
+    var waterVertices = terrain.water.geometry.attributes.position.array;
+    var colorVertices = terrain.water.geometry.attributes.color.array;
+    var sunPosition = new THREE.Vector3(sunPositionX, sunPositionY, sunPositionZ);
+
+    for (let i = 0; i < originalWaterPosition.length; i += 9) { // Loop over every triangle (3 vertices per triangle)
+        // Get the three vertices of the triangle
+        var v0 = new THREE.Vector3(originalWaterPosition[i], originalWaterPosition[i + 1], originalWaterPosition[i + 2]);
+        var v1 = new THREE.Vector3(originalWaterPosition[i + 3], originalWaterPosition[i + 4], originalWaterPosition[i + 5]);
+        var v2 = new THREE.Vector3(originalWaterPosition[i + 6], originalWaterPosition[i + 7], originalWaterPosition[i + 8]);
+
+        // Calculate the triangle center (used for rotation)
+        var triangleCenter = new THREE.Vector3().addVectors(v0, v1).add(v2).divideScalar(3);
+
+        // // Get the personal sine wave journey for rotation for this triangle
+        // let triangleIndex = i / 9;
+        // let rotationParams = triangleRotationWaves.get(triangleIndex);
+
+        // // Calculate the rotation angle for this triangle (based on its personal sine wave)
+        // var rotationAngle = Math.sin(time * rotationParams.frequency + rotationParams.phase) * Math.PI * randomInRange(0.0005, 0.05);  // Small rotation angle
+
+        // // Rotate the triangle vertices around their center
+        // v0 = rotateAroundPoint(v0, triangleCenter, rotationAngle);
+        // v1 = rotateAroundPoint(v1, triangleCenter, rotationAngle);
+        // v2 = rotateAroundPoint(v2, triangleCenter, rotationAngle);
+
+        // Recalculate the triangle normal after rotation
+        var edge1 = new THREE.Vector3().subVectors(v1, v0);
+        var edge2 = new THREE.Vector3().subVectors(v2, v0);
+        var newNormal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
+
+        // Calculate the direction to the sun
+        var sunDirection = new THREE.Vector3().subVectors(sunPosition, triangleCenter).normalize();
+
+        // Calculate the dot product to get the angle between the new normal and the sun direction
+        var dotProduct = newNormal.dot(sunDirection);
+        var colorFactor = (dotProduct + 1) / 2;  // Normalize to range 0 to 1
+
+        // Map colorFactor to a color (e.g., blue to white)
+        var color = new THREE.Color().setHSL(0.6, 1, colorFactor);  // HSL with hue 0.6 for blue
+
+        // Set the vertex color for each vertex in the triangle
+        for (let j = 0; j < 3; j++) {
+            var vertexIndex = i + (j * 3);  // Get the index of the vertex
+            colorVertices[vertexIndex] = color.r;
+            colorVertices[vertexIndex + 1] = color.g;
+            colorVertices[vertexIndex + 2] = color.b;
+        }
+
+        // Update the new rotated vertices in the waterVertices array
+        waterVertices[i] = v0.x; waterVertices[i + 1] = v0.y; waterVertices[i + 2] = v0.z;
+        waterVertices[i + 3] = v1.x; waterVertices[i + 4] = v1.y; waterVertices[i + 5] = v1.z;
+        waterVertices[i + 6] = v2.x; waterVertices[i + 7] = v2.y; waterVertices[i + 8] = v2.z;
+    }
+
+    terrain.water.geometry.attributes.position.needsUpdate = true;
+    terrain.water.geometry.attributes.color.needsUpdate = true;
+}
 
 function createBox(center, width, height, depth, map, rgb, meshkind) {
     const meshes = [];
@@ -577,8 +707,6 @@ function createBox(center, width, height, depth, map, rgb, meshkind) {
 
     return meshes;  // Return all created triangle meshes
 }
-
-
 
 class Castle {
     offsetY = 1.5
@@ -1162,11 +1290,7 @@ class Castle {
             }
         }
     }
-
-
 }
-
-
 
 class Terrain {
     // map
@@ -1355,8 +1479,6 @@ class Terrain {
                     }
 
 
-                   
-
                     let curveFactor = Math.cos(Math.random() * Math.PI); // Smooth cosine factor
                     let targetHeight = -50;
 
@@ -1364,55 +1486,55 @@ class Terrain {
                     v.y = curveFactor * (v.y - targetHeight) + targetHeight;
                 }
 
-                if ([v.x, v.y, v.z].some(isNaN)) {
-                    debugger; // Debugging to catch any NaN errors
-                }
-
                 vertices.push(v.x, v.y, v.z);  // Add to terrain vertices
             }
         }
 
-        var yLength = averageY.length
-        averageY = averageY.reduce((a, b) => a + b) / yLength
+        // var yLength = averageY.length
+        // averageY = averageY.reduce((a, b) => a + b) / yLength
 
         var xStep = (maxX - minX) / 300
         var zStep = (maxZ - minZ) / 300
 
-        freshwaterPond = []
+        // var theCove = []
+        var theCovesColors = []
         for (var x = minX - 10; x < maxX; x += xStep) {
-            for (var z = minZ; z < maxZ; z += zStep) {
-                var _y = averageY - 5
-                freshwaterPond.push(randomInRange(x - 1.5, x + 1.5), randomInRange(_y - 1.5, _y + 1.5), randomInRange(z -3.5, z + 3.5))
-                 
+            for (var z = minZ - 2; z < maxZ + 2; z += zStep) {
+                theCovesColors.push(0, randomInRange(0, 0.05), Math.random())
             }
         }
 
-
-
-        // Create geometry for the pond
-        var freshwaterPondGeometry = new THREE.BufferGeometry();
-        freshwaterPondGeometry.setAttribute(
-            'position', 
-            new THREE.Float32BufferAttribute(new Float32Array(freshwaterPond), 3) // 3 vertices per position
-        );
+        // var theCovesGeometry = new THREE.BufferGeometry();
+        // theCovesGeometry.setAttribute(
+        //     'position', 
+        //     new THREE.Float32BufferAttribute(new Float32Array(theCove), 3) // 3 vertices per position
+        // )
+       
+        var theCovesGeometry = new THREE.PlaneGeometry(maxX - minX, maxZ - minZ, 100, 100)
+        theCovesGeometry.setAttribute(
+            'color',
+            new THREE.Float32BufferAttribute(new Float32Array(theCovesColors), 3)
+        )
 
         // Create mesh for the pond
-        var freshwaterPondMesh = new THREE.Mesh(
-            freshwaterPondGeometry,
-            new THREE.MeshBasicMaterial({
-                color: new THREE.Color(0, .5, 1),  // Color of the pond
+        var TheCove = new THREE.Mesh(
+            theCovesGeometry,
+            new THREE.MeshStandardMaterial({
+                // vertexColors: true,
+                color: 'royalblue',
                 side: THREE.DoubleSide ,   // Double-sided for visibility from both sides
                 transparent: true,
-                opacity: 0.9
+                opacity: 0.85
             })
         );
 
-        freshwaterPond.receiveShadow = true
+        TheCove.rotation.x = Math.PI / 2
+        TheCove.position.set((maxX - minX) / 2, -5, 0)
 
-        // Add the pond to the scene
-        scene.add(freshwaterPondMesh);
+        TheCove.receiveShadow = true
+        scene.add(TheCove);
 
-        this.water = freshwaterPondMesh
+        this.water = TheCove
 
 
 
@@ -1425,9 +1547,7 @@ class Terrain {
 
                     if (sameX && sameZ && differentY) {
                         vertices[x2 + 1] = m.geometry.attributes.position.array[x1 + 1];
-
-                    } 
-                    else if (sameX && Math.abs(m.geometry.attributes.position.array[x1 + 2] - vertices[x2 + 2]) < 2) {
+                    } else if (sameX && Math.abs(m.geometry.attributes.position.array[x1 + 2] - vertices[x2 + 2]) < 2) {
                         vertices[x2 + 1] = m.geometry.attributes.position.array[x1 + 1];
                     } else if (sameZ && Math.abs(m.geometry.attributes.position.array[x1] - vertices[x2]) < 2) {
                         vertices[x2 + 1] = m.geometry.attributes.position.array[x1 + 1];
@@ -1437,7 +1557,7 @@ class Terrain {
         }
 
 
-        var grassPatches = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(false));  // Initialize an array to track grass patches
+        var grassPatches = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(false));
         
         
         switch (this.terrainType) {
@@ -1467,8 +1587,7 @@ class Terrain {
                         }
                     }
                 }
-                break;
-                        
+                break;                      
         }
 
 
@@ -1494,7 +1613,7 @@ class Terrain {
 
                 var inCastle = v.x > -50 && v.x < 50 && v.z > -35 && v.z < 35
 
-                var isNearGrassPatch = (grassPatches[i][j] || 
+                var isNearGrassPatch = false && (grassPatches[i][j] || 
                                           (i > 0 && grassPatches[i - 1][j]) ||  // Check left
                                           (i < this.segments && grassPatches[i + 1][j]) ||  // Check right
                                           (j > 0 && grassPatches[i][j - 1]) ||  // Check above
@@ -1506,7 +1625,7 @@ class Terrain {
                 );
 
 
-                const isTree = eval(this.treeCondition);
+                const isTree = false && eval(this.treeCondition);
 
 
 
@@ -2919,6 +3038,7 @@ class UserController {
         this.sS = .1
         this.dS = .1
         this.tS = .075
+        this.mousedown = false
         this.shift = false
         this.space = false;
         this.ArrowUp = false;
@@ -3102,9 +3222,14 @@ class UserController {
         this.previous = { movementX: 0, movementY: 0 }
         this.targetLook = new THREE.Vector3();
 
+
+        window.addEventListener('mousedown', e => this.mouseDown = true)
+        window.addEventListener('mouseup', e => this.mouseDown = false)
+
         // Define the max angle for the arc (in radians)
         const maxAngle = THREE.MathUtils.degToRad(45);  // 45 degrees in radians
         window.addEventListener('mousemove', (event) => {
+            if (this.mouseDown == false) return
             const sensitivity = 0.005;  // Adjust sensitivity
             this.yaw -= event.movementX * sensitivity;
             this.pitch -= event.movementY * sensitivity;
@@ -3615,15 +3740,10 @@ class UserController {
     }
 }
 
-
-
-
 function isVerticalIntersection(normal) {
     // If the normal of the intersected object is pointing mostly upward or downward, it's vertical
     return Math.abs(normal.y) > 0.7; // Adjust threshold as necessary
 }
-
-
 
 class View {
     constructor() {
@@ -3648,6 +3768,9 @@ class View {
         window.terrain.setSun(window.sky.sun);
         window.terrain.setCamera(window.user.camera);
 
+        // Call this once to initialize wave parameters for all triangles
+        initializeTriangleRotationWaves(terrain.water.geometry.attributes.position.array.length / 9);
+
     
         window.terrain.setGrandCentralPillar()
 
@@ -3671,6 +3794,7 @@ class View {
            
 
             var newTerrain = window.terrain.updateTerrain(window.user.camera.position);
+
             window.renderer.render(window.scene, window.user.camera);
 
 
@@ -3737,37 +3861,6 @@ class View {
 
 }
 
-function UndulateWater() {
-    // Store original water vertices
-    var originalWater = terrain.water.geometry.attributes.position.array;
-    var time = performance.now() * 0.001;  // Time factor for animating the waves
-    var speed1 = 1.5, speed2 = 2.0, speed3 = 0.8;  // Wave speeds
-    var amp1 = .02, amp2 = .01, amp3 = .05;  // Amplitudes for each wave
-    var waveLength1 = 0.02, waveLength2 = 0.03, waveLength3 = 0.01;  // Wavelengths
-
-    // Update the y position of the water vertices
-    var waterVertices = terrain.water.geometry.attributes.position.array;
-    for (let i = 0; i < originalWater.length; i += 3) {
-        var x = originalWater[i];
-        var z = originalWater[i + 2];
-
-        // Apply 3 different sine wave functions for variation
-        var wave1 = Math.sin(x * waveLength1 + time * speed1) * amp1;
-        var wave2 = Math.sin(z * waveLength2 + time * speed2) * amp2;
-        var wave3 = Math.sin((x + z) * waveLength3 + time * speed3) * amp3;
-
-        // Update the y position by adding the wave contributions
-        waterVertices[i + 1] = originalWater[i + 1] + wave1 + wave2 + wave3;
-    }
-
-    terrain.water.geometry.attributes.position.array = waterVertices
-
-    // Notify Three.js that the position attribute needs to be updated
-    terrain.water.geometry.attributes.position.needsUpdate = true;
-
-
-}
-
 function getCenterOfGeometry(geometry) {
     // Get the position attribute of the geometry (which contains all the vertices)
     const position = geometry.attributes.position;
@@ -3791,7 +3884,6 @@ function getCenterOfGeometry(geometry) {
     return new THREE.Vector3(centerX, centerY, centerZ);
 }
 
-
 document.getElementById('map').innerHTML = new Array(25).fill(``).map((html, index) => {
     const x = ((index % 5) - 2) * 128; // -2, -1, 0, 1, 2 based on column
     const z = (Math.floor(index / 5) - 2) * 128; // -2, -1, 0, 1, 2 based on row
@@ -3799,7 +3891,6 @@ document.getElementById('map').innerHTML = new Array(25).fill(``).map((html, ind
     // Return the HTML for each div, including the id in the format x_z
     return `<div class="quadrant" id="${x}_${z}">${x}_${z}</div>`;
 }).join('');
-
 
 window.VM = new ViewModel();
 window.view = new View();
