@@ -2,7 +2,7 @@ import * as THREE from '/lib/three.module.min.js';
 import { UnrealBloomPass } from '/lib/UnrealBloomPass.js';
 import { EffectComposer } from '/lib/EffectComposer.js';
 import { RenderPass } from '/lib/RenderPass.js';
-
+import { CSG } from '/lib/CSG.js'
 import { SUBTRACTION, Brush, Evaluator } from '/lib/three-bvh-csg.js';
 import ViewModel from "/src/view-model.js";
 
@@ -27,8 +27,8 @@ const cameraBoundingBox = () => new THREE.Box3().setFromCenterAndSize(
 window.sliding = false
 
 
-window.GRAVITY = -0.1
-window.TERMINAL_VELOCITY = -1,
+window.GRAVITY = -0.05
+window.TERMINAL_VELOCITY = -.5,
 
 window.sunMaxDist = -Infinity;
 window.sunMinDist = Infinity
@@ -227,7 +227,7 @@ class Sky {
         this.full_circle = 2 * Math.PI;
         this.time = 0;
 
-        this.hemisphereLight = new THREE.HemisphereLight(0xfefeff, 0x444444, .15); // Sky and ground color
+        this.hemisphereLight = new THREE.HemisphereLight(0xfefeff, 0x444444, .05); // Sky and ground color
         this.hemisphereLight.position.set(0, 0, 0);
         scene.add(this.hemisphereLight);
 
@@ -647,16 +647,17 @@ class Castle {
         for (var key in VM.map[VM.user.level].structures[0]) {
             this[key] = VM.map[VM.user.level].structures[0][key]
         }
-        this.houseDim = [70, 50];
+        this.houseDim = [50, 50];
         this.parts = [];
         this.elevator = []
-        this.wallHeight = 5;
-        this.foundationHeight = 1.5;
+        this.wallHeight = 4;
+        this.foundationHeight = 1;
 
         var buildingHeight = 300
         var elevatorHeight = 3
-        const floorHeight = 10
-        var floorY = 0 - (this.foundationHeight / 2)
+        const floorHeight = 4
+        const foundationY = 0 - (this.foundationHeight / 2)
+        var floorY = foundationY
 
         const foundation = new THREE.Mesh(
             new THREE.BoxGeometry(this.houseDim[0], this.foundationHeight, this.houseDim[1]),
@@ -684,79 +685,218 @@ class Castle {
         scene.add( light_foundation )
 
 
-        const boardwalk = new THREE.TextureLoader().load("/images/floor18.jpg")
-        const floor = new THREE.TextureLoader().load("/images/floor114.jpg")
-        var startX = -this.houseDim[0] / 2
-        var endX = this.houseDim[0] / 2
-        var startZ = -this.houseDim[1] / 2
-        var endZ = this.houseDim[1] / 2
-        var stepX = (this.houseDim[0] + 10) / 50
-        var stepZ = this.houseDim[1] / 50
-        for (var x = (this.houseDim[0] / 2) + (stepX / 2); x < (this.houseDim[0] + 10) / 2; x += stepX) {
-            for (var z = -this.houseDim[0] / 2; z < this.houseDim[1] / 2; z += stepZ) {
-                var opts = {}
-                opts.map = boardwalk;
-                var tilePlane = new THREE.Mesh(
-                    new THREE.PlaneGeometry(stepX, stepZ),
-                    new THREE.MeshStandardMaterial(opts)
-                );
-                tilePlane.receiveShadow = true;
-                tilePlane.rotation.x = -Math.PI / 2
-                tilePlane.position.set(x, castleBaseCenter.y, z);
-                scene.add(tilePlane)
+        const boardwalkTexture = new THREE.TextureLoader().load("/images/floor18.jpg", texture => {
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(11, 11);
+        })
+        const boardwalk = {
+            width: 8,
+            depth: this.houseDim[1] * .8,
+            height: 0.1,
+            center: {
+                x: (this.houseDim[0] / 2) + 4,
+                y: foundationY + (this.foundationHeight / 2) - 0.05,
+                z: 0
             }
         }
 
+        var opts = {}
+        opts.map = boardwalkTexture;
+        var tilePlane = new THREE.Mesh(
+            new THREE.BoxGeometry(boardwalk.width, boardwalk.height, boardwalk.depth),
+            new THREE.MeshStandardMaterial(opts)
+        );
+        tilePlane.receiveShadow = true;
+        tilePlane.position.set(boardwalk.center.x, boardwalk.center.y, boardwalk.center.z);
+        this.parts.push(tilePlane)
+        scene.add(tilePlane)
+
         
-        var elevatorWidth = this.houseDim[0] * .05;
-        for (var i = 1; i < 2; i++) {
-            const floor = new THREE.Mesh(
-                new THREE.BoxGeometry(this.houseDim[0], this.foundationHeight * 2, this.houseDim[1]),
+        var boxHeight = 5;
+        var wallHeight = boxHeight / 2;
+        var maxWidth = this.houseDim[0];
+        var maxDepth = this.houseDim[1];
+        var startY = foundationY + (this.foundationHeight / 2) - wallHeight;
+
+        for (var i = 0; i < 20; i++) {
+            var width = randomInRange(maxWidth / 4, maxWidth);
+            var depth = randomInRange(maxDepth / 4, maxDepth);
+
+            // Create the main box
+            var box = new THREE.Mesh(
+                new THREE.BoxGeometry(width, boxHeight, depth),
                 new THREE.MeshStandardMaterial({
-                    map: new THREE.TextureLoader().load("/images/concrete", texture => {
-                        texture.wrapS = THREE.RepeatWrapping;
+                    map: new THREE.TextureLoader().load("/images/wall4.jpg"),
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 1
+                })
+            );
+            box.castShadow = true;
+            box.receiveShadow = true
+            var xPos = randomInRange(-width / 2, width / 2);
+            var yPos = (i * wallHeight) + wallHeight;
+            var zPos = randomInRange(-depth / 2, depth / 2);
+            box.position.set(0, yPos, 0);
+      
+
+            // Define wall thickness
+            var wallThickness = 0.2;
+            var windowThickness = 2
+            var wallMaterial = new THREE.MeshStandardMaterial({ 
+                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
+                    texture.wrapS = THREE.RepeatWrapping;
                         texture.wrapT = THREE.RepeatWrapping;
                         texture.repeat.set(11, 11);
-                    }),
-                    side: THREE.DoubleSide
-                }) 
-            )
-            floor.position.set(0, floorY, 0)
-            floorY += floorHeight
-            this.parts.push(floor)
-            scene.add(floor)
+                }), side: THREE.DoubleSide 
+            });
+
+            // Window variables
+            var windowWidth = width / 4; // Fixed size for smaller windows
+            var windowHeight = boxHeight / 4;
+            var windowSpacing = windowWidth * 1.5;  // Spacing between windows
+
+            const evaluator = new Evaluator();
+
+            // Front Wall
+            var frontWallGeometry = new THREE.BoxGeometry(width, boxHeight, wallThickness);
+            var frontWallBrush = new Brush(frontWallGeometry);
+            frontWallBrush.position.set(0, yPos, depth / 2);
+            frontWallBrush.updateMatrixWorld();
+
+            // Create and subtract multiple windows for front wall
+            for (var w = 0; w < 3; w++) {
+                var windowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowThickness);
+                var windowBrush = new Brush(windowGeometry);
+                windowBrush.position.set(
+                    randomInRange(-width / 2 + windowWidth, width / 2 - windowWidth), // Avoid edges
+                    yPos + randomInRange(-boxHeight / 4, boxHeight / 4),
+                    depth / 2 + windowThickness / 2 + 0.01
+                );
+                windowBrush.updateMatrixWorld();
+                frontWallBrush = evaluator.evaluate(frontWallBrush, windowBrush, SUBTRACTION); // Subtract the window
+            }
+
+            // Convert front wall geometry back to mesh
+            var frontMesh = new THREE.Mesh(frontWallBrush.geometry, new THREE.MeshStandardMaterial({
+                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
+                    texture.wrapS = THREE.RepeatWrapping;
+                        texture.wrapT = THREE.RepeatWrapping;
+                        texture.repeat.set(11, 11);
+                })
+            }));
+            this.parts.push(frontMesh)
+            scene.add(frontMesh);
+
+            // Back Wall
+            var backWallGeometry = new THREE.BoxGeometry(width, boxHeight, wallThickness);
+            var backWallBrush = new Brush(backWallGeometry);
+            backWallBrush.position.set(0, yPos, -depth / 2);
+            backWallBrush.updateMatrixWorld();
+
+            // Subtract multiple windows from back wall
+            for (var w = 0; w < 3; w++) {
+                var backWindowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowThickness);
+                var backWindowBrush = new Brush(backWindowGeometry);
+                backWindowBrush.position.set(
+                    randomInRange(-width / 2 + windowWidth, width / 2 - windowWidth), 
+                    yPos + randomInRange(-boxHeight / 4, boxHeight / 4),
+                    -depth / 2 - windowThickness / 2 - 0.01
+                );
+                backWindowBrush.updateMatrixWorld();
+                backWallBrush = evaluator.evaluate(backWallBrush, backWindowBrush, SUBTRACTION);
+            }
+
+            // Convert back wall geometry back to mesh
+            var backMesh = new THREE.Mesh(backWallBrush.geometry, new THREE.MeshStandardMaterial({
+                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
+                    texture.wrapS = THREE.RepeatWrapping;
+                        texture.wrapT = THREE.RepeatWrapping;
+                        texture.repeat.set(11, 11);
+                })
+            }));
+            this.parts.push(backMesh)
+            scene.add(backMesh);
+
+            // Left Wall
+            var leftWallGeometry = new THREE.BoxGeometry(wallThickness, boxHeight, depth);
+            var leftWallBrush = new Brush(leftWallGeometry);
+            leftWallBrush.position.set(-width / 2, yPos, 0);
+            leftWallBrush.updateMatrixWorld();
+
+            // Subtract multiple windows from left wall
+            for (var w = 0; w < 3; w++) {
+                var leftWindowGeometry = new THREE.BoxGeometry(windowThickness, windowHeight, windowWidth);
+                var leftWindowBrush = new Brush(leftWindowGeometry);
+                leftWindowBrush.position.set(
+                    -width / 2 - windowThickness / 2 - 0.01, 
+                    yPos + randomInRange(-boxHeight / 4, boxHeight / 4),
+                    randomInRange(-depth / 2 + windowHeight, depth / 2 - windowHeight)
+                );
+                leftWindowBrush.updateMatrixWorld();
+                leftWallBrush = evaluator.evaluate(leftWallBrush, leftWindowBrush, SUBTRACTION);
+            }
+
+            // Convert left wall geometry back to mesh
+            var leftMesh = new THREE.Mesh(leftWallBrush.geometry, new THREE.MeshStandardMaterial({
+                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
+                    texture.wrapS = THREE.RepeatWrapping;
+                        texture.wrapT = THREE.RepeatWrapping;
+                        texture.repeat.set(11, 11);
+                })
+            }));
+            this.parts.push(leftMesh)
+            scene.add(leftMesh);
+
+            // Right Wall
+            var rightWallGeometry = new THREE.BoxGeometry(wallThickness, boxHeight, depth);
+            var rightWallBrush = new Brush(rightWallGeometry);
+            rightWallBrush.position.set(width / 2, yPos, 0);
+            rightWallBrush.updateMatrixWorld();
+
+            // Subtract multiple windows from right wall
+            for (var w = 0; w < 3; w++) {
+                var rightWindowGeometry = new THREE.BoxGeometry(windowThickness * 3, windowHeight, windowWidth);
+                var rightWindowBrush = new Brush(rightWindowGeometry);
+                rightWindowBrush.position.set(
+                    width / 2 + windowThickness / 2 + 0.01, 
+                    yPos + randomInRange(-boxHeight / 4, boxHeight / 4),
+                    randomInRange(-depth / 2 + windowHeight, depth / 2 - windowHeight)
+                );
+                rightWindowBrush.updateMatrixWorld();
+                rightWallBrush = evaluator.evaluate(rightWallBrush, rightWindowBrush, SUBTRACTION);
+            }
+
+            // Convert right wall geometry back to mesh
+            var rightMesh = new THREE.Mesh(rightWallBrush.geometry, new THREE.MeshStandardMaterial({
+                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
+                    texture.wrapS = THREE.RepeatWrapping;
+                        texture.wrapT = THREE.RepeatWrapping;
+                        texture.repeat.set(11, 11);
+                })
+            }));
+            this.parts.push(rightMesh)
+            scene.add(rightMesh);
+
+            // Top and bottom walls remain unchanged
+            var topWall = new THREE.Mesh(new THREE.BoxGeometry(width, wallThickness, depth), wallMaterial);
+            topWall.position.set(0, yPos + (boxHeight / 2), 0);
+            this.parts.push(topWall)
+            scene.add(topWall);
+
+            var bottomWall = new THREE.Mesh(new THREE.BoxGeometry(width, wallThickness, depth), new THREE.MeshStandardMaterial({
+                side: THREE.DoubleSide,
+                map: new THREE.TextureLoader().load("/images/floor19.jpg")
+            }));
+            bottomWall.position.set(0, yPos - (boxHeight / 2), 0);
+            this.parts.push(bottomWall)
+            scene.add(bottomWall);
         }
 
+               
+       
 
-        floorY = 0 - (this.foundationHeight / 2)
-        var SlidingGlassDoor = {
-            height: 5
-        }
-        var slidingGlassDoorGeometry = new THREE.BoxGeometry(5, SlidingGlassDoor.height, .1)
-        slidingGlassDoorGeometry.rotateY(Math.PI / 2)
-        slidingGlassDoorGeometry.computeVertexNormals()
-        var slidingGlassDoor = new THREE.Mesh(
-            slidingGlassDoorGeometry,
-            new THREE.MeshPhysicalMaterial({
-                color: 0xfff0ff,
-                transparent: true,
-                opacity: 0.95,
-                roughness: 0.1,  // Glass is smooth
-                metalness: 0.0,  // No metalness
-                reflectivity: 0.9,  // High reflectivity for glass effect
-                clearcoat: 1.0,  // Extra glossiness
-                clearcoatRoughness: 0.05  // Very smooth
-            })
-
-        )
-        slidingGlassDoor.position.set(
-            this.houseDim[0] / 2, 
-            floorY + SlidingGlassDoor.height / 2, 
-            this.houseDim[1] / 2 - 7
-        )
-
-        this.parts.push(slidingGlassDoor)
-        scene.add(slidingGlassDoor)
 
     }
 
@@ -1398,7 +1538,7 @@ class Terrain {
 
                 v.y += variance;
 
-                var inCastle = v.x > -45 && v.x < 45 && v.z > -30 && v.z < 30;
+                var inCastle = v.x > -45 && v.x < 35 && v.z > -30 && v.z < 30;
                 if (inCastle) {
                     v.y = -1;  // Flatten the terrain inside the castle
                 }
@@ -1428,7 +1568,7 @@ class Terrain {
                     let targetHeight = -50;
 
                     // Blend between current height and target height using cosine curve
-                    if (Math.random() < 0.7) {
+                    if (Math.random() < 0.95) {
                         v.y = curveFactor * (v.y - targetHeight) + targetHeight;
                     }
 
@@ -1582,10 +1722,10 @@ class Terrain {
                 v.y = (1 - x) * (1 - y) * v0.y + x * (1 - y) * v1.y + x * y * v2.y + (1 - x) * y * v3.y;
                 v.z = (1 - x) * (1 - y) * v0.z + x * (1 - y) * v1.z + x * y * v2.z + (1 - x) * y * v3.z;
 
-                var inCastle = v.x > -50 && v.x < 50 && v.z > -35 && v.z < 35
+                var inCastle = v.x > -50 && v.x < 35 && v.z > -35 && v.z < 35
                 var inCove = v.x >= 35 && v.z >= -30 && v.z <= 30;
 
-                var isNearGrassPatch = false && (grassPatches[i][j] || 
+                var isNearGrassPatch = inCastle/*false && (grassPatches[i][j] || 
                                           (i > 0 && grassPatches[i - 1][j]) ||  // Check left
                                           (i < this.segments && grassPatches[i + 1][j]) ||  // Check right
                                           (j > 0 && grassPatches[i][j - 1]) ||  // Check above
@@ -1594,7 +1734,7 @@ class Terrain {
                                           (i < this.segments && j > 0 && grassPatches[i + 1][j - 1]) ||  // Check top-right diagonal
                                           (i > 0 && j < this.segments && grassPatches[i - 1][j + 1]) ||  // Check bottom-left diagonal
                                           (i < this.segments && j < this.segments && grassPatches[i + 1][j + 1])  // Check bottom-right diagonal
-                );
+                );*/
 
 
                 if (a >= 0 && b >= 0 && c >= 0 && d >= 0 && a < vertices.length / 3 && b < vertices.length / 3 && c < vertices.length / 3 && d < vertices.length / 3) {
@@ -1615,11 +1755,12 @@ class Terrain {
                         this.grounds.push(triangle);
                         
 
-                        if (isNearGrassPatch && !inCastle) {
+                        if (isNearGrassPatch) {
                             this.grasses.push(
                                 this.createGrassResult(indices, vertices, triangle, 1000, randomInRange(.1, .3), randomInRange(0.1, .3))
                             )
-                            this.groundColorMap[i][j] = Math.random()
+
+                            this.groundColorMap[i][j] = inCastle ? .33 : Math.random()
                         }
 
                     });
@@ -1641,19 +1782,22 @@ class Terrain {
         for (let i = 0; i < gridSize; i++) {
             for (let j = 0; j < gridSize; j++) {
                 const density = this.groundColorMap[i][j];
+                
 
                 // Ensure that color application and grass application use the same coordinates
                 const vertexIndex = i * (this.segments + 1) + j;  // Adjust based on segment count and grid
 
                 if (vertexIndex < vertices.length / 3) {  // Ensure vertex index is within bounds
                     if (density > 0) {
-                        // More grass means more green intensity
-                        const greenIntensity = Math.min(0.8, Math.pow(density / 10, 0.7));  // Non-linear scaling for green intensity
-                        const red = randomInRange(0, 0.2);  // Slightly larger range for red
-                        const blue = randomInRange(0, 0.2);  // Slightly larger range for blue
+                        if (density == .33) {
+                            colors.push(0, 1, 0)
+                        } else {
+                            const greenIntensity = Math.min(0.8, Math.pow(density / 10, 0.7));  // Non-linear scaling for green intensity
+                            const red = randomInRange(0, 0.2);  // Slightly larger range for red
+                            const blue = randomInRange(0, 0.2);  // Slightly larger range for blue
 
-                        colors.push(red, greenIntensity, blue);  // Push RGB color with more balanced variation
-
+                            colors.push(red, greenIntensity, blue);
+                        }
                     } else {
                         // No grass means brown soil
                         var color = VM.map[VM.user.level].Grass[Math.floor(Math.random() * VM.map[VM.user.level].Grass.length)];
@@ -2496,8 +2640,8 @@ class UserController {
                 this.cmd = true
             }
             if (this.cmd && key == 'S') {
-                localStorage.position = JSON.stringify({ x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z })
-                localStorage.rotation = JSON.stringify({ x: this.camera.rotation.x, y: this.camera.rotation.y, z: this.camera.rotation.z })
+                // localStorage.position = JSON.stringify({ x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z })
+                // localStorage.rotation = JSON.stringify({ x: this.camera.rotation.x, y: this.camera.rotation.y, z: this.camera.rotation.z })
             } if (key == 'W') {
                 this.w = true;
                 this.time_held.w = new Date().getTime();
@@ -2777,6 +2921,8 @@ class UserController {
 
 
         for (const direction of directions) {
+            if (direction.y == -1 || direction.y == 1 && this.floor !== null) continue
+
             const ray = new THREE.Ray(this.camera.position.clone(), direction.clone().normalize());
             const raycaster = new THREE.Raycaster();
 
@@ -2819,6 +2965,9 @@ class UserController {
                 const offset = user.wS * 2;  // Adjust based on your needs
 
                 const normalOffset = closestIntersection.normal.clone().multiplyScalar(offset);
+
+                if (this.floor !== null && normalOffset.y !== 0) normalOffset.y = 0
+
                 this.camera.position.add(normalOffset);
 
                 // Stop vertical movement if it's a ground or ceiling collision
@@ -2869,8 +3018,8 @@ class UserController {
                 const offset = user.wS * 2;  // Adjust based on your needs
                 if (dotProduct < 0) {
                     // Camera is on the negative side of the normal, move it to the positive side
-                    
                     const normalOffset = closestIntersection.normal.clone().multiplyScalar(offset);
+                    if (this.floor !== null && normalOffset.y !== 0) normalOffset.y = 0
                     this.camera.position.add(normalOffset);
                     // console.log('Camera moved to the positive side of the normal.');
                 } else {
@@ -2943,9 +3092,12 @@ class UserController {
             // console.log("Camera is above the ground, landing");
 
             // Adjust the camera position to the surface plus a small offset to simulate landing
-            this.camera.position.y = downIntersection.point.y + 1;
+            this.camera.position.y = downIntersection.point.y + .6;
+            this.floor = this.camera.position.y ;
             this.camera.velocity.y = 0;
             this.isJumping = false;
+        } else {
+            this.floor = null
         }
 
         // Ceiling collision detection
@@ -2983,12 +3135,16 @@ class UserController {
         if (intersection && intersection.distance < 1) {
             this.intersections.push(intersection)
 
-            this.camera.position.y = intersection.point.y + 1;
+            var newY = intersection.point.y + 1
 
+            this.camera.position.y = newY;
+            this.floor = intersection.point.y + 1
 
             this.camera.velocity.y = 0;
             this.isJumping = false;
 
+        } else {
+            this.floor = null
         }
         
         // Cast a ray upwards to detect ceilings
@@ -3139,11 +3295,9 @@ class View {
         }
 
         // window.user.camera.position.set(33.953909365281795, 2.610000001490116, 23.053098469337314);
-        window.user.camera.position.set(37.64253652708739,1.5,14.461816303157224)
-        // window.user.camera.rotation.set(0, 1.533185307179759, 0)
-        window.user.camera.rotation.set(0.590, 0.674, -0.396)
+        window.user.camera.position.set(24, 1.1, 0)
 
-
+        window.user.camera.lookAt(sky.sphere.position)
         
         
     }

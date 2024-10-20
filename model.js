@@ -30,7 +30,7 @@ class Model {
         segments: 50,
         sop: {
             trees: t / 2,
-            grasses: t * .1,
+            grasses: t / 3,
             grounds: 0,
             cliffs: t / 2
         },
@@ -207,6 +207,8 @@ app.whenReady().then(() => {
     // Serve files based on the URL
     if (url === 'three') {
       filePath = path.join(__dirname, 'node_modules/three/build/three.module.js');
+    } else if (url.startsWith('node_modules')) {
+      filePath = path.join(__dirname, url);
     } else if (url.startsWith('src/')) {
       filePath = path.join(__dirname, 'src', url.replace('src/', ''));
     } else if (url.startsWith('images/')) {
