@@ -714,12 +714,12 @@ class Castle {
 
         
         var boxHeight = 5;
-        var wallHeight = boxHeight / 2;
+        var wallHeight = boxHeight
         var maxWidth = this.houseDim[0];
         var maxDepth = this.houseDim[1];
         var startY = foundationY + (this.foundationHeight / 2) - wallHeight;
 
-        for (var i = 0; i < 20; i++) {
+        for (var i = 0; i < 3; i++) {
             var width = randomInRange(maxWidth / 4, maxWidth);
             var depth = randomInRange(maxDepth / 4, maxDepth);
 
@@ -753,7 +753,7 @@ class Castle {
             });
 
             // Window variables
-            var windowWidth = width / 4; // Fixed size for smaller windows
+            var windowWidth = boxHeight / 4; // Fixed size for smaller windows
             var windowHeight = boxHeight / 4;
             var windowSpacing = windowWidth * 1.5;  // Spacing between windows
 
@@ -770,8 +770,8 @@ class Castle {
                 var windowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowThickness);
                 var windowBrush = new Brush(windowGeometry);
                 windowBrush.position.set(
-                    randomInRange(-width / 2 + windowWidth, width / 2 - windowWidth), // Avoid edges
-                    yPos + randomInRange(-boxHeight / 4, boxHeight / 4),
+                    -width / 2 + windowWidth, // Avoid edges
+                    yPos + boxHeight / 4,
                     depth / 2 + windowThickness / 2 + 0.01
                 );
                 windowBrush.updateMatrixWorld();
@@ -800,8 +800,8 @@ class Castle {
                 var backWindowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowThickness);
                 var backWindowBrush = new Brush(backWindowGeometry);
                 backWindowBrush.position.set(
-                    randomInRange(-width / 2 + windowWidth, width / 2 - windowWidth), 
-                    yPos + randomInRange(-boxHeight / 4, boxHeight / 4),
+                    width / 2 - windowWidth, 
+                    yPos - boxHeight / 4,
                     -depth / 2 - windowThickness / 2 - 0.01
                 );
                 backWindowBrush.updateMatrixWorld();
@@ -829,13 +829,15 @@ class Castle {
             for (var w = 0; w < 3; w++) {
                 var leftWindowGeometry = new THREE.BoxGeometry(windowThickness, windowHeight, windowWidth);
                 var leftWindowBrush = new Brush(leftWindowGeometry);
-                leftWindowBrush.position.set(
-                    -width / 2 - windowThickness / 2 - 0.01, 
-                    yPos + randomInRange(-boxHeight / 4, boxHeight / 4),
-                    randomInRange(-depth / 2 + windowHeight, depth / 2 - windowHeight)
-                );
+                var lwb_x = -width / 2 - windowThickness / 2 - 0.01
+                var lwb_y = yPos + boxHeight / 4
+                var lwb_z = -depth / 2 + windowHeight
+
+                leftWindowBrush.position.set(lwb_x, lwb_y, lwb_z);
                 leftWindowBrush.updateMatrixWorld();
                 leftWallBrush = evaluator.evaluate(leftWallBrush, leftWindowBrush, SUBTRACTION);
+
+                
             }
 
             // Convert left wall geometry back to mesh
@@ -857,15 +859,31 @@ class Castle {
 
             // Subtract multiple windows from right wall
             for (var w = 0; w < 3; w++) {
-                var rightWindowGeometry = new THREE.BoxGeometry(windowThickness * 3, windowHeight, windowWidth);
+                var rightWindowGeometry = new THREE.BoxGeometry(windowThickness * 3, windowHeight * 2, windowWidth);
                 var rightWindowBrush = new Brush(rightWindowGeometry);
-                rightWindowBrush.position.set(
-                    width / 2 + windowThickness / 2 + 0.01, 
-                    yPos + randomInRange(-boxHeight / 4, boxHeight / 4),
-                    randomInRange(-depth / 2 + windowHeight, depth / 2 - windowHeight)
-                );
+                var rwb_x = width / 2 + windowThickness / 2 + 0.01
+                var rwb_y = yPos + boxHeight / 4
+                var rwb_z = depth / 2 - windowHeight
+                rightWindowBrush.position.set(rwb_x, rwb_y, rwb_z);
                 rightWindowBrush.updateMatrixWorld();
                 rightWallBrush = evaluator.evaluate(rightWallBrush, rightWindowBrush, SUBTRACTION);
+                
+
+                var lwb_sx = rwb_x
+                for (var lwb_sy = lwb_y - windowHeight; lwb_sy > 0; lwb_sy -= .2) {
+                    var stepGeo = new THREE.BoxGeometry(.3, .2, .8)
+                    stepGeo.computeVertexNormals()
+                    var stepMat = new THREE.MeshStandardMaterial({
+                        side: THREE.DoubleSide, map: new THREE.TextureLoader().load("/images/floor1111.jpg")
+                    })
+                    var step = new THREE.Mesh(stepGeo, stepMat)
+                    step.castShadow = true
+                    step.receiveShadow = true
+                    step.position.set(lwb_sx, lwb_sy, rwb_z)
+                    lwb_sx += .3
+                    this.parts.push(step)
+                    scene.add(step)
+                }
             }
 
             // Convert right wall geometry back to mesh
