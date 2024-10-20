@@ -869,20 +869,22 @@ class Castle {
                 rightWallBrush = evaluator.evaluate(rightWallBrush, rightWindowBrush, SUBTRACTION);
                 
 
-                var lwb_sx = rwb_x
-                for (var lwb_sy = lwb_y - windowHeight; lwb_sy > 0; lwb_sy -= .2) {
-                    var stepGeo = new THREE.BoxGeometry(.3, .2, .8)
-                    stepGeo.computeVertexNormals()
-                    var stepMat = new THREE.MeshStandardMaterial({
-                        side: THREE.DoubleSide, map: new THREE.TextureLoader().load("/images/floor1111.jpg")
-                    })
-                    var step = new THREE.Mesh(stepGeo, stepMat)
-                    step.castShadow = true
-                    step.receiveShadow = true
-                    step.position.set(lwb_sx, lwb_sy, rwb_z)
-                    lwb_sx += .3
-                    this.parts.push(step)
-                    scene.add(step)
+                if (i % 2 == 0) {
+                    var lwb_sx = rwb_x
+                    for (var lwb_sy = lwb_y - windowHeight; lwb_sy > 0; lwb_sy -= .2) {
+                        var stepGeo = new THREE.BoxGeometry(.3, .2, .8)
+                        stepGeo.computeVertexNormals()
+                        var stepMat = new THREE.MeshStandardMaterial({
+                            side: THREE.DoubleSide, map: new THREE.TextureLoader().load("/images/floor1111.jpg")
+                        })
+                        var step = new THREE.Mesh(stepGeo, stepMat)
+                        step.castShadow = true
+                        step.receiveShadow = true
+                        step.position.set(lwb_sx, lwb_sy, rwb_z)
+                        lwb_sx += .3
+                        this.parts.push(step)
+                        scene.add(step)
+                    }
                 }
             }
 
@@ -2909,6 +2911,8 @@ class UserController {
             this.camera.quaternion.multiplyQuaternions(quaternionY, this.camera.quaternion);
         }
 
+        this.handleCollision()
+
 
         // Apply movement after collision handling
         this.camera.position.add(combinedMovement);
@@ -2929,24 +2933,13 @@ class UserController {
             new THREE.Vector3(-1, 0, 0),   // Left
             new THREE.Vector3(0, 0, 1),    // Forward
             new THREE.Vector3(0, 0, -1),   // Backward
-            new THREE.Vector3(1, 0, 1).normalize(),   // Forward-right diagonal
-            new THREE.Vector3(-1, 0, 1).normalize(),  // Forward-left diagonal
-            new THREE.Vector3(1, 0, -1).normalize(),  // Backward-right diagonal
-            new THREE.Vector3(-1, 0, -1).normalize()  // Backward-left diagonal
         ];
 
 
-
-
         for (const direction of directions) {
-            if (direction.y == -1 || direction.y == 1 && this.floor !== null) continue
+            var dir = direction
 
             const ray = new THREE.Ray(this.camera.position.clone(), direction.clone().normalize());
-            const raycaster = new THREE.Raycaster();
-
-            // Set the raycaster's origin to the camera's position and direction
-            raycaster.set(this.camera.position.clone(), direction.clone().normalize());
-
 
             let closestIntersection = null;
             let minDistance = .5;
@@ -2954,22 +2947,17 @@ class UserController {
 
             terrain.cliffs.forEach(cliffTriangle => {
 
-                // Each cliffTriangle already contains vertices a, b, c
                 const a = cliffTriangle.a;
                 const b = cliffTriangle.b;
                 const c = cliffTriangle.c;
 
-                // Create the intersection point vector
                 const intersectionPoint = new THREE.Vector3();
 
-                // Use intersectTriangle to test for intersection
                 const intersects = ray.intersectTriangle(a, b, c, false, intersectionPoint);
 
                 if (intersects) {
-                    // Calculate the distance from the camera to the intersection point
                     const distance = this.camera.position.distanceTo(intersectionPoint);
 
-                    // Keep track of the closest intersection
                     if (distance < minDistance) {
                         minDistance = distance;
                         closestIntersection = { normal: cliffTriangle.normal, point: intersects }
@@ -2988,66 +2976,38 @@ class UserController {
 
                 this.camera.position.add(normalOffset);
 
-                // Stop vertical movement if it's a ground or ceiling collision
                 this.camera.velocity.y = 0;
                 this.isJumping = false;
 
-                // Break after handling the closest intersection for this direction
                 break;
             }
 
-            closestIntersection = { point: null };
-            intersectionNormal = null;
-            castle.parts.forEach(part => {
-                
-                // Use intersectTriangle to test for intersection
-                const intersects = raycaster.intersectObject(part, true);
+            const raycaster = new THREE.Raycaster(this.camera.position, dir.normalize());
 
-                if (intersects.length) {
-                    // Calculate the distance from the camera to the intersection point
-                    const distance = this.camera.position.distanceTo(intersects[0].point);
+            const intersectsTrees = raycaster.intersectObjects(this.terrain.trees.flatMap(tree => [tree.trunk, tree.foliage]), true);
+            if (intersectsTrees.length > 0 && intersectsTrees[0].distance < .5) {
+                const responseDirection = this.camera.position.clone().sub(intersectsTrees[0].point).normalize();
+                this.camera.position.add(responseDirection.multiplyScalar(1));
 
-                    // Keep track of the closest intersection
-                    if (distance < minDistance) {
-                        minDistance = distance;
-                        closestIntersection.point = intersects[0].point.clone();
-                        closestIntersection.normal = intersects[0].normal
-
-                        
-                    }
+                if (direction.equals(new THREE.Vector3(0, -1, 0))) {
+                    this.camera.velocity.y = 0;
+                    this.camera.position.y = intersectsTrees[0].point.y + 1;
+                } else if (direction.equals(new THREE.Vector3(0, 1, 0))) {
+                    this.camera.velocity.y = Math.min(this.camera.velocity.y, 0);
                 }
-            });
+            }
 
-            // If a closest intersection was found, adjust the camera's position
-            if (closestIntersection.point && closestIntersection.normal) {
-                // Add a small helper line to visualize the normal at the point of intersection
-                const normalHelper = new THREE.ArrowHelper(
-                    closestIntersection.normal.clone(),  // Direction
-                    closestIntersection.point.clone(),   // Starting point
-                    1,  // Length of arrow
-                    0xff0000  // Color (red)
-                );
-                scene.add(normalHelper);
+            const intersectsCastle = raycaster.intersectObjects(window.castle.parts, true);
+            if (intersectsCastle.length > 0 && intersectsCastle.some(i => i.distance < 0.2)) {
+                const responseDirection = this.camera.position.clone().sub(intersectsCastle[0].point).normalize();
 
-
-                // Check if the camera is on the negative side of the normal
-                const cameraToIntersection = new THREE.Vector3().subVectors(closestIntersection.point, this.camera.position);
-                const dotProduct = cameraToIntersection.dot(closestIntersection.normal);
-                const offset = user.wS * 2;  // Adjust based on your needs
-                if (dotProduct < 0) {
-                    // Camera is on the negative side of the normal, move it to the positive side
-                    const normalOffset = closestIntersection.normal.clone().multiplyScalar(offset);
-                    if (this.floor !== null && normalOffset.y !== 0) normalOffset.y = 0
-                    this.camera.position.add(normalOffset);
-                    // console.log('Camera moved to the positive side of the normal.');
+                if (isVerticalIntersection(intersectsCastle[0].face.normal)) {
+                    this.camera.velocity.y = 0;
+                    this.camera.position.y = intersectsCastle[0].point.y + 1;
                 } else {
-                    // Camera is on the positive side, handle the normal case (like preventing it from falling through terrain)
-                    this.camera.position.y = Math.max(this.camera.position.y, closestIntersection.point.y + offset);
+                    this.camera.position.add(responseDirection.multiplyScalar(1));
                 }
-
-                break;
             }
-
         }
 
     }
@@ -3253,7 +3213,6 @@ class View {
             window.sky.update()
             window.terrain.updateTerrain(window.user.camera.position.clone)
 
-            window.user.handleCollision()
             window.user.handleMovement()
            
             composer.render();
