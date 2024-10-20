@@ -684,22 +684,66 @@ class Castle {
         light_foundation.lookAt( 0, 0, 0 );
         scene.add( light_foundation )
 
+        var dockDepth = this.houseDim[1]
+        const boardwalk = {
+            width: 5,
+            depth: dockDepth,
+            height: 0.1,
+            center: {
+                x: (this.houseDim[0] / 2) + 4,
+                y: foundationY - .4,
+                z: 0
+            }
+        }
 
-        const boardwalkTexture = new THREE.TextureLoader().load("/images/floor18.jpg", texture => {
+        var dockStepDepth = this.houseDim[1] * .4
+        var dockWidth = (boardwalk.center.x - (boardwalk.width / 2)) - (this.houseDim[1] / 2)
+
+        var stepsToDock = {
+            start: {
+                x: this.houseDim[0] / 2,
+                y: foundationY + this.foundationHeight / 2,
+                z: 0
+            },
+            count: 3,
+            width: dockWidth / 3,
+            height: ((foundationY + this.foundationHeight / 2) - boardwalk.center.y) / 3
+        }
+
+        console.log(`
+            foundationY: ${foundationY}
+            this.foundationHeight / 2: ${this.foundationHeight / 2}
+            boardwalk.center.y: ${boardwalk.center.y}
+        `)
+
+        for (var i = 0; i < stepsToDock.count; i += stepsToDock.width) {
+            var stepGeo = new THREE.BoxGeometry(stepsToDock.width, stepsToDock.height, dockDepth)
+            stepGeo.computeVertexNormals()
+            var step = new THREE.Mesh(
+                stepGeo,
+                new THREE.MeshStandardMaterial({
+                    map: new THREE.TextureLoader().load("/images/floor2.jpg"),
+                    side: THREE.DoubleSide
+                })
+            )
+            step.castShadow = true
+            step.receiveShadow = true
+            step.position.set(
+                stepsToDock.start.x + (stepsToDock.width / 2) + (i * stepsToDock.width),
+                stepsToDock.start.y - (i * stepsToDock.height),
+                stepsToDock.start.z 
+            )
+            this.parts.push(step)
+            scene.add(step)
+        }
+
+
+        const boardwalkTexture = new THREE.TextureLoader().load("/images/floor2.jpg", texture => {
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
             texture.repeat.set(11, 11);
         })
-        const boardwalk = {
-            width: 8,
-            depth: this.houseDim[1] * .8,
-            height: 0.1,
-            center: {
-                x: (this.houseDim[0] / 2) + 4,
-                y: foundationY + (this.foundationHeight / 2) - 0.05,
-                z: 0
-            }
-        }
+        
 
         var opts = {}
         opts.map = boardwalkTexture;
@@ -869,23 +913,23 @@ class Castle {
                 rightWallBrush = evaluator.evaluate(rightWallBrush, rightWindowBrush, SUBTRACTION);
                 
 
-                if (i % 2 == 0) {
-                    var lwb_sx = rwb_x
-                    for (var lwb_sy = lwb_y - windowHeight; lwb_sy > 0; lwb_sy -= .2) {
-                        var stepGeo = new THREE.BoxGeometry(.3, .2, .8)
-                        stepGeo.computeVertexNormals()
-                        var stepMat = new THREE.MeshStandardMaterial({
-                            side: THREE.DoubleSide, map: new THREE.TextureLoader().load("/images/floor1111.jpg")
-                        })
-                        var step = new THREE.Mesh(stepGeo, stepMat)
-                        step.castShadow = true
-                        step.receiveShadow = true
-                        step.position.set(lwb_sx, lwb_sy, rwb_z)
-                        lwb_sx += .3
-                        this.parts.push(step)
-                        scene.add(step)
-                    }
-                }
+                // if (i % 2 == 0) {
+                //     var lwb_sx = rwb_x
+                //     for (var lwb_sy = lwb_y - windowHeight; lwb_sy > 0; lwb_sy -= .2) {
+                //         var stepGeo = new THREE.BoxGeometry(.3, .2, .8)
+                //         stepGeo.computeVertexNormals()
+                //         var stepMat = new THREE.MeshStandardMaterial({
+                //             side: THREE.DoubleSide, map: new THREE.TextureLoader().load("/images/floor1111.jpg")
+                //         })
+                //         var step = new THREE.Mesh(stepGeo, stepMat)
+                //         step.castShadow = true
+                //         step.receiveShadow = true
+                //         step.position.set(lwb_sx, lwb_sy, rwb_z)
+                //         lwb_sx += .3
+                //         this.parts.push(step)
+                //         scene.add(step)
+                //     }
+                // }
             }
 
             // Convert right wall geometry back to mesh
@@ -915,7 +959,8 @@ class Castle {
         }
 
                
-       
+        var backyardTree = terrain.createTree(29, 0, 21);
+        terrain.trees.push(backyardTree);
 
 
     }
@@ -1539,6 +1584,7 @@ class Terrain {
         var minZ = Infinity
         var averageY = []
 
+
         // Generate vertices and initial setup
         for (let i = 0; i <= this.segments; i++) {
             for (let j = 0; j <= this.segments; j++) {
@@ -1595,7 +1641,7 @@ class Terrain {
                 } else {
                     if (eval(this.treeCondition)) {
                         var tree = this.createTree(v.x, v.y, v.z, 1);
-                        VM.map[VM.user.level].trees.push(tree);
+                        this.trees.push(tree);
                     }
                 }
 
@@ -1742,10 +1788,12 @@ class Terrain {
                 v.y = (1 - x) * (1 - y) * v0.y + x * (1 - y) * v1.y + x * y * v2.y + (1 - x) * y * v3.y;
                 v.z = (1 - x) * (1 - y) * v0.z + x * (1 - y) * v1.z + x * y * v2.z + (1 - x) * y * v3.z;
 
-                var inCastle = v.x > -50 && v.x < 35 && v.z > -35 && v.z < 35
+                var inCastle = (v.x > -50 && v.x < 35 && v.z > -35 && v.z < 35)
+
+
                 var inCove = v.x >= 35 && v.z >= -30 && v.z <= 30;
 
-                var isNearGrassPatch = inCastle/*false && (grassPatches[i][j] || 
+                var isNearGrassPatch = false && (grassPatches[i][j] || 
                                           (i > 0 && grassPatches[i - 1][j]) ||  // Check left
                                           (i < this.segments && grassPatches[i + 1][j]) ||  // Check right
                                           (j > 0 && grassPatches[i][j - 1]) ||  // Check above
@@ -1754,7 +1802,7 @@ class Terrain {
                                           (i < this.segments && j > 0 && grassPatches[i + 1][j - 1]) ||  // Check top-right diagonal
                                           (i > 0 && j < this.segments && grassPatches[i - 1][j + 1]) ||  // Check bottom-left diagonal
                                           (i < this.segments && j < this.segments && grassPatches[i + 1][j + 1])  // Check bottom-right diagonal
-                );*/
+                );
 
 
                 if (a >= 0 && b >= 0 && c >= 0 && d >= 0 && a < vertices.length / 3 && b < vertices.length / 3 && c < vertices.length / 3 && d < vertices.length / 3) {
