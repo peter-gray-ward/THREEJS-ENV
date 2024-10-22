@@ -8,12 +8,37 @@ import ViewModel from "/src/view-model.js";
 
 const evaluator = new Evaluator();
 
+var floorTexture = new THREE.TextureLoader().load("/images/floor2.jpg", texture => {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(2, 2);
+})
+
+var landscape = {
+    field: {
+        center: {
+            x: 0,
+            y: 10,
+            z: 0
+        },
+        width: 50,
+        depth: 35
+    }
+}
+
+var house = {
+    center: landscape.field.center,
+    width: 30,
+    depth: 20,
+    foundation: {
+        height: 1
+    }
+}
+
 var pillars = []
 var composer
 
 window.THREE = THREE;
-
-const rockwallTexture = new THREE.TextureLoader().load("/images/painting.jpg");
 
 const LEVEL = [
     null,
@@ -647,20 +672,17 @@ class Castle {
         for (var key in VM.map[VM.user.level].structures[0]) {
             this[key] = VM.map[VM.user.level].structures[0][key]
         }
-        this.houseDim = [50, 50];
         this.parts = [];
         this.elevator = []
-        this.wallHeight = 4;
-        this.foundationHeight = 1;
 
         var buildingHeight = 300
         var elevatorHeight = 3
         const floorHeight = 4
-        const foundationY = 0 - (this.foundationHeight / 2)
+        const foundationY = house.center.y - (house.foundation.height / 2)
         var floorY = foundationY
 
         const foundation = new THREE.Mesh(
-            new THREE.BoxGeometry(this.houseDim[0], this.foundationHeight, this.houseDim[1]),
+            new THREE.BoxGeometry(house.width, house.foundation.height, house.depth),
                 new THREE.MeshStandardMaterial({
                     map: new THREE.TextureLoader().load("/images/concrete", texture => {
                         texture.wrapS = THREE.RepeatWrapping;
@@ -671,80 +693,41 @@ class Castle {
                 }),
                 
         )
-        foundation.position.set(0, floorY, 0)
+        foundation.position.set(0, floorY + .1, 0)
         floorY += floorHeight
+        foundation.frustrumCulled = true
         this.parts.push(foundation)
         scene.add(foundation)
 
 
 
         const intensity = .1;
-        const light_foundation = new THREE.RectAreaLight( 0xffffff, intensity,  this.houseDim[0], this.houseDim[1] );
+        const light_foundation = new THREE.RectAreaLight( 0xffffff, intensity,  house.width, house.width );
         light_foundation.position.set( 0, 5, 0 );
         light_foundation.lookAt( 0, 0, 0 );
         scene.add( light_foundation )
 
-        var dockDepth = this.houseDim[1]
+        var dockDepth = house.width
         const boardwalk = {
-            width: 5,
+            width: (landscape.field.width / 2) - (house.width / 2),
             depth: dockDepth,
-            height: 0.1,
+            height: 0.2,
             center: {
-                x: (this.houseDim[0] / 2) + 4,
-                y: foundationY - .4,
+                x: (house.width / 2) + (((landscape.field.width / 2) - (house.width / 2)) / 2),
+                y: house.center.y + .1,
                 z: 0
             }
         }
 
-        var dockStepDepth = this.houseDim[1] * .4
-        var dockWidth = (boardwalk.center.x - (boardwalk.width / 2)) - (this.houseDim[1] / 2)
-
-        var stepsToDock = {
-            start: {
-                x: this.houseDim[0] / 2,
-                y: foundationY + this.foundationHeight / 2,
-                z: 0
-            },
-            count: 3,
-            width: dockWidth / 3,
-            height: ((foundationY + this.foundationHeight / 2) - boardwalk.center.y) / 3
-        }
-
-        console.log(`
-            foundationY: ${foundationY}
-            this.foundationHeight / 2: ${this.foundationHeight / 2}
-            boardwalk.center.y: ${boardwalk.center.y}
-        `)
-
-        for (var i = 0; i < stepsToDock.count; i += stepsToDock.width) {
-            var stepGeo = new THREE.BoxGeometry(stepsToDock.width, stepsToDock.height, dockDepth)
-            stepGeo.computeVertexNormals()
-            var step = new THREE.Mesh(
-                stepGeo,
-                new THREE.MeshStandardMaterial({
-                    map: new THREE.TextureLoader().load("/images/floor2.jpg"),
-                    side: THREE.DoubleSide
-                })
-            )
-            step.castShadow = true
-            step.receiveShadow = true
-            step.position.set(
-                stepsToDock.start.x + (stepsToDock.width / 2) + (i * stepsToDock.width),
-                stepsToDock.start.y - (i * stepsToDock.height),
-                stepsToDock.start.z 
-            )
-            this.parts.push(step)
-            scene.add(step)
-        }
-
-
+       
+        
+    
         const boardwalkTexture = new THREE.TextureLoader().load("/images/floor2.jpg", texture => {
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
             texture.repeat.set(11, 11);
         })
         
-
         var opts = {}
         opts.map = boardwalkTexture;
         var tilePlane = new THREE.Mesh(
@@ -754,18 +737,85 @@ class Castle {
         tilePlane.receiveShadow = true;
         tilePlane.position.set(boardwalk.center.x, boardwalk.center.y, boardwalk.center.z);
         this.parts.push(tilePlane)
+        tilePlane.frustrumCulled = true
         scene.add(tilePlane)
+
+        var dock = {
+            width: boardwalk.width, 
+            height: boardwalk.height, 
+            depth: boardwalk.depth / 2,
+            x: (landscape.field.width / 2) + (boardwalk.width / 2) + 1,
+            y: -3,
+            z: 3
+        }
+        var dockMesh =  new THREE.Mesh(
+            new THREE.BoxGeometry(dock.width, dock.height, dock.depth),
+            new THREE.MeshStandardMaterial(opts)
+        );
+        dockMesh.position.set(dock.x, dock.y, dock.z)
+        dockMesh.receiveShadow = true
+        dockMesh.castShadow = true
+        dockMesh.frustrumCulled = true
+        scene.add(dockMesh)
+        this.parts.push(dockMesh)
+
+        var dockStepDepth = house.width * .4
+        var dockWidth = (landscape.field.width / 2) - (house.width / 2)
+
+        
+        var stepHeight = .15
+        var stepY = boardwalk.center.y - (stepHeight / 2)
+        var stepX = boardwalk.center.x + (boardwalk.width / 2)
+        var stepZ = boardwalk.center.z - (boardwalk.depth / 2.5)
+        
+        var stepCount = Math.abs(boardwalk.center.y - dock.y) / stepHeight
+        var turning = false
+        for (var i = 0; i < stepCount; i++) {
+            var stepGeo = new THREE.BoxGeometry(stepHeight, stepHeight, 2)
+            if (i > (stepCount / 2) && turning) {
+                stepGeo.rotateY(Math.PI / 2)
+            }
+            var step = new THREE.Mesh(stepGeo, new THREE.MeshStandardMaterial({
+                map: boardwalkTexture,
+                side: THREE.DoubleSide
+            }))
+            step.position.set(stepX, stepY, stepZ)
+            
+            if (i > (stepCount / 2)) {
+                if (!turning) {
+                    turning = true
+                    var stepTurnPlane = new THREE.Mesh(
+                        new THREE.BoxGeometry(2, 0.15, 2),
+                        new THREE.MeshStandardMaterial({
+                            map: boardwalkTexture,
+                            side: THREE.DoubleSide
+                        })
+                    )
+                    stepTurnPlane.position.set(stepX + 1, stepY, stepZ)
+                    scene.add(stepTurnPlane)
+                    this.parts.push(stepTurnPlane)
+                    stepZ += .9
+                    stepX += 1
+                }
+                stepZ += stepHeight
+            } else {
+                stepX += stepHeight
+            }
+
+            stepY -= stepHeight
+            scene.add(step)
+            this.parts.push(step)
+        }
 
         
         var boxHeight = 5;
         var wallHeight = boxHeight
-        var maxWidth = this.houseDim[0];
-        var maxDepth = this.houseDim[1];
-        var startY = foundationY + (this.foundationHeight / 2) - wallHeight;
+        var maxWidth = house.width;
+        var maxDepth = house.width;
 
-        for (var i = 0; i < 3; i++) {
-            var width = randomInRange(maxWidth / 4, maxWidth);
-            var depth = randomInRange(maxDepth / 4, maxDepth);
+        for (var i = 0; i < 10; i++) {
+            var width = i < 5 ? maxWidth : maxWidth
+            var depth = i < 5 ? maxDepth : maxDepth
 
             // Create the main box
             var box = new THREE.Mesh(
@@ -780,7 +830,7 @@ class Castle {
             box.castShadow = true;
             box.receiveShadow = true
             var xPos = randomInRange(-width / 2, width / 2);
-            var yPos = (i * wallHeight) + wallHeight;
+            var yPos = (i * wallHeight) + wallHeight / 2
             var zPos = randomInRange(-depth / 2, depth / 2);
             box.position.set(0, yPos, 0);
       
@@ -810,12 +860,12 @@ class Castle {
             frontWallBrush.updateMatrixWorld();
 
             // Create and subtract multiple windows for front wall
-            for (var w = 0; w < 3; w++) {
+            for (var w = 0; w < 5; w++) {
                 var windowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowThickness);
                 var windowBrush = new Brush(windowGeometry);
                 windowBrush.position.set(
                     -width / 2 + windowWidth, // Avoid edges
-                    yPos + boxHeight / 4,
+                    yPos,
                     depth / 2 + windowThickness / 2 + 0.01
                 );
                 windowBrush.updateMatrixWorld();
@@ -830,6 +880,7 @@ class Castle {
                         texture.repeat.set(11, 11);
                 })
             }));
+            frontMesh.frustrumCulled = true
             this.parts.push(frontMesh)
             scene.add(frontMesh);
 
@@ -860,6 +911,7 @@ class Castle {
                         texture.repeat.set(11, 11);
                 })
             }));
+            backMesh.frustrumCulled = true
             this.parts.push(backMesh)
             scene.add(backMesh);
 
@@ -892,6 +944,7 @@ class Castle {
                         texture.repeat.set(11, 11);
                 })
             }));
+            leftMesh.frustrumCulled = true
             this.parts.push(leftMesh)
             scene.add(leftMesh);
 
@@ -940,12 +993,14 @@ class Castle {
                         texture.repeat.set(11, 11);
                 })
             }));
+            rightMesh.frustrumCulled = true
             this.parts.push(rightMesh)
             scene.add(rightMesh);
 
             // Top and bottom walls remain unchanged
             var topWall = new THREE.Mesh(new THREE.BoxGeometry(width, wallThickness, depth), wallMaterial);
             topWall.position.set(0, yPos + (boxHeight / 2), 0);
+            topWall.frustrumCulled = true
             this.parts.push(topWall)
             scene.add(topWall);
 
@@ -953,7 +1008,8 @@ class Castle {
                 side: THREE.DoubleSide,
                 map: new THREE.TextureLoader().load("/images/floor19.jpg")
             }));
-            bottomWall.position.set(0, yPos - (boxHeight / 2), 0);
+            bottomWall.position.set(0, yPos - (boxHeight / 3), 0);
+            bottomWall.frustrumCulled = true
             this.parts.push(bottomWall)
             scene.add(bottomWall);
         }
@@ -972,9 +1028,9 @@ class Castle {
             new THREE.MeshStandardMaterial({ color: 'maroon' })
         );
         eFloor.position.set(
-            this.houseDim[0] / 2 - elevatorWidth / 2,
+            house.width / 2 - elevatorWidth / 2,
             castleBaseCenter.y + this.offsetY,
-            this.houseDim[1] / 2 - elevatorWidth / 2
+            house.width / 2 - elevatorWidth / 2
         );
         eFloor.geometry.computeVertexNormals()
         eFloor.floorZero = castleBaseCenter.y + this.offsetY
@@ -988,9 +1044,9 @@ class Castle {
             new THREE.MeshStandardMaterial({ color: 'maroon' })
         );
         eCeiling.position.set(
-            this.houseDim[0] / 2 - elevatorWidth / 2, 
+            house.width / 2 - elevatorWidth / 2, 
             castleBaseCenter.y + elevatorHeight + this.offsetY, 
-            this.houseDim[1] / 2 - elevatorWidth / 2
+            house.width / 2 - elevatorWidth / 2
         );
         eCeiling.geometry.computeVertexNormals()
         this.elevator.push(eCeiling)
@@ -1281,9 +1337,9 @@ class Castle {
         var elevatorPointLight = new THREE.PointLight(0xffffff, 25, 5);
         this.elevator.push(elevatorPointLight)
         elevatorPointLight.position.set(
-            this.houseDim[0] / 2 - elevatorWidth / 2, 
+            house.width / 2 - elevatorWidth / 2, 
             castleBaseCenter.y + elevatorHeight + 1,  // Y position (at ceiling height)
-            this.houseDim[1] / 2 - elevatorWidth / 2
+            house.width / 2 - elevatorWidth / 2
         )
         scene.add(elevatorPointLight)
         var elevatorLightViz = new THREE.Mesh(
@@ -1318,7 +1374,7 @@ class Castle {
             button.position.set(
                 buttonPlate.position.x + .01,  // x position, you can adjust it if needed
                 plateCenterY - plateHeight / 2 + i * buttonSpacing,  // y position, spacing the buttons evenly
-                this.houseDim[1] / 2 - elevatorWidth / 2      // z position
+                house.width / 2 - elevatorWidth / 2      // z position
             );
             button.floorZero = plateCenterY - plateHeight / 2 + i * buttonSpacing
             button.rotation.y = Math.PI / 2
@@ -1448,7 +1504,7 @@ class Terrain {
     constructor(options) {
         switch (options.user.level) {
         case LEVEL[1]:
-            this.grassTexture = new THREE.TextureLoader().load("/images/nasturtiums1.jpg")
+            // this.grassTexture = new THREE.TextureLoader().load("/images/nasturtiums1.jpg")
             this.Grass = [
                 '#33462d', //
                 '#435c3a', //
@@ -1457,12 +1513,12 @@ class Terrain {
                 '#536c46', //
                 '#5d6847', //
             ]
-            let _textures = options.map[options.user.level].textures;
-            for (var key in _textures) {
-                _textures[key] = _textures[key].map(t => new THREE.TextureLoader().load(t));
-            }
+            // let _textures = options.map[options.user.level].textures;
+            // for (var key in _textures) {
+            //     _textures[key] = _textures[key].map(t => new THREE.TextureLoader().load(t));
+            // }
             this.sop = VM.map[VM.user.level].sop
-            this.textures =  _textures;
+            // this.textures =  _textures;
             this.vertices = new Map();
             this.meshes = [];
             this.markers = {};
@@ -1498,9 +1554,7 @@ class Terrain {
         for (var xyz in axis) {
             for (var polarity in axis[xyz]) {
                 var cylinderHelperGeometry = new THREE.CylinderGeometry(0.15, 0.5, cylinderLength, 32); // Radius 0.5, length 20 (horizontal)
-                var cylinderMaterialArgs = xyz == 'y' ? {
-                    map: new THREE.TextureLoader().load("/images/door10.jpg")
-                } : { 
+                var cylinderMaterialArgs = {
                     color: axis[xyz][polarity] 
                 }
                 var cylinderMaterial = new THREE.MeshStandardMaterial(cylinderMaterialArgs);
@@ -1604,12 +1658,12 @@ class Terrain {
 
                 v.y += variance;
 
-                var inCastle = v.x > -45 && v.x < 35 && v.z > -30 && v.z < 30;
-                if (inCastle) {
-                    v.y = -1;  // Flatten the terrain inside the castle
+                var inField = v.x > -landscape.field.width / 2 && v.x < landscape.field.width / 2 && v.z > -landscape.field.depth / 2 && v.z < landscape.field.depth / 2;
+                if (inField) {
+                    v.y = landscape.field.center.y;  // Flatten the terrain inside the castle
                 }
 
-                var goingDownToRiver = v.x >= 35 && v.z >= -30 && v.z <= 30;
+                var goingDownToRiver = v.x >= landscape.field.width / 2 && v.z >= -landscape.field.depth && v.z <= landscape.field.depth / 3;
                 if (goingDownToRiver) {
 
 
@@ -1631,7 +1685,7 @@ class Terrain {
 
 
                     let curveFactor = .1 * Math.cos(Math.random() * Math.PI); // Smooth cosine factor
-                    let targetHeight = -50;
+                    let targetHeight = -20;
 
                     // Blend between current height and target height using cosine curve
                     if (Math.random() < 0.95) {
@@ -1639,7 +1693,7 @@ class Terrain {
                     }
 
                 } else {
-                    if (eval(this.treeCondition)) {
+                    if (!inField && eval(this.treeCondition)) {
                         var tree = this.createTree(v.x, v.y, v.z, 1);
                         this.trees.push(tree);
                     }
@@ -1788,12 +1842,12 @@ class Terrain {
                 v.y = (1 - x) * (1 - y) * v0.y + x * (1 - y) * v1.y + x * y * v2.y + (1 - x) * y * v3.y;
                 v.z = (1 - x) * (1 - y) * v0.z + x * (1 - y) * v1.z + x * y * v2.z + (1 - x) * y * v3.z;
 
-                var inCastle = (v.x > -50 && v.x < 35 && v.z > -35 && v.z < 35)
+                var inCastle = (v.x > -house.width / 2 && v.x < house.width / 2 && v.z > -house.depth / 2 && v.z < house.depth / 2)
 
 
-                var inCove = v.x >= 35 && v.z >= -30 && v.z <= 30;
+                var inCove = v.x >= landscape.field.width / 2 && v.z >= -landscape.field.depth && v.z <= landscape.field.depth / 3;
 
-                var isNearGrassPatch = false && (grassPatches[i][j] || 
+                var isNearGrassPatch = !inCastle && Math.random() < .5 && (grassPatches[i][j] || 
                                           (i > 0 && grassPatches[i - 1][j]) ||  // Check left
                                           (i < this.segments && grassPatches[i + 1][j]) ||  // Check right
                                           (j > 0 && grassPatches[i][j - 1]) ||  // Check above
@@ -2494,18 +2548,18 @@ class Terrain {
         const greenValue = Math.floor(Math.random() * 256);
         const color = new THREE.Color(Math.random() < 0.05 ? randomInRange(0, 0.5) : 0, greenValue / 255, 0);
         const foliageIndex = textureIndex > 4 ? textureIndex - 3 : textureIndex;
-        const foliageTexture = this.textures.foliage[Math.floor(Math.random() * 7)];
+        // const foliageTexture = this.textures.foliage[Math.floor(Math.random() * 7)];
 
         // Set how many times the texture should repeat in the U and V directions
-        foliageTexture.wrapS = THREE.RepeatWrapping; // Repeat horizontally
-        foliageTexture.wrapT = THREE.RepeatWrapping; // Repeat vertically
+        // foliageTexture.wrapS = THREE.RepeatWrapping; // Repeat horizontally
+        // foliageTexture.wrapT = THREE.RepeatWrapping; // Repeat vertically
 
         // Adjust these values to control the repetition frequency
-        foliageTexture.repeat.set(10, 10); // Increase these numbers for more repetitions and smaller texture
+        // foliageTexture.repeat.set(10, 10); // Increase these numbers for more repetitions and smaller texture
 
         let sphereMaterial = new THREE.MeshStandardMaterial({
             color,
-            map: foliageTexture,
+            // map: foliageTexture,
             transparent: false
         });
 
@@ -2514,6 +2568,7 @@ class Terrain {
         sphere.castShadow = true
         sphere.receiveShadow = true
         sphere.position.set(xS, yS + (foliageRadius / 2), zS); // Set foliage position
+        sphere.frustrumCulled = true
         scene.add(sphere);
 
         var { array, itemSize } = sphereGeometry.attributes.position
@@ -2540,8 +2595,8 @@ class Terrain {
         const tubeGeometry = new THREE.TubeGeometry(path, segments, trunkBaseRadius);
 
         const material = new THREE.MeshStandardMaterial({ 
-            map: this.textures.barks[textureIndex],
-            // color: 'red',
+            // map: this.textures.barks[textureIndex],
+            color: 'red',
             side: THREE.DoubleSide
         });
 
@@ -2552,6 +2607,7 @@ class Terrain {
         tubeMesh.position.y -= 2
 
         // Add the mesh to the scene
+        tubeMesh.frustrumCulled = true
         scene.add(tubeMesh);
 
         return new Terrain.Tree(tubeMesh, sphere);
@@ -2600,7 +2656,8 @@ class Terrain {
             [instancedMesh, bladePositions] = this.createGrassBlade(instancedMesh, triangle, bladePositions, i);
         }
 
-        instancedMesh.castShadow = true;
+        instancedMesh.frustrumCulled = true
+        // instancedMesh.castShadow = true;
         instancedMesh.receiveShadow = true;
         instancedMesh.position.y += bladeHeight / 2
 
@@ -2842,8 +2899,8 @@ class UserController {
         this.targetLook = new THREE.Vector3();
 
 
-        window.addEventListener('mousedown', e => this.mouseDown = true)
-        window.addEventListener('mouseup', e => this.mouseDown = false)
+        window.addEventListener('mousedown', e => { this.mouseDown = true })
+        window.addEventListener('mouseup', e => { this.mouseDown = false })
 
         // Define the max angle for the arc (in radians)
         const maxAngle = THREE.MathUtils.degToRad(45);  // 45 degrees in radians
@@ -3232,8 +3289,15 @@ class View {
 
         window.terrain = new Terrain(VM);
 
+        console.log("added terrain")
+
         window.user = new UserController(terrain);
+
+        console.log("added user controller")
+
         window.sky = new Sky(window.user);
+
+        console.log('added sky')
 
         window.terrain.setCamera(window.user.camera);
 
@@ -3246,8 +3310,9 @@ class View {
         var castleBaseCenter = new THREE.Vector3(0, 0, 0)
 
         window.castle = new Castle(castleBaseCenter);
+        // window.castle = { parts: [] }
 
-
+        console.log('added castle')
 
 
         
@@ -3320,9 +3385,10 @@ class View {
         }
 
         // window.user.camera.position.set(33.953909365281795, 2.610000001490116, 23.053098469337314);
-        window.user.camera.position.set(24, 1.1, 0)
+        window.user.camera.position.set(24, landscape.field.center.y + 10, 0)
 
         window.user.camera.lookAt(sky.sphere.position)
+
         
         
     }

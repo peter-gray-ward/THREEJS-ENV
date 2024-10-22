@@ -188,6 +188,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
+      offscreen: false
     },
   });
 
@@ -195,6 +196,10 @@ function createWindow() {
   win.loadURL('app://./index.html');
   win.webContents.openDevTools();
 }
+app.disableHardwareAcceleration()
+// app.commandLine.appendSwitch('use-angle', 'd3d11'); // Use DirectX 11
+app.commandLine.appendSwitch('use-angle', 'gl');
+
 
 app.whenReady().then(() => {
   // Register a custom protocol to handle app:// URLs

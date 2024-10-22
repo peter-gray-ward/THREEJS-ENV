@@ -18,20 +18,133 @@ class User {
   }
 }
 
+let t = 200
+
 class Model {
   constructor(user) {
     const center = { x: 0, y: 0, z: 0 };
     this.map = {
       [user.level]: {
         center, 
-        quadrant: 100, 
-        noiseWidth: 200, 
-        noiseHeight: 100,
+        quadrant: t, 
+        noiseWidth: t * 2, 
+        noiseHeight: t,
         segments: 50,
         sop: {
-            trees: 100 * 3,
-            grasses: 100 * .3
+            trees: t / 2,
+            grasses: t / 3,
+            grounds: 0,
+            cliffs: t / 2
         },
+        grasses: [],
+        grounds: [],
+        structures: [
+          {
+            name: 'castle',
+            position: {
+              foundation: {
+                x: 0,
+                y: 16,
+                z: 0,
+              },
+              elevator: {
+                x: 40 - 1.25,
+                y: 1.5 + 3,
+                z: -25 + 1.25,
+                floor: {
+                  x: 40 - 1.25,
+                  y: 1.5 + 0.1,
+                  z: -25 + 1.25,
+                },
+                ceiling: {
+                  x: 40 - 1.25,
+                  y: 1.5 + 3 - 0.1,
+                  z: -25 + 1.25,
+                },
+                shaft: {
+                  front: Array.from({ length: 20 }, (_, index) => {
+                    const LEVEL = (15 / 2 * (_ + 1));
+                    return {
+                      x: 40 - 1.25,
+                      y: 1.5 + LEVEL,
+                      z: -25 + 2.5 - .1,
+                      door: {
+                        x: 40 - 1.25,
+                        y: LEVEL - 1.5 + 1,
+                        z: -25 + 2.5 - .1,
+                      }
+                    }
+                  }),
+                  right: {
+                    x: 1.5 + 3, 
+                    y: 1.5 + (15 * 20 / 2), 
+                    z: -25 + 1.25 - 0.1
+                  },
+                  back: {},
+                  left: {
+                    x: 40 - 1.25,
+                    y: 1.5 + (15 * 20),
+                    z: -25 + 1.25
+                  }
+                }
+                // buttons: {
+                //   plate: {
+                //     x: eFloor.position.x - 1, 
+                //     floorYPosition + this.offsetY + 1,  // Y-position at this level
+                //     eFloor.position.z - escalationCooridorDim / 2 - .12
+                //   }
+                // }
+              }
+            },
+            rotation: {
+              elevator: {
+                shaft: {
+                  right: {
+                    y: Math.PI / 2
+                  }
+                }
+              }
+            },
+            area: {
+              foundation: {
+                width: 20,
+                height: 50,
+                depth: 20
+              },
+              floor: {
+                width: 20,
+                height: 3,
+                depth: 20
+              },
+              elevator: {
+                width: 2.5,
+                height: 3,
+                depth: 2.5,
+                floor: {
+                  width: 2.5,
+                  height: 0.2,
+                  depth: 2.5
+                },
+                shaft: {
+                  front: {},
+                  right: {
+                    width: 2.5, 
+                    height: (15 * 19 + 3), 
+                    depth: 0.2
+                  }
+                }
+              },
+              wall: {
+                height: 30
+              }
+            },
+            floors: 20,
+            textures: {
+              foundation: "/images/concrete"
+            }
+          }
+        ],
+        trees: [],
         Grass: [
             '#33462d', //
             '#435c3a', //
@@ -40,7 +153,8 @@ class Model {
             '#536c46', //
             '#5d6847', //
         ],
-        grassPatchPersistence: 0.03,
+        treeCondition: `!inCastle && (Math.random() < 0.31 || (Math.random() < 0.3 && !isNearGrassPatch))`,
+        grassPatchPersistence: 0.01,//0.03,
         textures: {
           barks: Array.from({ length: 7 }, (_, i) => `/images/trees/bark/bark-${i + 1}.jpg`),
           branches: Array.from({ length: 4 }, (_, i) => `/images/trees/foliage/branches/tree-branch-${i + 1}.png`),
@@ -48,14 +162,10 @@ class Model {
         },
         amplitude: 50,
         persistence: 0.15,
-        altitudeVariance: 10,
-        width: 200,
-        height: 200,
-        grassBladeDensity: 500,
-        v0: { x: center.x - 100, y: center.y, z: center.z + 100 },
-        v1: { x: center.x + 100, y: center.y, z: center.z + 100 }, 
-        v2: { x: center.x + 100, y: center.y, z: center.z - 100 }, 
-        v3: { x: center.x - 100, y: center.y, z: center.z - 100 }
+        altitudeVariance: 20,
+        width: t * 2,
+        height: t * 2,
+        grassBladeDensity: 300
       }
     };
     this.user = user;
@@ -64,23 +174,13 @@ class Model {
 
 
 
-
 var ii = 0
 app
   .use(express.json())
   .use(express.urlencoded({ extended: true }))
   .get('/', (req, res) => res.sendFile(dir('index.html')))
-  .get('/three', (req, res) => {
-    var fp = path.join(__dirname, 'node_modules/three/build/three.cjs')
-    res.type("text/javascript");
-    res.sendFile(fp)
-  })
- .get('/images/trees/:treepart/*', (req, res) => {
-    const { treepart } = req.params;
-    const restOfPath = req.params[0]; // The wildcard part (everything after :treepart)
-
-    // Construct the file path
-    const filePath = path.join(__dirname, 'images', 'trees', treepart, restOfPath);
+ .get('/images/:filename', (req, res) => {
+    const filePath = path.join(__dirname, 'images', req.params.filename);
     res.sendFile(filePath);
   })
   .get('/load/:username', (req, res) => {
@@ -101,16 +201,5 @@ app
     console.log("filePath", filePath);
     res.type("text/javascript");
     res.sendFile(filePath);
-  })
-  .post('/save', (req, res) => {
-    var body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', function() {
-      body = JSON.parse(body);
-      fs.writeFileSync('./db.json', JSON.stringify(body, null, 2));
-    })
-  })
-  .get('/load', (req, res) => {
-    return fs.readFileSync('./db.json');
   })
 .listen(8080, () => console.log('http://localhost:8080'));
