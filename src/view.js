@@ -398,7 +398,7 @@ class Sky {
 
 
     update() {
-        this.time += 0.0005;  // Control the speed of the sun's movement
+        this.time += 0.05;  // Control the speed of the sun's movement
 
         // Sun's position: moving along the x and y axes while keeping z fixed at 0
         var sunX = this.sceneRadius * Math.cos(this.time);  // Sun moves along the x-axis
@@ -732,10 +732,11 @@ class Castle {
                 z: 0
             }
         }
-
-       
-        
-    
+        this.createHarryPotterLampPost(
+            boardwalk.center.x - boardwalk.width / 2 + 1, 
+            boardwalk.center.y, 
+            boardwalk.center.z - boardwalk.depth / 2 + 1
+        )
         const boardwalkTexture = new THREE.TextureLoader().load("/images/floor2.jpg", texture => {
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
@@ -1038,6 +1039,38 @@ class Castle {
 
     }
 
+    createHarryPotterLampPost(x, y, z) {
+        const lampHeight = 5;
+
+        // Create the lamp post (a tall cylinder)
+        const postGeometry = new THREE.CylinderGeometry(0.1, 0.1, lampHeight, 8);
+        const postMaterial = new THREE.MeshStandardMaterial({ color: 'black' });
+        const lampPost = new THREE.Mesh(postGeometry, postMaterial);
+        lampPost.position.set(x, y + lampHeight / 2, z); // Position it so the base is at the given coordinates
+        scene.add(lampPost);
+
+        // Create the top cap of the lamp post (a sphere)
+        const capGeometry = new THREE.SphereGeometry(0.2, 8, 8); // Small cap on top of the post
+        const capMaterial = new THREE.MeshStandardMaterial({ color: 'black' });
+        const lampPostCap = new THREE.Mesh(capGeometry, capMaterial);
+        lampPostCap.position.set(x, y + lampHeight, z); // Position at the top of the post
+        scene.add(lampPostCap);
+
+        // Add a light to the lamp post
+        const pointLight = new THREE.PointLight(0xffa500, 10, 10); // Orangish-yellow light
+        pointLight.position.set(x, y + lampHeight + 0.5, z); // Slightly above the cap
+        scene.add(pointLight);
+
+        // Optionally, add a sphere to represent the light bulb (glowing effect)
+        const bulbGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+        const bulbMaterial = new THREE.MeshBasicMaterial({ color: 0xffa500, emissive: 0xffa500 });
+        const bulb = new THREE.Mesh(bulbGeometry, bulbMaterial);
+        bulb.position.set(x, y + lampHeight + 0.5, z);
+        scene.add(bulb);
+
+        // Optionally, add shadow to the light
+        pointLight.castShadow = true;
+    }
 
     buildElevator() {
         // Elevator floor
