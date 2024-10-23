@@ -737,6 +737,7 @@ class Castle {
             boardwalk.center.y, 
             boardwalk.center.z - boardwalk.depth / 2 + 1
         )
+
         const boardwalkTexture = new THREE.TextureLoader().load("/images/floor2.jpg", texture => {
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
@@ -807,6 +808,8 @@ class Castle {
                             side: THREE.DoubleSide
                         })
                     )
+                    stepTurnPlane.castShadow = true
+                    stepTurnPlane.receiveShadow = true
                     stepTurnPlane.position.set(stepX + 1, stepY, stepZ)
                     scene.add(stepTurnPlane)
                     this.parts.push(stepTurnPlane)
@@ -825,212 +828,184 @@ class Castle {
 
 
         
-        var boxHeight = 5;
-        var wallHeight = boxHeight
+      var boxHeight = 5;
+        var wallHeight = boxHeight;
         var maxWidth = house.width;
         var maxDepth = house.width;
 
         for (var i = 0; i < 10; i++) {
-            var width = i < 5 ? maxWidth : maxWidth
-            var depth = i < 5 ? maxDepth : maxDepth
+            var width = i < 5 ? maxWidth : maxWidth;
+            var depth = i < 5 ? maxDepth : maxDepth;
 
-            // Create the main box
-            var box = new THREE.Mesh(
-                new THREE.BoxGeometry(width, boxHeight, depth),
-                new THREE.MeshStandardMaterial({
-                    map: new THREE.TextureLoader().load("/images/wall4.jpg"),
-                    side: THREE.DoubleSide,
-                    transparent: true,
-                    opacity: 1
-                })
-            );
-            box.castShadow = true;
-            box.receiveShadow = true
+            var yPos = (i * wallHeight) + (wallHeight / 2); // Proper y-position adjustment
 
-            var xPos = randomInRange(-width / 2, width / 2);
-            var yPos = (i * wallHeight) + wallHeight / 2
-            var zPos = randomInRange(-depth / 2, depth / 2);
-            box.position.set(0, yPos, 0);
-      
-
-            // Define wall thickness
+            // Wall and Window/Door Materials
             var wallThickness = 0.2;
-            var windowThickness = 2
-            var wallMaterial = new THREE.MeshStandardMaterial({ 
+            var windowThickness = 2;
+            var wallMaterial = new THREE.MeshStandardMaterial({
                 map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
                     texture.wrapS = THREE.RepeatWrapping;
-                        texture.wrapT = THREE.RepeatWrapping;
-                        texture.repeat.set(11, 11);
-                }), side: THREE.DoubleSide 
+                    texture.wrapT = THREE.RepeatWrapping;
+                    texture.repeat.set(11, 11);
+                }),
+                side: THREE.DoubleSide
             });
 
-            // Window variables
-            var windowWidth = boxHeight / 4; // Fixed size for smaller windows
-            var windowHeight = boxHeight / 4;
-            var windowSpacing = windowWidth * 1.5;  // Spacing between windows
+            // Door and Window Sizes
+            var doorWidth = boxHeight / 2;
+            var doorHeight = boxHeight * 0.8;
+            var windowWidth = boxHeight / 4;
+            var windowHeight = 1; // Small window if i == 0
 
-            const evaluator = new Evaluator();
-
-            // Front Wall
+            // -----------------------
+            // Front Wall Geometry
+            // -----------------------
             var frontWallGeometry = new THREE.BoxGeometry(width, boxHeight, wallThickness);
             var frontWallBrush = new Brush(frontWallGeometry);
             frontWallBrush.position.set(0, yPos, depth / 2);
             frontWallBrush.updateMatrixWorld();
 
-            // Create and subtract multiple windows for front wall
-            for (var w = 0; w < 5; w++) {
-                var windowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowThickness);
-                var windowBrush = new Brush(windowGeometry);
-                windowBrush.position.set(
-                    -width / 2 + windowWidth, // Avoid edges
-                    yPos,
-                    depth / 2 + windowThickness / 2 + 0.01
-                );
-                windowBrush.updateMatrixWorld();
-                frontWallBrush = evaluator.evaluate(frontWallBrush, windowBrush, SUBTRACTION); // Subtract the window
+            // Subtract Door on Bottom Floor, Else Subtract Windows
+            if (i === 0) {
+                // Create Door
+                var doorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, windowThickness);
+                var doorBrush = new Brush(doorGeometry);
+                doorBrush.position.set(0, yPos - boxHeight / 2 + doorHeight / 2, depth / 2 + windowThickness / 2 + 0.01);
+                doorBrush.updateMatrixWorld();
+                frontWallBrush = evaluator.evaluate(frontWallBrush, doorBrush, SUBTRACTION); // Subtract door
+            } else {
+                // Create and subtract windows for higher floors
+                for (var w = 0; w < 5; w++) {
+                    var windowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowThickness);
+                    var windowBrush = new Brush(windowGeometry);
+                    windowBrush.position.set(
+                        -width / 2 + windowWidth * (w + 1), // Place windows evenly along the wall
+                        yPos,
+                        depth / 2 + windowThickness / 2 + 0.01
+                    );
+                    windowBrush.updateMatrixWorld();
+                    frontWallBrush = evaluator.evaluate(frontWallBrush, windowBrush, SUBTRACTION); // Subtract windows
+                }
             }
 
-            // Convert front wall geometry back to mesh
-            var frontMesh = new THREE.Mesh(frontWallBrush.geometry, new THREE.MeshStandardMaterial({
-                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
-                    texture.wrapS = THREE.RepeatWrapping;
-                        texture.wrapT = THREE.RepeatWrapping;
-                        texture.repeat.set(11, 11);
-                })
-            }));
-            frontMesh.frustrumCulled = true
-            this.parts.push(frontMesh)
+            // Convert Front Wall Geometry Back to Mesh
+            var frontMesh = new THREE.Mesh(frontWallBrush.geometry, wallMaterial);
+            frontMesh.frustumCulled = true;
+            frontMesh.castShadow = true
+            frontMesh.receiveShadow = true
+            this.parts.push(frontMesh);
             scene.add(frontMesh);
 
-            // Back Wall
+            // -----------------------
+            // Back Wall Geometry
+            // -----------------------
             var backWallGeometry = new THREE.BoxGeometry(width, boxHeight, wallThickness);
             var backWallBrush = new Brush(backWallGeometry);
             backWallBrush.position.set(0, yPos, -depth / 2);
             backWallBrush.updateMatrixWorld();
 
-            // Subtract multiple windows from back wall
-            for (var w = 0; w < 3; w++) {
-                var backWindowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowThickness);
-                var backWindowBrush = new Brush(backWindowGeometry);
-                backWindowBrush.position.set(
-                    width / 2 - windowWidth, 
-                    yPos - boxHeight / 4,
-                    -depth / 2 - windowThickness / 2 - 0.01
-                );
-                backWindowBrush.updateMatrixWorld();
-                backWallBrush = evaluator.evaluate(backWallBrush, backWindowBrush, SUBTRACTION);
+            // Subtract windows or door for the back wall
+            if (i === 0) {
+                // Create Door for the back wall if needed
+                var backDoorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, windowThickness);
+                var backDoorBrush = new Brush(backDoorGeometry);
+                backDoorBrush.position.set(0, yPos - boxHeight / 2 + doorHeight / 2, -depth / 2 - windowThickness / 2 - 0.01);
+                backDoorBrush.updateMatrixWorld();
+                backWallBrush = evaluator.evaluate(backWallBrush, backDoorBrush, SUBTRACTION);
+            } else {
+                for (var w = 0; w < 3; w++) {
+                    var backWindowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowThickness);
+                    var backWindowBrush = new Brush(backWindowGeometry);
+                    backWindowBrush.position.set(
+                        width / 2 - windowWidth, 
+                        yPos,
+                        -depth / 2 - windowThickness / 2 - 0.01
+                    );
+                    backWindowBrush.updateMatrixWorld();
+                    backWallBrush = evaluator.evaluate(backWallBrush, backWindowBrush, SUBTRACTION);
+                }
             }
 
-            // Convert back wall geometry back to mesh
-            var backMesh = new THREE.Mesh(backWallBrush.geometry, new THREE.MeshStandardMaterial({
-                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
-                    texture.wrapS = THREE.RepeatWrapping;
-                        texture.wrapT = THREE.RepeatWrapping;
-                        texture.repeat.set(11, 11);
-                })
-            }));
-            backMesh.frustrumCulled = true
-            this.parts.push(backMesh)
+            var backMesh = new THREE.Mesh(backWallBrush.geometry, wallMaterial);
+            backMesh.frustumCulled = true;
+            backMesh.receiveShadow = true
+            backMesh.castShadow = true
+            this.parts.push(backMesh);
             scene.add(backMesh);
 
-            // Left Wall
+            // -----------------------
+            // Left Wall Geometry
+            // -----------------------
             var leftWallGeometry = new THREE.BoxGeometry(wallThickness, boxHeight, depth);
             var leftWallBrush = new Brush(leftWallGeometry);
             leftWallBrush.position.set(-width / 2, yPos, 0);
             leftWallBrush.updateMatrixWorld();
 
-            // Subtract multiple windows from left wall
             for (var w = 0; w < 3; w++) {
                 var leftWindowGeometry = new THREE.BoxGeometry(windowThickness, windowHeight, windowWidth);
                 var leftWindowBrush = new Brush(leftWindowGeometry);
-                var lwb_x = -width / 2 - windowThickness / 2 - 0.01
-                var lwb_y = yPos + boxHeight / 4
-                var lwb_z = -depth / 2 + windowHeight
-
-                leftWindowBrush.position.set(lwb_x, lwb_y, lwb_z);
+                leftWindowBrush.position.set(
+                    -width / 2 - windowThickness / 2 - 0.01,
+                    yPos,
+                    -depth / 2 + windowHeight
+                );
                 leftWindowBrush.updateMatrixWorld();
                 leftWallBrush = evaluator.evaluate(leftWallBrush, leftWindowBrush, SUBTRACTION);
-
-                
             }
 
-            // Convert left wall geometry back to mesh
-            var leftMesh = new THREE.Mesh(leftWallBrush.geometry, new THREE.MeshStandardMaterial({
-                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
-                    texture.wrapS = THREE.RepeatWrapping;
-                        texture.wrapT = THREE.RepeatWrapping;
-                        texture.repeat.set(11, 11);
-                })
-            }));
-            leftMesh.frustrumCulled = true
-            this.parts.push(leftMesh)
+            var leftMesh = new THREE.Mesh(leftWallBrush.geometry, wallMaterial);
+            leftMesh.receiveShadow = true
+            leftMesh.castShadow = true
+            leftMesh.frustumCulled = true;
+            this.parts.push(leftMesh);
             scene.add(leftMesh);
 
-            // Right Wall
+            // -----------------------
+            // Right Wall Geometry
+            // -----------------------
             var rightWallGeometry = new THREE.BoxGeometry(wallThickness, boxHeight, depth);
             var rightWallBrush = new Brush(rightWallGeometry);
             rightWallBrush.position.set(width / 2, yPos, 0);
             rightWallBrush.updateMatrixWorld();
 
-            // Subtract multiple windows from right wall
             for (var w = 0; w < 3; w++) {
                 var rightWindowGeometry = new THREE.BoxGeometry(windowThickness * 3, windowHeight * 2, windowWidth);
                 var rightWindowBrush = new Brush(rightWindowGeometry);
-                var rwb_x = width / 2 + windowThickness / 2 + 0.01
-                var rwb_y = yPos + boxHeight / 4
-                var rwb_z = depth / 2 - windowHeight
-                rightWindowBrush.position.set(rwb_x, rwb_y, rwb_z);
+                rightWindowBrush.position.set(
+                    width / 2 + windowThickness / 2 + 0.01,
+                    yPos,
+                    depth / 2 - windowHeight
+                );
                 rightWindowBrush.updateMatrixWorld();
                 rightWallBrush = evaluator.evaluate(rightWallBrush, rightWindowBrush, SUBTRACTION);
-                
-
-                // if (i % 2 == 0) {
-                //     var lwb_sx = rwb_x
-                //     for (var lwb_sy = lwb_y - windowHeight; lwb_sy > 0; lwb_sy -= .2) {
-                //         var stepGeo = new THREE.BoxGeometry(.3, .2, .8)
-                //         stepGeo.computeVertexNormals()
-                //         var stepMat = new THREE.MeshStandardMaterial({
-                //             side: THREE.DoubleSide, map: new THREE.TextureLoader().load("/images/floor1111.jpg")
-                //         })
-                //         var step = new THREE.Mesh(stepGeo, stepMat)
-                //         step.castShadow = true
-                //         step.receiveShadow = true
-                //         step.position.set(lwb_sx, lwb_sy, rwb_z)
-                //         lwb_sx += .3
-                //         this.parts.push(step)
-                //         scene.add(step)
-                //     }
-                // }
             }
 
-            // Convert right wall geometry back to mesh
-            var rightMesh = new THREE.Mesh(rightWallBrush.geometry, new THREE.MeshStandardMaterial({
-                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
-                    texture.wrapS = THREE.RepeatWrapping;
-                        texture.wrapT = THREE.RepeatWrapping;
-                        texture.repeat.set(11, 11);
-                })
-            }));
-            rightMesh.frustrumCulled = true
-            this.parts.push(rightMesh)
+            var rightMesh = new THREE.Mesh(rightWallBrush.geometry, wallMaterial);
+            rightMesh.castShadow = true
+            rightMesh.receiveShadow = true
+            rightMesh.frustumCulled = true;
+            this.parts.push(rightMesh);
             scene.add(rightMesh);
 
-            // Top and bottom walls remain unchanged
+            // -----------------------
+            // Top and Bottom Walls
+            // -----------------------
             var topWall = new THREE.Mesh(new THREE.BoxGeometry(width, wallThickness, depth), wallMaterial);
             topWall.position.set(0, yPos + (boxHeight / 2), 0);
-            topWall.frustrumCulled = true
-            this.parts.push(topWall)
+            this.parts.push(topWall);
             scene.add(topWall);
 
             var bottomWall = new THREE.Mesh(new THREE.BoxGeometry(width, wallThickness, depth), new THREE.MeshStandardMaterial({
                 side: THREE.DoubleSide,
                 map: new THREE.TextureLoader().load("/images/floor19.jpg")
             }));
-            bottomWall.position.set(0, yPos - (boxHeight / 3), 0);
-            bottomWall.frustrumCulled = true
-            this.parts.push(bottomWall)
+            bottomWall.castShadow = true
+            bottomWall.receiveShadow = true
+            bottomWall.position.set(0, yPos - (boxHeight / 2), 0);
+            this.parts.push(bottomWall);
             scene.add(bottomWall);
         }
+
 
                
         var backyardTree = terrain.createTree(29, 0, 21);
@@ -1747,7 +1722,8 @@ class Terrain {
 
         const segmentSize = 1 / this.segments;
         this.groundColorMap = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(0));  // Initialize ground color map
-
+        this.grassPatches = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(false));
+        
 
         const neighbors = this.meshes.filter(mesh => this.isNeighbor(mesh.centerKey, centerKey));
 
@@ -1825,7 +1801,7 @@ class Terrain {
                     }
 
                 } else {
-                    if (!inField && eval(this.treeCondition)) {
+                    if (!inField && Math.random() < 0.2) {
                         var tree = this.createTree(v.x, v.y, v.z, 1);
                         this.trees.push(tree);
                     }
@@ -1930,25 +1906,23 @@ class Terrain {
         }
 
 
-        var grassPatches = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(false));
         
         
         switch (this.terrainType) {
             case 'dense':
                 for (let i = 0; i < this.segments; i++) {
                     for (let j = 0; j < this.segments; j++) {
-                        for (var k = 0; k < 3; k++) {
-                            grassPatches[i][j] = Math.random() < 0.9;
-                        }
+                        var x = i * this.segments
+                        var z = j * this.segments
+                        this.grassPatches[i][j] = Math.random() < 0.9;
+                        
                     }
                 }
                 break;
             case 'sparse':
                 for (let i = 0; i < this.segments; i++) {
                     for (let j = 0; j < this.segments; j++) {
-                        for (var k = 0; k < 3; k++) {
-                            grassPatches[i][j] = Math.random() < 0.09;
-                        }
+                        this.grassPatches[i][j] = Math.random() < 0.09
                     }
                 }
                 break;
@@ -1956,21 +1930,27 @@ class Terrain {
                 for (let i = 0; i < this.segments; i++) {
                     for (let j = 0; j < this.segments; j++) {
                         for (var k = 0; k < 3; k++) {
-                            grassPatches[i][j] = Math.random() < 0.5;
+                            this.grassPatches[i][j] = Math.random() < 0.5;
                         }
                     }
                 }
                 break;                      
         }
 
-
+        var dockDepth = house.width
+        const boardwalk = {
+            width: (landscape.field.width / 2) - (house.width / 2),
+            depth: dockDepth,
+            height: 0.2,
+            center: {
+                x: (house.width / 2) + (((landscape.field.width / 2) - (house.width / 2)) / 2),
+                y: house.center.y + .1,
+                z: 0
+            }
+        }
         var start_i = 1.0;
         // Process triangles and apply grass in defined ranges
         for (let i = 0; i < this.segments; i++) {
-            if (new Number(i / this.segments).toFixed(1) != start_i) {
-                start_i = new Number((i + 1) / this.segments).toFixed(2);
-                // console.log(start_i)
-            }
             for (let j = 0; j < this.segments; j++) {
                 let a = i + j * (this.segments + 1);
                 let b = (i + 1) + j * (this.segments + 1);
@@ -1978,18 +1958,14 @@ class Terrain {
                 let d = i + (j + 1) * (this.segments + 1);
                 let x = i * segmentSize;
                 let y = j * segmentSize;
-
                 let v = new THREE.Vector3();
                 v.x = (1 - x) * (1 - y) * v0.x + x * (1 - y) * v1.x + x * y * v2.x + (1 - x) * y * v3.x;
                 v.y = (1 - x) * (1 - y) * v0.y + x * (1 - y) * v1.y + x * y * v2.y + (1 - x) * y * v3.y;
                 v.z = (1 - x) * (1 - y) * v0.z + x * (1 - y) * v1.z + x * y * v2.z + (1 - x) * y * v3.z;
 
-                var inCastle = (v.x > -house.width / 2 && v.x < house.width / 2 && v.z > -house.depth / 2 && v.z < house.depth / 2)
+               
 
-
-                var inCove = v.x >= landscape.field.width / 2 && v.z >= -landscape.field.depth && v.z <= landscape.field.depth / 3;
-
-                var isNearGrassPatch = !inCastle && Math.random() < .5 && (grassPatches[i][j] || 
+                var isNearGrassPatch =    this.grassPatches[i][j]/* || 
                                           (i > 0 && grassPatches[i - 1][j]) ||  // Check left
                                           (i < this.segments && grassPatches[i + 1][j]) ||  // Check right
                                           (j > 0 && grassPatches[i][j - 1]) ||  // Check above
@@ -1998,7 +1974,7 @@ class Terrain {
                                           (i < this.segments && j > 0 && grassPatches[i + 1][j - 1]) ||  // Check top-right diagonal
                                           (i > 0 && j < this.segments && grassPatches[i - 1][j + 1]) ||  // Check bottom-left diagonal
                                           (i < this.segments && j < this.segments && grassPatches[i + 1][j + 1])  // Check bottom-right diagonal
-                );
+                );*/
 
 
                 if (a >= 0 && b >= 0 && c >= 0 && d >= 0 && a < vertices.length / 3 && b < vertices.length / 3 && c < vertices.length / 3 && d < vertices.length / 3) {
@@ -2024,7 +2000,6 @@ class Terrain {
                                 this.createGrassResult(indices, vertices, triangle, 1000, randomInRange(.1, .3), randomInRange(0.1, .3))
                             )
 
-                            this.groundColorMap[i][j] = inCastle ? .33 : Math.random()
                         }
 
                     });
@@ -2039,13 +2014,13 @@ class Terrain {
 
         this.clusterCliffs()
         
-        // Now, let's apply the grass density in groundColorMap to color the vertices
+        // Now, let's apply the grass density in grassPatches to color the vertices
         const colors = [];
-        const gridSize = this.groundColorMap.length;  // Assuming groundColorMap is a 2D array of the grid size
+        const gridSize = this.grassPatches.length;  // Assuming grassPatches is a 2D array of the grid size
 
         for (let i = 0; i < gridSize; i++) {
             for (let j = 0; j < gridSize; j++) {
-                const density = this.groundColorMap[i][j];
+                const density = this.grassPatches[i][j];
                 
 
                 // Ensure that color application and grass application use the same coordinates
@@ -3486,14 +3461,7 @@ class View {
             window.renderer.render(window.scene, window.user.camera);
 
 
-           devview.innerHTML = `<pre style="background: rgba(0,0,0,0.6); color: white">
-    x: ${user.camera.position.x.toFixed(2)}, y: ${user.camera.position.y.toFixed(2)}, z: ${user.camera.position.z.toFixed(2)}
-    a: ${user.a}
-    s: ${user.s}
-    d: ${user.d}
-    w: ${user.w}
-           </pre>`
-
+    
 
 
            UndulateWater() 
@@ -3571,14 +3539,6 @@ function getCenterOfGeometry(geometry) {
     return new THREE.Vector3(centerX, centerY, centerZ);
 }
 
-document.getElementById('map').innerHTML = new Array(25).fill(``).map((html, index) => {
-    const x = ((index % 5) - 2) * 128; // -2, -1, 0, 1, 2 based on column
-    const z = (Math.floor(index / 5) - 2) * 128; // -2, -1, 0, 1, 2 based on row
-
-    // Return the HTML for each div, including the id in the format x_z
-    return `<div class="quadrant" id="${x}_${z}">${x}_${z}</div>`;
-}).join('');
-
 
 
 
@@ -3586,8 +3546,6 @@ document.getElementById('map').innerHTML = new Array(25).fill(``).map((html, ind
 
 window.VM = new ViewModel();
 window.view = new View();
-window.devview = document.getElementById('map');
-
 
 
 
