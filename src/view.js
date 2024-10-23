@@ -31,8 +31,24 @@ var house = {
     width: 30,
     depth: 20,
     foundation: {
+        width: 20,
         height: 1
     }
+}
+
+var twoPi = Math.PI * 2
+function piBy01() {
+    var arr = []
+    for (var i = 0; i < twoPi; i += .01) {
+        arr.push(i)
+    }
+    return arr
+}
+
+function interpolateArrays(array1, array1Index, array2) {
+    var sourceIndexPercent = new Number(array1Index / array1.length).toFixed(2)
+    var targetIndex = Math.floor(array2 / sourceIndexPercent)
+    return array2[targetIndex]
 }
 
 var pillars = []
@@ -382,7 +398,7 @@ class Sky {
 
 
     update() {
-        this.time += 0.00005;  // Control the speed of the sun's movement
+        this.time += 0.0005;  // Control the speed of the sun's movement
 
         // Sun's position: moving along the x and y axes while keeping z fixed at 0
         var sunX = this.sceneRadius * Math.cos(this.time);  // Sun moves along the x-axis
@@ -660,9 +676,7 @@ function UndulateWater(sunPositionX, sunPositionY, sunPositionZ) {
 }
 
 
-
-
-
+// [0, 0.1, 0.2, 0.30000000000000004, 0.4, 0.5, 0.6, 0.7, 0.7999999999999999, 0.8999999999999999, 0.9999999999999999, 1.0999999999999999, 1.2, 1.3, 1.4000000000000001, 1.5000000000000002, 1.6000000000000003, 1.7000000000000004, 1.8000000000000005, 1.9000000000000006, 2.0000000000000004, 2.1000000000000005, 2.2000000000000006, 2.3000000000000007, 2.400000000000001, 2.500000000000001, 2.600000000000001, 2.700000000000001, 2.800000000000001, 2.9000000000000012, 3.0000000000000013, 3.1000000000000014, 3.2000000000000015, 3.3000000000000016, 3.4000000000000017, 3.5000000000000018, 3.600000000000002, 3.700000000000002, 3.800000000000002, 3.900000000000002, 4.000000000000002, 4.100000000000001, 4.200000000000001, 4.300000000000001, 4.4, 4.5, 4.6, 4.699999999999999, 4.799999999999999, 4.899999999999999, 4.999999999999998, 5.099999999999998, 5.1999999999999975, 5.299999999999997, 5.399999999999997, 5.4999999999999964, 5.599999999999996, 5.699999999999996, 5.799999999999995, 5.899999999999995, 5.999999999999995, 6.099999999999994, 6.199999999999994]
 
 class Castle {
     offsetY = 1.5
@@ -741,7 +755,7 @@ class Castle {
         scene.add(tilePlane)
 
         var dock = {
-            width: boardwalk.width, 
+            width: boardwalk.width * 1.5 + 4, 
             height: boardwalk.height, 
             depth: boardwalk.depth / 2,
             x: (landscape.field.width / 2) + (boardwalk.width / 2) + 1,
@@ -762,7 +776,8 @@ class Castle {
         var dockStepDepth = house.width * .4
         var dockWidth = (landscape.field.width / 2) - (house.width / 2)
 
-        
+
+        var stepWidth = .3
         var stepHeight = .15
         var stepY = boardwalk.center.y - (stepHeight / 2)
         var stepX = boardwalk.center.x + (boardwalk.width / 2)
@@ -771,7 +786,7 @@ class Castle {
         var stepCount = Math.abs(boardwalk.center.y - dock.y) / stepHeight
         var turning = false
         for (var i = 0; i < stepCount; i++) {
-            var stepGeo = new THREE.BoxGeometry(stepHeight, stepHeight, 2)
+            var stepGeo = new THREE.BoxGeometry(stepWidth, stepHeight, 2)
             if (i > (stepCount / 2) && turning) {
                 stepGeo.rotateY(Math.PI / 2)
             }
@@ -799,13 +814,14 @@ class Castle {
                 }
                 stepZ += stepHeight
             } else {
-                stepX += stepHeight
+                stepX += stepWidth
             }
 
             stepY -= stepHeight
             scene.add(step)
             this.parts.push(step)
         }
+
 
         
         var boxHeight = 5;
@@ -829,6 +845,7 @@ class Castle {
             );
             box.castShadow = true;
             box.receiveShadow = true
+
             var xPos = randomInRange(-width / 2, width / 2);
             var yPos = (i * wallHeight) + wallHeight / 2
             var zPos = randomInRange(-depth / 2, depth / 2);
@@ -1020,6 +1037,7 @@ class Castle {
 
 
     }
+
 
     buildElevator() {
         // Elevator floor
@@ -1536,6 +1554,92 @@ class Terrain {
         this.go();
     }
 
+    createFlora(x, Y, z, treeKind) {
+        const tree = {
+            cypress: {
+                height: randomInRange(15, 20),
+                width: randomInRange(1, 1.9),
+                colors: [
+                    // '#292c2c', 
+                    // '#424d3c', 
+                    // '#0e120f', 
+                    // '#34392a', 
+                    // '#252a1e', 
+                    // '#4d523a', 
+                    // '#1b2419', 
+                    // '#3e4730', 
+                    // '#596443',
+                    // '#93b449',
+
+                    '#6b881c',
+                    '#a9cc4e'
+                ],
+                trimmed: Math.random() < 0.5 ? true : false
+            }
+        };
+        const howManyTreeColors = tree[treeKind].colors.length;
+        const twoPi = Math.PI * 2;
+
+        // Loop through each height step to build the tree
+        for (let y = Y; y < Y + tree[treeKind].height; y += 1) {
+            // Calculate the radius at the current height (larger at the base, smaller at the top)
+            const progress = (y - Y) / tree[treeKind].height; // A value from 0 (base) to 1 (top)
+            const radiusAtY = .1 + ((1 - progress) * (tree[treeKind].width / 2) / 2); // Shrinks as 'y' increases
+
+            for (let p = 0; p < twoPi; p += 0.5) {
+                // Randomize the outward angle for each branch to create folds
+                const randomAngle = randomInRange(-0.3, 0.3);  // Outward angles for folds
+                const randomHeightAdjustment = randomInRange(-0.2, 0.2); // Add irregularity in height
+
+                const leafColor = '#6b881c'//tree[treeKind].colors[colorIndex];
+
+                const sphereGeo = new THREE.SphereGeometry(radiusAtY, 10, 10); // Adjust radius for each level
+                const leafMaterial = new THREE.MeshStandardMaterial({ 
+                    color: leafColor, 
+                    side: THREE.DoubleSide 
+                });
+
+                const leaf = new THREE.Mesh(sphereGeo, leafMaterial);
+                leaf.castShadow = true;
+                leaf.receiveShadow = true;
+
+                // Calculate position with radius adjustment
+                const xPos = x + (radiusAtY * Math.cos(p + randomAngle));
+                const zPos = z + (radiusAtY * Math.sin(p + randomAngle));
+
+                // Vary y position to simulate uneven folds
+                leaf.position.set(xPos, y + randomHeightAdjustment, zPos);
+
+                for (var i = 0; i < sphereGeo.attributes.position.array.length; i += 3) {
+                    sphereGeo.attributes.position.array[i] += randomInRange(
+                        sphereGeo.attributes.position.array[i] - (Math.random() < 0.3 ? 1.25 : .75), 
+                        sphereGeo.attributes.position.array[i] + (Math.random() < 0.3 ? 1.25 : .75)
+                    )
+                    sphereGeo.attributes.position.array[i + 1] += randomInRange(
+                        sphereGeo.attributes.position.array[i + 1], 
+                        sphereGeo.attributes.position.array[i + 1] + 1
+                    )
+                    sphereGeo.attributes.position.array[i + 2] += randomInRange(
+                        sphereGeo.attributes.position.array[i + 2] - .75, 
+                        sphereGeo.attributes.position.array[i + 2] + .75
+                    )
+                }
+
+                scene.add(leaf);
+            }
+        }
+
+        // Optionally, create the trunk
+        const trunkGeometry = new THREE.CylinderGeometry(tree[treeKind].width / 12, tree[treeKind].width / 3, tree[treeKind].height, 8); // Slightly thicker at the base
+        const trunkMaterial = new THREE.MeshStandardMaterial({ color: '#8B4513' });
+        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+        trunk.position.set(x, Y + tree[treeKind].height / 2, z);
+        scene.add(trunk);
+    }
+
+
+
+
     setGrandCentralPillar() {
         // Set up the axis object to define colors for positive and negative directions
         var axis = {
@@ -1587,13 +1691,7 @@ class Terrain {
 
     go(centerX = 0, centerY = 0, centerZ = 0) {
         const centerKey = `${centerX}_${centerZ}`;
-        this.terrainType = 'dense'//['sparse', 'dense', 'half'][Math.floor(Math.random() * 3)];
-        for (var i = 0; i < this.meshes.length; i++) {
-            if (this.meshes[i].centerKey == centerKey) {
-                debugger
-            }
-        }
-        
+        this.terrainType = 'dense'//['sparse', 'dense', 'half'][Math.floor(Math.random() * 3)];        
         this.cliffs = [];
         this.grounds = [];
         this.grassTriangles = [];
@@ -1640,6 +1738,7 @@ class Terrain {
 
 
         // Generate vertices and initial setup
+        // the first loop over the terrain segments
         for (let i = 0; i <= this.segments; i++) {
             for (let j = 0; j <= this.segments; j++) {
                 let x = i * segmentSize;
@@ -1699,7 +1798,14 @@ class Terrain {
                     }
                 }
 
-                vertices.push(v.x, v.y, v.z);  // Add to terrain vertices
+                // terrain vertices
+                vertices.push(v.x, v.y, v.z);
+                console.log(v.x, v.y, v.z)
+                if (v.x > 0 && v.x < 50 && v.z > -30 && v.z < -13) {
+                    
+                    var cypressTree = this.createFlora(v.x, v.y, v.z, 'cypress')
+                    console.log("Created a 'cypress' tree!")
+                }
             }
         }
 
@@ -1737,6 +1843,9 @@ class Terrain {
                 }
             }
         }
+
+ 
+        
 
         // Create geometry and assign the vertices and theCoveIndices
         var theCovesGeometry = new THREE.BufferGeometry();
@@ -2506,8 +2615,8 @@ class Terrain {
 
     static Tree = class {
         constructor(trunk, foliage) {
-            this.trunk = trunk;  // TubeMesh (representing the trunk)
-            this.foliage = foliage;  // SphereMesh (representing the foliage)
+            this.trunk = trunk; 
+            this.foliage = foliage;  
             this.boundingBox = new THREE.Box3().setFromObject(this.trunk).union(new THREE.Box3().setFromObject(this.foliage));
         }
     }
@@ -2563,6 +2672,14 @@ class Terrain {
             transparent: false
         });
 
+
+
+
+
+
+        // 
+        // createFoliageBunch(x, y, z)
+        //
         
         const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
         sphere.castShadow = true
@@ -2613,6 +2730,8 @@ class Terrain {
         return new Terrain.Tree(tubeMesh, sphere);
     }
 
+
+
     createGrassBlade(instancedMesh, triangle, bladePositions, i) {
         triangle = triangle.triangle
         const dummy = new THREE.Object3D();
@@ -2635,6 +2754,7 @@ class Terrain {
     }
 
     createGrassResult(indices, vertices, triangle, bladeCount = 11, bladeHeight = 1, bladeWidth = 0.1) {
+
 
         const bladeGeometry = new THREE.PlaneGeometry(bladeWidth, bladeHeight, 1, 4);
         bladeGeometry.computeVertexNormals();
@@ -3426,9 +3546,30 @@ document.getElementById('map').innerHTML = new Array(25).fill(``).map((html, ind
     return `<div class="quadrant" id="${x}_${z}">${x}_${z}</div>`;
 }).join('');
 
+
+
+
+
+
 window.VM = new ViewModel();
 window.view = new View();
-
 window.devview = document.getElementById('map');
 
+
+
+
+
 await VM.init("Peter", view);
+
+
+
+
+
+
+
+
+
+
+
+
+

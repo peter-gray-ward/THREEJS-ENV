@@ -5,7 +5,7 @@ app = Flask(__name__)
 
 LEVEL = [
     None,
-    "Heart of the Woods"
+    "Cypress Garden"
 ]
 
 t = 200
