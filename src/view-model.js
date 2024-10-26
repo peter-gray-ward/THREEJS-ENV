@@ -28,7 +28,7 @@ export default class ViewModel {
             const model = JSON.parse(xhr.response);
             console.log("model loaded", model);
             this.user = model.user;
-            this.map = model.map;
+            this.map = model.map[this.user.level];
 
             await view.init();
             

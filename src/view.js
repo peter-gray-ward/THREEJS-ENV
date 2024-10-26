@@ -32,9 +32,46 @@ var house = {
     depth: 20,
     foundation: {
         width: 20,
-        height: 1
+        height: 1,
+        depth: 20
     }
 }
+var dockDepth = house.width
+const boardwalk = {
+    width: (landscape.field.width / 2) - (house.width / 2),
+    depth: dockDepth,
+    height: 0.2,
+    center: {
+        x: (house.width / 2) + (((landscape.field.width / 2) - (house.width / 2)) / 2),
+        y: house.center.y + .1,
+        z: 0
+    }
+}
+// Define the side yard boundaries extending from the house foundation
+var sideYardStartZ = house.center.z - house.foundation.depth / 2 - 30;  // Extend outwards on the -Z side
+var sideYardEndZ = house.center.z - house.foundation.depth / 2 - 5;    // Extend outwards on the +Z side
+var sideYardStartX = house.center.x - house.foundation.width / 2 - 30;  // Extend outwards on the -X side
+var sideYardEndX = house.center.x + house.foundation.width / 2 + 30;    // Extend outwards on the +X side
+var sideYardStartY = house.center.y - house.foundation.height / 2;      // Match house Y bounds
+var sideYardEndY = house.center.y + house.foundation.height / 2;        // Match house Y bounds
+
+// Function to check if point `v` is within the side yard boundaries
+function isIn(v, which) {
+    switch (which) {
+        case 'sideyard':
+            return (
+                v.x >= sideYardStartX && 
+                v.x <= sideYardEndX &&
+                v.y >= sideYardStartY && 
+                v.y <= sideYardEndY &&
+                v.z >= sideYardStartZ && 
+                v.z <= sideYardEndZ
+            );
+        default:
+            return false;
+    }
+}
+
 
 var twoPi = Math.PI * 2
 function piBy01() {
@@ -56,10 +93,6 @@ var composer
 
 window.THREE = THREE;
 
-const LEVEL = [
-    null,
-    "Heart of the Woods"
-];
 const cameraBoundingBox = () => new THREE.Box3().setFromCenterAndSize(
     window.user.camera.position,
     new THREE.Vector3(.35, 1.2, .2) // Adjust size if needed
@@ -187,16 +220,24 @@ function randomInRange(from, to, startDistance = 0) {
 class GrassPatch {
     constructor(initobject) {
         this.mesh = initobject.mesh;
+        this.triangle = initobject.triangle
         this.bladePositions = initobject.bladePositions;
+        this.ground = initobject.ground
     }
 }
 
-function Triangle(vertices, a, b, c, terrainWidth, terrainHeight) {
+function Triangle(vertices, a, b, c) {
     const vertexPositions = [
         vertices[a * 3], vertices[a * 3 + 1], vertices[a * 3 + 2],  // Vertex a
         vertices[b * 3], vertices[b * 3 + 1], vertices[b * 3 + 2],  // Vertex b
         vertices[c * 3], vertices[c * 3 + 1], vertices[c * 3 + 2]   // Vertex c
     ];
+
+    for (var i = 0; i < vertexPositions.length; i++) {
+        if (Number.isNaN(vertexPositions[i])) {
+            debugger
+        }
+    }
 
     // Create the THREE.Triangle object
     const triangle = new THREE.Triangle(
@@ -215,7 +256,12 @@ function Triangle(vertices, a, b, c, terrainWidth, terrainHeight) {
     triangleGeometry.computeBoundingBox()
 
     // Create a mesh for the triangle with a basic material (optional)
-    const triangleMesh = new THREE.Mesh(triangleGeometry, new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+    const triangleMesh = new THREE.Mesh(
+        triangleGeometry, 
+        new THREE.MeshBasicMaterial({ 
+        color: 0xff0000,
+        side: THREE.BackSide
+    }));
     triangleMesh.name = `${a}_${b}_${c}`
 
     // Return the triangle data and mesh
@@ -226,6 +272,142 @@ function Triangle(vertices, a, b, c, terrainWidth, terrainHeight) {
         mesh: triangleMesh               // The mesh object for this triangle
     };
 }
+
+function TriangleGrid(vertices, a, b, c) {
+    const vertexPositions = [
+        vertices[a * 3], vertices[a * 3 + 1], vertices[a * 3 + 2],  // Vertex a
+        vertices[b * 3], vertices[b * 3 + 1], vertices[b * 3 + 2],  // Vertex b
+        vertices[c * 3], vertices[c * 3 + 1], vertices[c * 3 + 2]   // Vertex c
+    ];
+
+    // Midpoints of the edges
+    const midpointAB = [
+        (vertexPositions[0] + vertexPositions[3]) / 2, // X midpoint between a and b
+        (vertexPositions[1] + vertexPositions[4]) / 2, // Y midpoint
+        (vertexPositions[2] + vertexPositions[5]) / 2  // Z midpoint
+    ];
+
+    const midpointBC = [
+        (vertexPositions[3] + vertexPositions[6]) / 2, // X midpoint between b and c
+        (vertexPositions[4] + vertexPositions[7]) / 2, // Y midpoint
+        (vertexPositions[5] + vertexPositions[8]) / 2  // Z midpoint
+    ];
+
+    const midpointCA = [
+        (vertexPositions[6] + vertexPositions[0]) / 2, // X midpoint between c and a
+        (vertexPositions[7] + vertexPositions[1]) / 2, // Y midpoint
+        (vertexPositions[8] + vertexPositions[2]) / 2  // Z midpoint
+    ];
+
+    // Now, create four triangles:
+    // 1. Outer triangle: a, midpointAB, midpointCA
+    // 2. Outer triangle: b, midpointBC, midpointAB
+    // 3. Outer triangle: c, midpointCA, midpointBC
+    // 4. Inner upside-down triangle: midpointAB, midpointBC, midpointCA (the central triangle)
+
+    const smallerTriangles = [
+        // Outer triangle 1: a, midpointAB, midpointCA
+        [vertexPositions.slice(0, 3), midpointAB, midpointCA],
+
+        // Outer triangle 2: b, midpointBC, midpointAB
+        [vertexPositions.slice(3, 6), midpointBC, midpointAB],
+
+        // Outer triangle 3: c, midpointCA, midpointBC
+        [vertexPositions.slice(6, 9), midpointCA, midpointBC],
+
+        // Inner upside-down triangle: midpointAB, midpointBC, midpointCA
+        [midpointAB, midpointBC, midpointCA]
+    ];
+
+    const triangles = [];
+
+    // Create a mesh for each smaller triangle
+    smallerTriangles.forEach((triangleVertices, index) => {
+        // // Flatten the vertices array into a Float32Array
+        // const positions = new Float32Array([
+        //     ...triangleVertices[0],  // First vertex
+        //     ...triangleVertices[1],  // Second vertex
+        //     ...triangleVertices[2]   // Third vertex
+        // ]);
+
+        // // Create the BufferGeometry for each smaller triangle
+        // const geometry = new THREE.BufferGeometry();
+        // geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        // geometry.setIndex([0, 1, 2]); // Indices for the triangle
+
+        // // Create the mesh for the triangle
+        // const mesh = new THREE.Mesh(
+        //     geometry,
+        //     new THREE.MeshBasicMaterial({
+        //         wireframe: true,
+        //         color: Math.random() < 0.5 ? 'lawngreen' : 'green', // Set color as needed
+        //         side: THREE.DoubleSide // Make it render on both sides
+        //     })
+        // );
+        // mesh.receiveShadow = true;
+        // mesh.name = `triangle_${index}`;
+        // mesh.triangle = new THREE.Triangle(
+        //     new THREE.Vector3(...triangleVertices[0]),
+        //     new THREE.Vector3(...triangleVertices[1]),
+        //     new THREE.Vector3(...triangleVertices[2])
+        // );
+        // mesh.indices = [0, 1, 2]; // Simple index array for each triangle
+        // triangleMeshes.push(mesh);
+        triangles.push(new THREE.Triangle(
+            new THREE.Vector3(...triangleVertices[0]),
+            new THREE.Vector3(...triangleVertices[1]),
+            new THREE.Vector3(...triangleVertices[2])
+        ))
+    });
+
+    // Return the array of triangle meshes
+    return triangles
+}
+
+function Lathe(x, y, z, mesh_map, mesh_color, height) {
+    const group = new THREE.Group();
+    
+    // Define mesh material arguments
+    const meshMaterialArgs = { side: THREE.DoubleSide, transparent: true, opacity: 1 };
+    if (mesh_map) meshMaterialArgs.map = mesh_map;
+    if (mesh_color) meshMaterialArgs.color = mesh_color;
+    
+    // Create the mesh material
+    const meshMaterial = new THREE.MeshStandardMaterial(meshMaterialArgs);
+    
+
+    // Generate profile points for LatheGeometry
+    const points = [];
+    for (let i = 0; i <= 10; i++) {
+        const heightStep = (i / 10) * height;
+        const  x = Math.sin(i * 0.2) * (height / 2)
+            * (Math.random() < 0.05 ? -1 : 1)
+        const  y = heightStep - (height / 2) 
+
+        points.push(new THREE.Vector2(x, y));
+    }
+
+    // Lathe geometry parameters
+    const data = {
+        segments: 12,
+        phiStart: Math.random(),
+        phiLength: 1
+    };
+
+    // Create the lathe geometry
+    const geometry = new THREE.LatheGeometry(points, data.segments, data.phiStart, data.phiLength);
+
+    // Create the wireframe and mesh and add them to the group
+    const mesh = new THREE.Mesh(geometry, meshMaterial);
+
+    group.add(mesh);
+
+    // Set the position of the group
+    group.position.set(x, y, z);
+
+    return group
+}
+
 
 function getInstancePosition(instancedMesh, index) {
     const matrix = new THREE.Matrix4();
@@ -398,7 +580,7 @@ class Sky {
 
 
     update() {
-        this.time += 0.05;  // Control the speed of the sun's movement
+        this.time += 0.001;  // Control the speed of the sun's movement
 
         // Sun's position: moving along the x and y axes while keeping z fixed at 0
         var sunX = this.sceneRadius * Math.cos(this.time);  // Sun moves along the x-axis
@@ -676,15 +858,13 @@ function UndulateWater(sunPositionX, sunPositionY, sunPositionZ) {
 }
 
 
-// [0, 0.1, 0.2, 0.30000000000000004, 0.4, 0.5, 0.6, 0.7, 0.7999999999999999, 0.8999999999999999, 0.9999999999999999, 1.0999999999999999, 1.2, 1.3, 1.4000000000000001, 1.5000000000000002, 1.6000000000000003, 1.7000000000000004, 1.8000000000000005, 1.9000000000000006, 2.0000000000000004, 2.1000000000000005, 2.2000000000000006, 2.3000000000000007, 2.400000000000001, 2.500000000000001, 2.600000000000001, 2.700000000000001, 2.800000000000001, 2.9000000000000012, 3.0000000000000013, 3.1000000000000014, 3.2000000000000015, 3.3000000000000016, 3.4000000000000017, 3.5000000000000018, 3.600000000000002, 3.700000000000002, 3.800000000000002, 3.900000000000002, 4.000000000000002, 4.100000000000001, 4.200000000000001, 4.300000000000001, 4.4, 4.5, 4.6, 4.699999999999999, 4.799999999999999, 4.899999999999999, 4.999999999999998, 5.099999999999998, 5.1999999999999975, 5.299999999999997, 5.399999999999997, 5.4999999999999964, 5.599999999999996, 5.699999999999996, 5.799999999999995, 5.899999999999995, 5.999999999999995, 6.099999999999994, 6.199999999999994]
-
 class Castle {
     offsetY = 1.5
     elevatorSpeed = 0.2
 
     constructor(castleBaseCenter) {
-        for (var key in VM.map[VM.user.level].structures[0]) {
-            this[key] = VM.map[VM.user.level].structures[0][key]
+        for (var key in VM.map.structures[0]) {
+            this[key] = VM.map.structures[0][key]
         }
         this.parts = [];
         this.elevator = []
@@ -721,23 +901,12 @@ class Castle {
         light_foundation.lookAt( 0, 0, 0 );
         scene.add( light_foundation )
 
-        var dockDepth = house.width
-        const boardwalk = {
-            width: (landscape.field.width / 2) - (house.width / 2),
-            depth: dockDepth,
-            height: 0.2,
-            center: {
-                x: (house.width / 2) + (((landscape.field.width / 2) - (house.width / 2)) / 2),
-                y: house.center.y + .1,
-                z: 0
-            }
-        }
+        
         this.createHarryPotterLampPost(
             boardwalk.center.x - boardwalk.width / 2 + 1, 
             boardwalk.center.y, 
             boardwalk.center.z - boardwalk.depth / 2 + 1
         )
-
         const boardwalkTexture = new THREE.TextureLoader().load("/images/floor2.jpg", texture => {
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
@@ -808,8 +977,6 @@ class Castle {
                             side: THREE.DoubleSide
                         })
                     )
-                    stepTurnPlane.castShadow = true
-                    stepTurnPlane.receiveShadow = true
                     stepTurnPlane.position.set(stepX + 1, stepY, stepZ)
                     scene.add(stepTurnPlane)
                     this.parts.push(stepTurnPlane)
@@ -826,186 +993,214 @@ class Castle {
             this.parts.push(step)
         }
 
-
+        return
         
-      var boxHeight = 5;
-        var wallHeight = boxHeight;
+        var boxHeight = 5;
+        var wallHeight = boxHeight
         var maxWidth = house.width;
         var maxDepth = house.width;
 
         for (var i = 0; i < 10; i++) {
-            var width = i < 5 ? maxWidth : maxWidth;
-            var depth = i < 5 ? maxDepth : maxDepth;
+            var width = i < 5 ? maxWidth : maxWidth
+            var depth = i < 5 ? maxDepth : maxDepth
 
-            var yPos = (i * wallHeight) + (wallHeight / 2); // Proper y-position adjustment
+            // Create the main box
+            var box = new THREE.Mesh(
+                new THREE.BoxGeometry(width, boxHeight, depth),
+                new THREE.MeshStandardMaterial({
+                    map: new THREE.TextureLoader().load("/images/wall4.jpg"),
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 1
+                })
+            );
+            box.castShadow = true;
+            box.receiveShadow = true
 
-            // Wall and Window/Door Materials
+            var xPos = randomInRange(-width / 2, width / 2);
+            var yPos = (i * wallHeight) + wallHeight / 2
+            var zPos = randomInRange(-depth / 2, depth / 2);
+            box.position.set(0, yPos, 0);
+      
+
+            // Define wall thickness
             var wallThickness = 0.2;
-            var windowThickness = 2;
-            var wallMaterial = new THREE.MeshStandardMaterial({
+            var windowThickness = 2
+            var wallMaterial = new THREE.MeshStandardMaterial({ 
                 map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
                     texture.wrapS = THREE.RepeatWrapping;
-                    texture.wrapT = THREE.RepeatWrapping;
-                    texture.repeat.set(11, 11);
-                }),
-                side: THREE.DoubleSide
+                        texture.wrapT = THREE.RepeatWrapping;
+                        texture.repeat.set(11, 11);
+                }), side: THREE.DoubleSide 
             });
 
-            // Door and Window Sizes
-            var doorWidth = boxHeight / 2;
-            var doorHeight = boxHeight * 0.8;
-            var windowWidth = boxHeight / 4;
-            var windowHeight = 1; // Small window if i == 0
+            // Window variables
+            var windowWidth = boxHeight / 4; // Fixed size for smaller windows
+            var windowHeight = boxHeight / 4;
+            var windowSpacing = windowWidth * 1.5;  // Spacing between windows
 
-            // -----------------------
-            // Front Wall Geometry
-            // -----------------------
+            const evaluator = new Evaluator();
+
+            // Front Wall
             var frontWallGeometry = new THREE.BoxGeometry(width, boxHeight, wallThickness);
             var frontWallBrush = new Brush(frontWallGeometry);
             frontWallBrush.position.set(0, yPos, depth / 2);
             frontWallBrush.updateMatrixWorld();
 
-            // Subtract Door on Bottom Floor, Else Subtract Windows
-            if (i === 0) {
-                // Create Door
-                var doorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, windowThickness);
-                var doorBrush = new Brush(doorGeometry);
-                doorBrush.position.set(0, yPos - boxHeight / 2 + doorHeight / 2, depth / 2 + windowThickness / 2 + 0.01);
-                doorBrush.updateMatrixWorld();
-                frontWallBrush = evaluator.evaluate(frontWallBrush, doorBrush, SUBTRACTION); // Subtract door
-            } else {
-                // Create and subtract windows for higher floors
-                for (var w = 0; w < 5; w++) {
-                    var windowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowThickness);
-                    var windowBrush = new Brush(windowGeometry);
-                    windowBrush.position.set(
-                        -width / 2 + windowWidth * (w + 1), // Place windows evenly along the wall
-                        yPos,
-                        depth / 2 + windowThickness / 2 + 0.01
-                    );
-                    windowBrush.updateMatrixWorld();
-                    frontWallBrush = evaluator.evaluate(frontWallBrush, windowBrush, SUBTRACTION); // Subtract windows
-                }
+            // Create and subtract multiple windows for front wall
+            for (var w = 0; w < 5; w++) {
+                var windowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowThickness);
+                var windowBrush = new Brush(windowGeometry);
+                windowBrush.position.set(
+                    -width / 2 + windowWidth, // Avoid edges
+                    yPos,
+                    depth / 2 + windowThickness / 2 + 0.01
+                );
+                windowBrush.updateMatrixWorld();
+                frontWallBrush = evaluator.evaluate(frontWallBrush, windowBrush, SUBTRACTION); // Subtract the window
             }
 
-            // Convert Front Wall Geometry Back to Mesh
-            var frontMesh = new THREE.Mesh(frontWallBrush.geometry, wallMaterial);
-            frontMesh.frustumCulled = true;
-            frontMesh.castShadow = true
-            frontMesh.receiveShadow = true
-            this.parts.push(frontMesh);
+            // Convert front wall geometry back to mesh
+            var frontMesh = new THREE.Mesh(frontWallBrush.geometry, new THREE.MeshStandardMaterial({
+                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
+                    texture.wrapS = THREE.RepeatWrapping;
+                        texture.wrapT = THREE.RepeatWrapping;
+                        texture.repeat.set(11, 11);
+                })
+            }));
+            frontMesh.frustrumCulled = true
+            this.parts.push(frontMesh)
             scene.add(frontMesh);
 
-            // -----------------------
-            // Back Wall Geometry
-            // -----------------------
+            // Back Wall
             var backWallGeometry = new THREE.BoxGeometry(width, boxHeight, wallThickness);
             var backWallBrush = new Brush(backWallGeometry);
             backWallBrush.position.set(0, yPos, -depth / 2);
             backWallBrush.updateMatrixWorld();
 
-            // Subtract windows or door for the back wall
-            if (i === 0) {
-                // Create Door for the back wall if needed
-                var backDoorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, windowThickness);
-                var backDoorBrush = new Brush(backDoorGeometry);
-                backDoorBrush.position.set(0, yPos - boxHeight / 2 + doorHeight / 2, -depth / 2 - windowThickness / 2 - 0.01);
-                backDoorBrush.updateMatrixWorld();
-                backWallBrush = evaluator.evaluate(backWallBrush, backDoorBrush, SUBTRACTION);
-            } else {
-                for (var w = 0; w < 3; w++) {
-                    var backWindowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowThickness);
-                    var backWindowBrush = new Brush(backWindowGeometry);
-                    backWindowBrush.position.set(
-                        width / 2 - windowWidth, 
-                        yPos,
-                        -depth / 2 - windowThickness / 2 - 0.01
-                    );
-                    backWindowBrush.updateMatrixWorld();
-                    backWallBrush = evaluator.evaluate(backWallBrush, backWindowBrush, SUBTRACTION);
-                }
+            // Subtract multiple windows from back wall
+            for (var w = 0; w < 3; w++) {
+                var backWindowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowThickness);
+                var backWindowBrush = new Brush(backWindowGeometry);
+                backWindowBrush.position.set(
+                    width / 2 - windowWidth, 
+                    yPos - boxHeight / 4,
+                    -depth / 2 - windowThickness / 2 - 0.01
+                );
+                backWindowBrush.updateMatrixWorld();
+                backWallBrush = evaluator.evaluate(backWallBrush, backWindowBrush, SUBTRACTION);
             }
 
-            var backMesh = new THREE.Mesh(backWallBrush.geometry, wallMaterial);
-            backMesh.frustumCulled = true;
-            backMesh.receiveShadow = true
-            backMesh.castShadow = true
-            this.parts.push(backMesh);
+            // Convert back wall geometry back to mesh
+            var backMesh = new THREE.Mesh(backWallBrush.geometry, new THREE.MeshStandardMaterial({
+                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
+                    texture.wrapS = THREE.RepeatWrapping;
+                        texture.wrapT = THREE.RepeatWrapping;
+                        texture.repeat.set(11, 11);
+                })
+            }));
+            backMesh.frustrumCulled = true
+            this.parts.push(backMesh)
             scene.add(backMesh);
 
-            // -----------------------
-            // Left Wall Geometry
-            // -----------------------
+            // Left Wall
             var leftWallGeometry = new THREE.BoxGeometry(wallThickness, boxHeight, depth);
             var leftWallBrush = new Brush(leftWallGeometry);
             leftWallBrush.position.set(-width / 2, yPos, 0);
             leftWallBrush.updateMatrixWorld();
 
+            // Subtract multiple windows from left wall
             for (var w = 0; w < 3; w++) {
                 var leftWindowGeometry = new THREE.BoxGeometry(windowThickness, windowHeight, windowWidth);
                 var leftWindowBrush = new Brush(leftWindowGeometry);
-                leftWindowBrush.position.set(
-                    -width / 2 - windowThickness / 2 - 0.01,
-                    yPos,
-                    -depth / 2 + windowHeight
-                );
+                var lwb_x = -width / 2 - windowThickness / 2 - 0.01
+                var lwb_y = yPos + boxHeight / 4
+                var lwb_z = -depth / 2 + windowHeight
+
+                leftWindowBrush.position.set(lwb_x, lwb_y, lwb_z);
                 leftWindowBrush.updateMatrixWorld();
                 leftWallBrush = evaluator.evaluate(leftWallBrush, leftWindowBrush, SUBTRACTION);
+
+                
             }
 
-            var leftMesh = new THREE.Mesh(leftWallBrush.geometry, wallMaterial);
-            leftMesh.receiveShadow = true
-            leftMesh.castShadow = true
-            leftMesh.frustumCulled = true;
-            this.parts.push(leftMesh);
+            // Convert left wall geometry back to mesh
+            var leftMesh = new THREE.Mesh(leftWallBrush.geometry, new THREE.MeshStandardMaterial({
+                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
+                    texture.wrapS = THREE.RepeatWrapping;
+                        texture.wrapT = THREE.RepeatWrapping;
+                        texture.repeat.set(11, 11);
+                })
+            }));
+            leftMesh.frustrumCulled = true
+            this.parts.push(leftMesh)
             scene.add(leftMesh);
 
-            // -----------------------
-            // Right Wall Geometry
-            // -----------------------
+            // Right Wall
             var rightWallGeometry = new THREE.BoxGeometry(wallThickness, boxHeight, depth);
             var rightWallBrush = new Brush(rightWallGeometry);
             rightWallBrush.position.set(width / 2, yPos, 0);
             rightWallBrush.updateMatrixWorld();
 
+            // Subtract multiple windows from right wall
             for (var w = 0; w < 3; w++) {
                 var rightWindowGeometry = new THREE.BoxGeometry(windowThickness * 3, windowHeight * 2, windowWidth);
                 var rightWindowBrush = new Brush(rightWindowGeometry);
-                rightWindowBrush.position.set(
-                    width / 2 + windowThickness / 2 + 0.01,
-                    yPos,
-                    depth / 2 - windowHeight
-                );
+                var rwb_x = width / 2 + windowThickness / 2 + 0.01
+                var rwb_y = yPos + boxHeight / 4
+                var rwb_z = depth / 2 - windowHeight
+                rightWindowBrush.position.set(rwb_x, rwb_y, rwb_z);
                 rightWindowBrush.updateMatrixWorld();
                 rightWallBrush = evaluator.evaluate(rightWallBrush, rightWindowBrush, SUBTRACTION);
+                
+
+                // if (i % 2 == 0) {
+                //     var lwb_sx = rwb_x
+                //     for (var lwb_sy = lwb_y - windowHeight; lwb_sy > 0; lwb_sy -= .2) {
+                //         var stepGeo = new THREE.BoxGeometry(.3, .2, .8)
+                //         stepGeo.computeVertexNormals()
+                //         var stepMat = new THREE.MeshStandardMaterial({
+                //             side: THREE.DoubleSide, map: new THREE.TextureLoader().load("/images/floor1111.jpg")
+                //         })
+                //         var step = new THREE.Mesh(stepGeo, stepMat)
+                //         step.castShadow = true
+                //         step.receiveShadow = true
+                //         step.position.set(lwb_sx, lwb_sy, rwb_z)
+                //         lwb_sx += .3
+                //         this.parts.push(step)
+                //         scene.add(step)
+                //     }
+                // }
             }
 
-            var rightMesh = new THREE.Mesh(rightWallBrush.geometry, wallMaterial);
-            rightMesh.castShadow = true
-            rightMesh.receiveShadow = true
-            rightMesh.frustumCulled = true;
-            this.parts.push(rightMesh);
+            // Convert right wall geometry back to mesh
+            var rightMesh = new THREE.Mesh(rightWallBrush.geometry, new THREE.MeshStandardMaterial({
+                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
+                    texture.wrapS = THREE.RepeatWrapping;
+                        texture.wrapT = THREE.RepeatWrapping;
+                        texture.repeat.set(11, 11);
+                })
+            }));
+            rightMesh.frustrumCulled = true
+            this.parts.push(rightMesh)
             scene.add(rightMesh);
 
-            // -----------------------
-            // Top and Bottom Walls
-            // -----------------------
+            // Top and bottom walls remain unchanged
             var topWall = new THREE.Mesh(new THREE.BoxGeometry(width, wallThickness, depth), wallMaterial);
             topWall.position.set(0, yPos + (boxHeight / 2), 0);
-            this.parts.push(topWall);
+            topWall.frustrumCulled = true
+            this.parts.push(topWall)
             scene.add(topWall);
 
             var bottomWall = new THREE.Mesh(new THREE.BoxGeometry(width, wallThickness, depth), new THREE.MeshStandardMaterial({
                 side: THREE.DoubleSide,
                 map: new THREE.TextureLoader().load("/images/floor19.jpg")
             }));
-            bottomWall.castShadow = true
-            bottomWall.receiveShadow = true
-            bottomWall.position.set(0, yPos - (boxHeight / 2), 0);
-            this.parts.push(bottomWall);
+            bottomWall.position.set(0, yPos - (boxHeight / 3), 0);
+            bottomWall.frustrumCulled = true
+            this.parts.push(bottomWall)
             scene.add(bottomWall);
         }
-
 
                
         var backyardTree = terrain.createTree(29, 0, 21);
@@ -1032,7 +1227,7 @@ class Castle {
         scene.add(lampPostCap);
 
         // Add a light to the lamp post
-        const pointLight = new THREE.PointLight(0xffa500, 10, 10); // Orangish-yellow light
+        const pointLight = new THREE.PointLight(0xffa5f0, 10, 10); // Orangish-yellow light
         pointLight.position.set(x, y + lampHeight + 0.5, z); // Slightly above the cap
         scene.add(pointLight);
 
@@ -1527,35 +1722,30 @@ class Castle {
 class Terrain {
     // map
     // Grass
+    segments = 79
     constructor(options) {
-        switch (options.user.level) {
-        case LEVEL[1]:
-            // this.grassTexture = new THREE.TextureLoader().load("/images/nasturtiums1.jpg")
-            this.Grass = [
-                '#33462d', //
-                '#435c3a', //
-                '#4e5e3e', //
-                '#53634c', //
-                '#536c46', //
-                '#5d6847', //
-            ]
-            // let _textures = options.map[options.user.level].textures;
-            // for (var key in _textures) {
-            //     _textures[key] = _textures[key].map(t => new THREE.TextureLoader().load(t));
-            // }
-            this.sop = VM.map[VM.user.level].sop
-            // this.textures =  _textures;
-            this.vertices = new Map();
-            this.meshes = [];
-            this.markers = {};
-            this.surroundingCenters = [];
-            this.currentMesh = 0;
-            this.center = new THREE.Vector3(0, 0, 0);
-            this.go();
-            break;
-        default:
-            return;
+        // this.grassTexture = new THREE.TextureLoader().load("/images/nasturtiums1.jpg")
+        this.Grass = [
+            '#33462d', //
+            '#435c3a', //
+            '#4e5e3e', //
+            '#53634c', //
+            '#536c46', //
+            '#5d6847', //
+        ]
+        for (var key in options) {
+            this[key] = options[key]
         }
+        this.sop = VM.map.sop
+        // this.textures =  _textures;
+        this.vertices = new Map();
+        this.meshes = [];
+        this.plants = []
+        this.markers = {};
+        this.surroundingCenters = [];
+        this.currentMesh = 0;
+        this.center = new THREE.Vector3(0, 0, 0);
+        this.go();
     }
 
     init() {
@@ -1567,21 +1757,7 @@ class Terrain {
             cypress: {
                 height: randomInRange(15, 20),
                 width: randomInRange(1, 1.9),
-                colors: [
-                    // '#292c2c', 
-                    // '#424d3c', 
-                    // '#0e120f', 
-                    // '#34392a', 
-                    // '#252a1e', 
-                    // '#4d523a', 
-                    // '#1b2419', 
-                    // '#3e4730', 
-                    // '#596443',
-                    // '#93b449',
-
-                    '#6b881c',
-                    '#a9cc4e'
-                ],
+                colors: ['#93b449', '#6b881c', '#a9cc4e'], // Cypress leaf colors
                 trimmed: Math.random() < 0.5 ? true : false
             }
         };
@@ -1589,17 +1765,23 @@ class Terrain {
         const twoPi = Math.PI * 2;
 
         // Loop through each height step to build the tree
-        for (let y = Y; y < Y + tree[treeKind].height; y += 1) {
+        for (let y = Y; y < Y + tree[treeKind].height; y += randomInRange(0.5, 1.2)) {
             // Calculate the radius at the current height (larger at the base, smaller at the top)
             const progress = (y - Y) / tree[treeKind].height; // A value from 0 (base) to 1 (top)
-            const radiusAtY = .1 + ((1 - progress) * (tree[treeKind].width / 2) / 2); // Shrinks as 'y' increases
+            let radiusAtY = (1 - progress) * (tree[treeKind].width / 2); // Shrinks as 'y' increases
+            
+            // Apply some randomness to the radius to create irregularity
+            radiusAtY *= randomInRange(0.7, 1.3); 
 
-            for (let p = 0; p < twoPi; p += 0.5) {
+            if (radiusAtY < 0.3) radiusAtY = 0.3; // Prevent the radius from becoming too small
+
+            for (let p = 0; p < twoPi; p += randomInRange(0.6, 1.0)) {
                 // Randomize the outward angle for each branch to create folds
-                const randomAngle = randomInRange(-0.3, 0.3);  // Outward angles for folds
-                const randomHeightAdjustment = randomInRange(-0.2, 0.2); // Add irregularity in height
+                const randomAngle = randomInRange(-0.4, 0.4);  // Outward angles for folds
+                const randomHeightAdjustment = randomInRange(-0.3, 0.3); // Add irregularity in height
 
-                const leafColor = '#6b881c'//tree[treeKind].colors[colorIndex];
+                // Randomize the leaf color
+                const leafColor = tree[treeKind].colors[Math.floor(Math.random() * howManyTreeColors)];
 
                 const sphereGeo = new THREE.SphereGeometry(radiusAtY, 10, 10); // Adjust radius for each level
                 const leafMaterial = new THREE.MeshStandardMaterial({ 
@@ -1611,39 +1793,32 @@ class Terrain {
                 leaf.castShadow = true;
                 leaf.receiveShadow = true;
 
-                // Calculate position with radius adjustment
-                const xPos = x + (radiusAtY * Math.cos(p + randomAngle));
-                const zPos = z + (radiusAtY * Math.sin(p + randomAngle));
+                // Randomize x and z positions slightly to break the cylindrical pattern
+                const xPos = x + (radiusAtY * Math.cos(p + randomAngle)) + randomInRange(-0.2, 0.2);
+                const zPos = z + (radiusAtY * Math.sin(p + randomAngle)) + randomInRange(-0.2, 0.2);
 
                 // Vary y position to simulate uneven folds
                 leaf.position.set(xPos, y + randomHeightAdjustment, zPos);
 
-                for (var i = 0; i < sphereGeo.attributes.position.array.length; i += 3) {
-                    sphereGeo.attributes.position.array[i] += randomInRange(
-                        sphereGeo.attributes.position.array[i] - (Math.random() < 0.3 ? 1.25 : .75), 
-                        sphereGeo.attributes.position.array[i] + (Math.random() < 0.3 ? 1.25 : .75)
-                    )
-                    sphereGeo.attributes.position.array[i + 1] += randomInRange(
-                        sphereGeo.attributes.position.array[i + 1], 
-                        sphereGeo.attributes.position.array[i + 1] + 1
-                    )
-                    sphereGeo.attributes.position.array[i + 2] += randomInRange(
-                        sphereGeo.attributes.position.array[i + 2] - .75, 
-                        sphereGeo.attributes.position.array[i + 2] + .75
-                    )
+                // Modify the vertices of the sphere for added irregularity
+                for (let i = 0; i < sphereGeo.attributes.position.array.length; i += 3) {
+                    sphereGeo.attributes.position.array[i] += randomInRange(-0.3, 0.3);
+                    sphereGeo.attributes.position.array[i + 1] += randomInRange(-0.5, 0.5);
+                    sphereGeo.attributes.position.array[i + 2] += randomInRange(-0.3, 0.3);
                 }
 
                 scene.add(leaf);
             }
         }
 
-        // Optionally, create the trunk
-        const trunkGeometry = new THREE.CylinderGeometry(tree[treeKind].width / 12, tree[treeKind].width / 3, tree[treeKind].height, 8); // Slightly thicker at the base
+        // Create the trunk with a gradual taper
+        const trunkGeometry = new THREE.CylinderGeometry(tree[treeKind].width / 6, tree[treeKind].width / 3, tree[treeKind].height, 8); // Slightly thicker at the base
         const trunkMaterial = new THREE.MeshStandardMaterial({ color: '#8B4513' });
         const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
         trunk.position.set(x, Y + tree[treeKind].height / 2, z);
         scene.add(trunk);
     }
+
 
 
 
@@ -1661,7 +1836,7 @@ class Terrain {
             }
         };
 
-        var cylinderLength = VM.map[VM.user.level].quadrant * 2;
+        var cylinderLength = VM.map.quadrant * 2;
 
         for (var xyz in axis) {
             for (var polarity in axis[xyz]) {
@@ -1698,14 +1873,15 @@ class Terrain {
     }
 
     go(centerX = 0, centerY = 0, centerZ = 0) {
+        console.log("what?")
         const centerKey = `${centerX}_${centerZ}`;
-        this.terrainType = 'dense'//['sparse', 'dense', 'half'][Math.floor(Math.random() * 3)];        
+        this.terrainType = 'half'//['sparse', 'dense', 'half'][Math.floor(Math.random() * 3)];        
         this.cliffs = [];
         this.grounds = [];
         this.grassTriangles = [];
         this.cliffMeshes = [];
 
-        let t = VM.map[VM.user.level].quadrant;
+        let t = VM.map.quadrant;
         let center = { x: centerX, y: centerY, z: centerZ }
 
         let v0 = { x: center.x - t, y: center.y, z: center.z + t };
@@ -1716,27 +1892,22 @@ class Terrain {
         let vertices = [];
         let indices = [];
 
-        for (var key in VM.map[VM.user.level]) {
-            this[key] = VM.map[VM.user.level][key];
+        for (var key in VM.map) {
+            this[key] = VM.map[key];
         }
 
-        const segmentSize = 1 / this.segments;
-        this.groundColorMap = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(0));  // Initialize ground color map
-        this.grassPatches = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(false));
-        
+        const segmentSize = 1 / this.segments
+        // const neighbors = this.meshes.filter(mesh => this.isNeighbor(mesh.centerKey, centerKey));
 
-        const neighbors = this.meshes.filter(mesh => this.isNeighbor(mesh.centerKey, centerKey));
-
-        if (neighbors.length > 0) {
-            var generationRootSlices = this.getRootSlices(centerKey, neighbors);
-            for (var obj of generationRootSlices) {
-                this.renderNoiseSlice(obj, this.width, this.height, center); 
-            }
+        // if (neighbors.length > 0) {
+        //     var generationRootSlices = this.getRootSlices(centerKey, neighbors);
+        //     for (var obj of generationRootSlices) {
+        //         this.renderNoiseSlice(obj, this.width, this.height, center); 
+        //     }
             
-        }
-        let perlinNoise = this.generatePerlinNoise({ center, centerKey });
+        // }
 
-        // let woodTerrain = this.generateRandomWoodsTerrain();
+        let perlinNoise = this.generatePerlinNoise({ center, centerKey });
 
         var theCove = [];
         var maxX = -Infinity
@@ -1745,9 +1916,6 @@ class Terrain {
         var minZ = Infinity
         var averageY = []
 
-
-        // Generate vertices and initial setup
-        // the first loop over the terrain segments
         for (let i = 0; i <= this.segments; i++) {
             for (let j = 0; j <= this.segments; j++) {
                 let x = i * segmentSize;
@@ -1771,8 +1939,8 @@ class Terrain {
                     v.y = landscape.field.center.y;  // Flatten the terrain inside the castle
                 }
 
-                var goingDownToRiver = v.x >= landscape.field.width / 2 && v.z >= -landscape.field.depth && v.z <= landscape.field.depth / 3;
-                if (goingDownToRiver) {
+                var inTheCove = v.x >= landscape.field.width / 2 && v.z >= -landscape.field.depth && v.z <= landscape.field.depth / 3;
+                if (inTheCove) {
 
 
                     if (v.x > maxX) {
@@ -1795,26 +1963,27 @@ class Terrain {
                     let curveFactor = .1 * Math.cos(Math.random() * Math.PI); // Smooth cosine factor
                     let targetHeight = -20;
 
-                    // Blend between current height and target height using cosine curve
+
                     if (Math.random() < 0.95) {
                         v.y = curveFactor * (v.y - targetHeight) + targetHeight;
                     }
 
                 } else {
-                    if (!inField && Math.random() < 0.2) {
-                        var tree = this.createTree(v.x, v.y, v.z, 1);
-                        this.trees.push(tree);
+
+                    if (isIn(v, 'sideyard')) {
+                        console.log('changing', v.y, house.center.y)
+                        v.y = house.center.y
+                    } else if (!inField) {
+                        if (Math.random() < 0.05) {
+                            var tree = this.createTree(v.x, v.y, v.z, 1);
+                            this.trees.push(tree);
+                        }
                     }
                 }
 
+                
                 // terrain vertices
                 vertices.push(v.x, v.y, v.z);
-                console.log(v.x, v.y, v.z)
-                if (v.x > 0 && v.x < 50 && v.z > -30 && v.z < -13) {
-                    
-                    var cypressTree = this.createFlora(v.x, v.y, v.z, 'cypress')
-                    console.log("Created a 'cypress' tree!")
-                }
             }
         }
 
@@ -1829,7 +1998,7 @@ class Terrain {
         var xStep = (maxX - minX) / this.segments;
         var zStep = (maxZ - minZ) / this.segments;
 
-        // Generate vertices and ensure they are properly connected
+
         for (let i = 0; i <= this.segments; i++) {
             for (let j = 0; j <= this.segments; j++) {
                 let x = minX + i * xStep;
@@ -1853,8 +2022,6 @@ class Terrain {
             }
         }
 
- 
-        
 
         // Create geometry and assign the vertices and theCoveIndices
         var theCovesGeometry = new THREE.BufferGeometry();
@@ -1883,6 +2050,7 @@ class Terrain {
 
 
         // Store reference to the water mesh
+        console.log("adding water")
         this.water = TheCove;
 
 
@@ -1906,154 +2074,149 @@ class Terrain {
         }
 
 
+        var grassPatches = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(false));
         
         
         switch (this.terrainType) {
             case 'dense':
                 for (let i = 0; i < this.segments; i++) {
                     for (let j = 0; j < this.segments; j++) {
-                        var x = i * this.segments
-                        var z = j * this.segments
-                        this.grassPatches[i][j] = Math.random() < 0.9;
-                        
+                        grassPatches[i][j] = Math.random() < 0.9
                     }
                 }
                 break;
             case 'sparse':
                 for (let i = 0; i < this.segments; i++) {
                     for (let j = 0; j < this.segments; j++) {
-                        this.grassPatches[i][j] = Math.random() < 0.09
+                        grassPatches[i][j] = Math.random() < 0.09
                     }
                 }
                 break;
             case 'half':
                 for (let i = 0; i < this.segments; i++) {
                     for (let j = 0; j < this.segments; j++) {
-                        for (var k = 0; k < 3; k++) {
-                            this.grassPatches[i][j] = Math.random() < 0.5;
-                        }
+                        grassPatches[i][j] = Math.random() < 0.5
                     }
                 }
                 break;                      
         }
 
-        var dockDepth = house.width
-        const boardwalk = {
-            width: (landscape.field.width / 2) - (house.width / 2),
-            depth: dockDepth,
-            height: 0.2,
-            center: {
-                x: (house.width / 2) + (((landscape.field.width / 2) - (house.width / 2)) / 2),
-                y: house.center.y + .1,
-                z: 0
-            }
-        }
-        var start_i = 1.0;
-        // Process triangles and apply grass in defined ranges
+
         for (let i = 0; i < this.segments; i++) {
             for (let j = 0; j < this.segments; j++) {
+                // Calculate vertex indices for the current quad
                 let a = i + j * (this.segments + 1);
                 let b = (i + 1) + j * (this.segments + 1);
                 let c = (i + 1) + (j + 1) * (this.segments + 1);
                 let d = i + (j + 1) * (this.segments + 1);
+             
+                indices.push(a, b, d); // First triangle in the quad
+                indices.push(b, c, d); // Second triangle in the quad
+
                 let x = i * segmentSize;
                 let y = j * segmentSize;
                 let v = new THREE.Vector3();
+
                 v.x = (1 - x) * (1 - y) * v0.x + x * (1 - y) * v1.x + x * y * v2.x + (1 - x) * y * v3.x;
                 v.y = (1 - x) * (1 - y) * v0.y + x * (1 - y) * v1.y + x * y * v2.y + (1 - x) * y * v3.y;
                 v.z = (1 - x) * (1 - y) * v0.z + x * (1 - y) * v1.z + x * y * v2.z + (1 - x) * y * v3.z;
 
-               
+                var inCastle = (v.x > -house.width / 2 && v.x < house.width / 2 && v.z > -house.depth / 2 && v.z < house.depth / 2)
+                var inCove = v.x >= landscape.field.width / 2 && v.z >= -landscape.field.depth && v.z <= landscape.field.depth / 3;
+  
+                const t1 = TriangleGrid(vertices, a, b, d, this.width, this.height);
+                const t2 = TriangleGrid(vertices, b, c, d, this.width, this.height);
 
-                var isNearGrassPatch =    this.grassPatches[i][j]/* || 
-                                          (i > 0 && grassPatches[i - 1][j]) ||  // Check left
-                                          (i < this.segments && grassPatches[i + 1][j]) ||  // Check right
-                                          (j > 0 && grassPatches[i][j - 1]) ||  // Check above
-                                          (j < this.segments && grassPatches[i][j + 1]) ||  // Check below
-                                          (i > 0 && j > 0 && grassPatches[i - 1][j - 1]) ||  // Check top-left diagonal
-                                          (i < this.segments && j > 0 && grassPatches[i + 1][j - 1]) ||  // Check top-right diagonal
-                                          (i > 0 && j < this.segments && grassPatches[i - 1][j + 1]) ||  // Check bottom-left diagonal
-                                          (i < this.segments && j < this.segments && grassPatches[i + 1][j + 1])  // Check bottom-right diagonal
-                );*/
-
-
-                if (a >= 0 && b >= 0 && c >= 0 && d >= 0 && a < vertices.length / 3 && b < vertices.length / 3 && c < vertices.length / 3 && d < vertices.length / 3) {
-                    indices.push(a, b, d);
-                    indices.push(b, c, d);
-                    
-
-                    const t1 = Triangle(vertices, a, b, d, this.width, this.height);
-                    const t2 = Triangle(vertices, b, c, d, this.width, this.height);
-
-                    [t1, t2].forEach((triangle) => {
+                [t1, t2].forEach((triangleGrid) => {
+                    triangleGrid.forEach(triangle => {
                         const normal = this.getTriangleNormal(triangle);
+                        var trianglePosition = this.getTriangleCenter(triangle)
+                        var inBoardwalk = trianglePosition.x > boardwalk.center.x - boardwalk.width / 2 &&
+                             trianglePosition.x < boardwalk.center.x + boardwalk.width / 2 &&
+                             trianglePosition.z > boardwalk.center.z - boardwalk.depth / 2 &&
+                             trianglePosition.z < boardwalk.center.z + boardwalk.depth / 2
 
-                        if (Math.abs(normal.y) < .3 && (Math.abs(normal.x) > .3 || Math.abs(normal.z) > .3)) {
-                            this.cliffs.push(triangle)
+                        if (isIn(trianglePosition, 'sideyard')) {
+                            console.log('creating a cypress at', trianglePosition.x, trianglePosition.y, trianglePosition.z)
+                            var cypressTree = this.createFlora(trianglePosition.x, trianglePosition.y, trianglePosition.z, 'cypress')
+                            console.log("Created a 'cypress' tree!")
                         }
 
-                        this.grounds.push(triangle);
+                        if (Math.abs(normal.y) < 0.3 && (Math.abs(normal.x) > 0.3 || Math.abs(normal.z) > 0.3)) {
+                            
+                            const positions = new Float32Array([
+                                triangle.a.x, triangle.a.y, triangle.a.z,  // First vertex
+                                triangle.b.x, triangle.b.y, triangle.b.z,  // Second vertex
+                                triangle.c.x, triangle.c.y, triangle.c.z   // Third vertex
+                            ]);
+
+                            // Create the BufferGeometry for each smaller triangle
+                            const geometry = new THREE.BufferGeometry();
+                            geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+                            geometry.setIndex([0, 1, 2]); // Indices for the triangle
+
+                            // Create the mesh for the triangle
+                            const mesh = new THREE.Mesh(
+                                geometry,
+                                new THREE.MeshBasicMaterial({
+                                    wireframe: true,
+                                    color: 'gray',
+                                    side: THREE.DoubleSide
+                                })
+                            );
+                            mesh.receiveShadow = true;
+                            mesh.triangle = triangle
+                            mesh.indices = [0, 1, 2]; // Simple index array for each triangle
+                            this.cliffs.push(mesh);
+                        } else if (!inCastle && !inBoardwalk) {
+                            if (Math.random() < 0.03) {
+                                var bushel = [1, 2, 3]
+                                for (var lathe of bushel) {
+                                    var plantWidth = randomInRange(.5, 13)
+                                    var plantHeight = randomInRange(1, 25)
+                                     var plant = Lathe(
+                                        (triangle.a.x + triangle.b.x + triangle.c.x) / 3,
+                                        (triangle.a.y + triangle.b.y + triangle.c.y) / 3 + plantHeight / 2,
+                                        (triangle.a.z + triangle.b.z + triangle.c.z) / 3 ,
+                                        null,
+                                        new THREE.Color(0.1, Math.random(), Math.random() * 0.5), 
+                                        plantWidth,
+                                        plantHeight
+                                    )
+                                    plant.rotation.y = Math.random()
+                                    this.plants.push(plant)
+                                }
+                            }
+                        }
+                    })
                         
+                });
 
-                        if (isNearGrassPatch) {
-                            this.grasses.push(
-                                this.createGrassResult(indices, vertices, triangle, 1000, randomInRange(.1, .3), randomInRange(0.1, .3))
-                            )
-
-                        }
-
-                    });
-
-                    
-                }
             }
-
-
         }
+    
 
 
         this.clusterCliffs()
         
-        // Now, let's apply the grass density in grassPatches to color the vertices
+        // Now, let's apply the grass density in groundColorMap to color the vertices
         const colors = [];
-        const gridSize = this.grassPatches.length;  // Assuming grassPatches is a 2D array of the grid size
+        const gridSize = grassPatches.length;  // Assuming groundColorMap is a 2D array of the grid size
+
 
         for (let i = 0; i < gridSize; i++) {
             for (let j = 0; j < gridSize; j++) {
-                const density = this.grassPatches[i][j];
+                const density = grassPatches[i][j];
                 
 
                 // Ensure that color application and grass application use the same coordinates
                 const vertexIndex = i * (this.segments + 1) + j;  // Adjust based on segment count and grid
 
-                if (vertexIndex < vertices.length / 3) {  // Ensure vertex index is within bounds
-                    if (density > 0) {
-                        if (density == .33) {
-                            colors.push(0, 1, 0)
-                        } else {
-                            const greenIntensity = Math.min(0.8, Math.pow(density / 10, 0.7));  // Non-linear scaling for green intensity
-                            const red = randomInRange(0, 0.2);  // Slightly larger range for red
-                            const blue = randomInRange(0, 0.2);  // Slightly larger range for blue
-
-                            colors.push(red, greenIntensity, blue);
-                        }
-                    } else {
-                        // No grass means brown soil
-                        var color = VM.map[VM.user.level].Grass[Math.floor(Math.random() * VM.map[VM.user.level].Grass.length)];
-
-                        // Remove the '#' and split the color into RGB components
-                        color = color.replace('#', '');
-                        
-                        // Parse the hex string into its RGB components
-                        var r = parseInt(color.substring(0, 2), 16) / 255
-                        var g = parseInt(color.substring(2, 4), 16) / 255 * 1.5
-                        var b = parseInt(color.substring(4, 6), 16) / 255
-                        colors.push(r ,g, b) //colors.push(randomInRange(0.1, 0.3), randomInRange(0.11, 0.15), randomInRange(0, 0.08));  // RGB color for dark brown soil
-                    }
-                }
+                colors.push(randomInRange(0.1, 0.3), randomInRange(0.11, 0.15), randomInRange(0, 0.08));  // RGB color for dark brown soil
             }
         }
 
+        console.log("created random colors for the terrain canvas")
 
         // Create red spheres at boundary positions
         const sphereGeometry = new THREE.SphereGeometry(0.2, 8, 8);
@@ -2077,7 +2240,12 @@ class Terrain {
 
         // Apply the custom texture to the terrain
         const material = new THREE.MeshStandardMaterial({
-            vertexColors: true,  // Enable vertex colors
+            // vertexColors: true,  // Enable vertex colors
+            map: new THREE.TextureLoader().load("/images/ground-0.jpg", texture => {
+                texture.wrapS = THREE.ClampToEdgeWrapping; // Prevent repetition horizontally
+                texture.wrapT = THREE.ClampToEdgeWrapping; // Prevent repetition vertically
+                texture.repeat.set(1, 1); // Keep the texture at its original size
+            }),
             side: THREE.DoubleSide,
             wireframe: false,
             transparent: false,
@@ -2106,99 +2274,23 @@ class Terrain {
 
 
     getTriangleNormal(triangle) {
-        triangle = triangle.triangle
         const v0 = new THREE.Vector3().subVectors(triangle.b, triangle.a);
         const v1 = new THREE.Vector3().subVectors(triangle.c, triangle.a);
         return new THREE.Vector3().crossVectors(v0, v1).normalize();
     }
    
+    trianglePosition(v0, v1, v2) {
+        // Create a new vector to store the center (centroid) of the triangle
+        let center = new THREE.Vector3();
 
- 
-    determineGrassClusters() {
-        const clusters = [];
-        const visited = new Set();
-    
-        const shareEdge = (t1, t2) => {
-            const t1Vertices = [t1.a, t1.b, t1.c];
-            const t2Vertices = [t2.a, t2.b, t2.c];
-            let sharedVertices = 0;
-            for (let v of t1Vertices) {
-                if (t2Vertices.some(v2 => v.distanceTo(v2) < 0.001)) {
-                    sharedVertices++;
-                }
-            }
-            return sharedVertices >= 2;
-        };
-    
-        const findCluster = (startTriangle) => {
-            const cluster = [];
-            const queue = [startTriangle];
-            
-            while (queue.length > 0) {
-                const currentTriangle = queue.shift();
-                if (!visited.has(currentTriangle)) {
-                    visited.add(currentTriangle);
-                    cluster.push(currentTriangle);
-    
-                    for (const otherTriangle of this.grassTriangles) {
-                        if (!visited.has(otherTriangle) && shareEdge(currentTriangle.triangle, otherTriangle.triangle)) {
-                            queue.push(otherTriangle);
-                        }
-                    }
-                }
-            }
-    
-            return cluster;
-        };
-    
-        const getPerimeterPoints = (cluster) => {
-            const perimeterPoints = [];
-            for (const triangle of cluster) {
-                let neighborCount = 0;
-                for (const otherTriangle of cluster) {
-                    if (triangle !== otherTriangle && shareEdge(triangle.triangle, otherTriangle.triangle)) {
-                        neighborCount++;
-                    }
-                }
-                if (neighborCount < 3) {
-                    perimeterPoints.push(triangle.triangle.a);
-                    perimeterPoints.push(triangle.triangle.b);
-                    perimeterPoints.push(triangle.triangle.c);
-                }
-            }
-            return perimeterPoints;
-        };
-    
-        for (const triangle of this.grassTriangles) {
-            if (!visited.has(triangle)) {
-                const newCluster = findCluster(triangle);
-                if (newCluster.length > 0) {
-                    const center = new THREE.Vector3(0, 0, 0);
-                    let totalVertices = 0;
-    
-                    for (const t of newCluster) {
-                        center.add(t.triangle.a);
-                        center.add(t.triangle.b);
-                        center.add(t.triangle.c);
-                        totalVertices += 3;
-                    }
-    
-                    if (totalVertices > 0) {
-                        center.divideScalar(totalVertices);
-                    }
-    
-                    const perimeterPoints = getPerimeterPoints(newCluster);
-    
-                    clusters.push({
-                        center,
-                        perimeterPoints
-                    });
-                }
-            }
-        }
-    
-        return clusters;
+        // Compute the center (centroid) of the triangle
+        center.x = (v0.x + v1.x + v2.x) / 3;
+        center.y = (v0.y + v1.y + v2.y) / 3;
+        center.z = (v0.z + v1.z + v2.z) / 3;
+
+        return center;
     }
+     
 
     
     findClosestVertex(point, positionAttribute) {
@@ -2238,7 +2330,7 @@ class Terrain {
 
 
     generateRollingPerlinNoise() {
-        const map = VM.map[VM.user.level];
+        const map = VM.map;
         let octaveCount = map.octaveCount || 4;
         let amplitude = map.amplitude || 0.003;  // Slightly higher amplitude for rolling hills
         let persistence = map.persistence || 0.15;  // Moderate persistence for rolling terrain
@@ -2271,7 +2363,7 @@ class Terrain {
 
     generatePerlinNoise(options) {
         // Get the map for the user's level from the VM (some kind of virtual machine or game state)
-        const map = VM.map[VM.user.level];
+        const map = VM.map;
 
         // Define the number of octaves, which is basically how many layers of detail we'll add to the noise.
         // Each octave adds more fine detail to the noise, like going from big waves to little ripples.
@@ -2347,7 +2439,7 @@ class Terrain {
     }
 
     generateWhiteNoise() {
-        const noise = new Array(VM.map[VM.user.level].width * VM.map[VM.user.level].height);
+        const noise = new Array(VM.map.width * VM.map.height);
         for (let i = 0; i < noise.length; ++i) {
             noise[i] = Math.random();
         }
@@ -2355,7 +2447,7 @@ class Terrain {
     }
 
     generateSmoothNoise(octave, whiteNoise) {
-        const map = VM.map[VM.user.level];
+        const map = VM.map;
         var noise = new Array(map.width * map.height);
         var samplePeriod = Math.pow(2, octave);
         var sampleFrequency = 1 / samplePeriod;
@@ -2386,8 +2478,8 @@ class Terrain {
     }
 
     generateCellularNoise() {
-        const width = VM.map[VM.user.level].width;
-        const height = VM.map[VM.user.level].height;
+        const width = VM.map.width;
+        const height = VM.map.height;
         const noise = new Array(width * height).fill(0);
         
         // Initialize with random cells
@@ -2498,21 +2590,24 @@ class Terrain {
                 const index1 = item.indices[1];
                 const index2 = item.indices[2];
 
-                const a = new THREE.Vector3(
-                    item.vertexPositions[index0 * 3],
-                    item.vertexPositions[index0 * 3 + 1],
-                    item.vertexPositions[index0 * 3 + 2]
-                );
-                const b = new THREE.Vector3(
-                    item.vertexPositions[index1 * 3],
-                    item.vertexPositions[index1 * 3 + 1],
-                    item.vertexPositions[index1 * 3 + 2]
-                );
-                const c = new THREE.Vector3(
-                    item.vertexPositions[index2 * 3],
-                    item.vertexPositions[index2 * 3 + 1],
-                    item.vertexPositions[index2 * 3 + 2]
-                );
+                // const a = new THREE.Vector3(
+                //     item.vertexPositions[index0 * 3],
+                //     item.vertexPositions[index0 * 3 + 1],
+                //     item.vertexPositions[index0 * 3 + 2]
+                // );
+                // const b = new THREE.Vector3(
+                //     item.vertexPositions[index1 * 3],
+                //     item.vertexPositions[index1 * 3 + 1],
+                //     item.vertexPositions[index1 * 3 + 2]
+                // );
+                // const c = new THREE.Vector3(
+                //     item.vertexPositions[index2 * 3],
+                //     item.vertexPositions[index2 * 3 + 1],
+                //     item.vertexPositions[index2 * 3 + 2]
+                // );
+                const a = triangle.a
+                const b = triangle.b
+                const c = triangle.c
 
                 // Create geometry for this triangle
                 const geometry = new THREE.BufferGeometry();
@@ -2571,7 +2666,8 @@ class Terrain {
 
                 this.cliffs.push(triangle);
 
-                // Add the triangle mesh to the scene
+                console.log("creating a cliff cluster!")
+
                 scene.add(mesh);
             });
         });
@@ -2599,22 +2695,31 @@ class Terrain {
             }
         });
 
-        // Remove triangles outside the SOP from the scene
-        this.grasses.forEach((grass) => {
-            var mesh = grass.mesh
-            var pos = getInstancePosition(mesh, 0);
+        this.plants.forEach(plant => {
+            if (plant.parent && !isInSOP(plant.position.clone(), sopCenter, this.sop.grasses)) {
+                scene.remove(plant);
+            } else if (!plant.parent && isInSOP(plant.position.clone(), sopCenter, this.sop.grasses)) {
+                scene.add(plant);
+            }
+        })
 
-            if (mesh.parent && !isInSOP(pos, sopCenter, this.sop.grasses)) {
-                scene.remove(mesh);
-            } else if (!mesh.parent && isInSOP(pos, sopCenter, this.sop.grasses)) {
-                scene.add(mesh);
+        // Remove triangles outside the SOP from the scene
+        this.grasses.forEach((grassResult) => {
+            var trianglePosition = this.trianglePosition(grassResult.triangle.a, grassResult.triangle.b, grassResult.triangle.c)
+            if (grassResult.mesh.parent && !isInSOP(trianglePosition, sopCenter, this.sop.grasses)) {
+                scene.remove(grassResult.mesh);
+                scene.remove(grassResult.ground)
+            } else if (!grassResult.mesh.parent && isInSOP(trianglePosition, sopCenter, this.sop.grasses)) {
+                scene.add(grassResult.mesh);
+                scene.add(grassResult.ground)
             }
         });
+
+
 
     }
 
     getTriangleCenter(triangle) {
-        triangle = triangle.triangle
         const centerX = (triangle.a.x + triangle.b.x + triangle.c.x) / 3;
         const centerY = (triangle.a.y + triangle.b.y + triangle.c.y) / 3;
         const centerZ = (triangle.a.z + triangle.b.z + triangle.c.z) / 3;
@@ -2680,11 +2785,6 @@ class Terrain {
             transparent: false
         });
 
-
-
-
-
-
         // 
         // createFoliageBunch(x, y, z)
         //
@@ -2741,7 +2841,6 @@ class Terrain {
 
 
     createGrassBlade(instancedMesh, triangle, bladePositions, i) {
-        triangle = triangle.triangle
         const dummy = new THREE.Object3D();
         const u = Math.random();
         const v = Math.random() * (1 - u);
@@ -2768,7 +2867,7 @@ class Terrain {
         bladeGeometry.computeVertexNormals();
         
         const material = new THREE.MeshStandardMaterial({
-            color: 'lawngreen',
+            color: ['#93b449', '#6b881c', '#a9cc4e', 'lawngreen'][Math.floor(Math.random() * 4)],
             // color: new THREE.Color(this.Grass[Math.floor(Math.random() * this.Grass.length)]),
             // map: this.grassTexture,
             side: THREE.DoubleSide,
@@ -2789,7 +2888,25 @@ class Terrain {
         instancedMesh.receiveShadow = true;
         instancedMesh.position.y += bladeHeight / 2
 
+        var ground_triangles = new TriangleGrid(vertices, triangle.a, triangle.b, triangle.c, this.width, this.height)
+        var groundMeshGeometry = new THREE.BufferGeometry()
+        var ground_points = []
+        for (var triangle of ground_triangles) {
+            for (var vertex in ground_triangles[triangle]) {
+                ground_points.push(vertex.x, vertex.y, vertex.z)
+            }
+        }
+        groundMeshGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ground_points), 3))
+        groundMeshGeometry.computeVertexNormals()
+        groundMeshGeometry.computeBoundingBox()
+        var ground = new THREE.Mesh(groundMeshGeometry, new THREE.MeshStandardMaterial({
+            map: new THREE.TextureLoader().load("/images/ground-0.jpg"),
+            side: THREE.DoubleSide
+        }))
+        ground.castShadow = true;
+        ground.receiveShadow = true
         return new GrassPatch({
+            ground,
             mesh: instancedMesh,
             triangle,
             bladePositions: bladePositions 
@@ -2801,8 +2918,8 @@ class Terrain {
             indices, 
             vertices,
             mesh,
-            VM.map[VM.user.level].grassBladeDensity,
-            randomInRange(0.1, 0.9),
+            5,
+            randomInRange(0.05, 0.2),
             randomInRange(0.1, 0.5)
         );
 
@@ -2812,7 +2929,6 @@ class Terrain {
             if (closestVertexIndex >= 0 && closestVertexIndex < vertices.length / 3) {
                 const x = Math.floor(closestVertexIndex / (this.segments + 1));
                 const y = closestVertexIndex % (this.segments + 1);
-                this.groundColorMap[x][y] += .1;  // Increment the grass density at the closest vertex
             }
         });
 
@@ -2868,6 +2984,19 @@ class UserController {
         this.objects = []
     }
 
+    moveForward() {
+        var { _w, _x, _y, _z } = this.camera.quaternion;
+        var forward_X = 2 * (_x * _z + _w * _y);
+        var forward_Y = 2 * (_y * _z - _w * _x);
+        var forward_Z = 1 - 2 * (_x**2 + _y**2);
+        
+        var distance = -0.21;
+        forward_X *= distance;
+        forward_Y *= distance;
+        forward_Z *= distance;
+
+        this.camera.position.add(new THREE.Vector3(forward_X, forward_Y, forward_Z));
+    }
 
     init() {
         let position = VM.user.position;
@@ -3033,7 +3162,6 @@ class UserController {
         // Define the max angle for the arc (in radians)
         const maxAngle = THREE.MathUtils.degToRad(45);  // 45 degrees in radians
         window.addEventListener('mousemove', (event) => {
-            if (this.mouseDown == false) return
             const sensitivity = 0.005;  // Adjust sensitivity
             this.yaw -= event.movementX * sensitivity;
             this.pitch -= event.movementY * sensitivity;
@@ -3043,6 +3171,10 @@ class UserController {
 
             const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');  // Yaw-Pitch-Roll
             this.camera.quaternion.setFromEuler(euler);  // Apply the rotation to the camera
+
+            if (this.mouseDown) {
+                this.moveForward()
+            }
         });
 
 
@@ -3410,6 +3542,7 @@ class View {
     }
 
     init() {
+        console.log("start")
         document.body.appendChild(window.renderer.domElement);
 
 
@@ -3461,10 +3594,9 @@ class View {
             window.renderer.render(window.scene, window.user.camera);
 
 
-    
 
 
-           UndulateWater() 
+            UndulateWater() 
 
         }
 
@@ -3538,7 +3670,6 @@ function getCenterOfGeometry(geometry) {
     // Return the center point as a Three.js Vector3
     return new THREE.Vector3(centerX, centerY, centerZ);
 }
-
 
 
 
