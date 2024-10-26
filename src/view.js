@@ -6,7 +6,7 @@ import { CSG } from '/lib/CSG.js'
 import { SUBTRACTION, Brush, Evaluator } from '/lib/three-bvh-csg.js';
 import ViewModel from "/src/view-model.js";
 
-
+window.CYPRESSGREENS = ['#93b449', '#6b881c', '#a9cc4e']
 var clock = new THREE.Clock()
 const evaluator = new Evaluator();
 
@@ -70,6 +70,10 @@ function isIn(v, which) {
                 v.z >= sideYardStartZ && 
                 v.z <= sideYardEndZ
             );
+        case 'backyard':
+            return (
+                v.x <= house.center.x - house.foundation.width / 2
+            )
         default:
             return false;
     }
@@ -445,14 +449,17 @@ function TriangleGrid(vertices, a, b, c) {
     return triangles
 }
 
-function Lathe(x, y, z, mesh_map, mesh_color, height) {
+function Lathe(x, y, z, color) {
+    const height = randomInRange(1.2, 3.2)
     const group = new THREE.Group();
     
     // Define mesh material arguments
-    const meshMaterialArgs = { side: THREE.DoubleSide, transparent: true, opacity: 1 };
-    if (mesh_map) meshMaterialArgs.map = mesh_map;
-    if (mesh_color) meshMaterialArgs.color = mesh_color;
-    
+    const meshMaterialArgs = { 
+        color: color || 'pink',
+        side: THREE.DoubleSide, 
+        transparent: true, 
+        opacity: 0.95
+    }
     // Create the mesh material
     const meshMaterial = new THREE.MeshStandardMaterial(meshMaterialArgs);
     
@@ -461,8 +468,7 @@ function Lathe(x, y, z, mesh_map, mesh_color, height) {
     const points = [];
     for (let i = 0; i <= 10; i++) {
         const heightStep = (i / 10) * height;
-        const  x = Math.sin(i * 0.2) * (height / 2)
-            * (Math.random() < 0.05 ? -1 : 1)
+        const  x = Math.sin(i * 0.2) * (height / 2) * (Math.random() < 0.5 ? -1 : 1)
         const  y = heightStep - (height / 2) 
 
         points.push(new THREE.Vector2(x, y));
@@ -472,7 +478,7 @@ function Lathe(x, y, z, mesh_map, mesh_color, height) {
     const data = {
         segments: 12,
         phiStart: Math.random(),
-        phiLength: 1
+        phiLength: 3.14
     };
 
     // Create the lathe geometry
@@ -480,11 +486,13 @@ function Lathe(x, y, z, mesh_map, mesh_color, height) {
 
     // Create the wireframe and mesh and add them to the group
     const mesh = new THREE.Mesh(geometry, meshMaterial);
+    mesh.castShadow = true
+    mesh.receiveShadow = true
 
     group.add(mesh);
 
     // Set the position of the group
-    group.position.set(x, y, z);
+    group.position.set(x, y + (height / 2), z);
 
     return group
 }
@@ -965,23 +973,23 @@ class Castle {
         const foundationY = house.center.y - (house.foundation.height / 2)
         var floorY = foundationY
 
-        const foundation = new THREE.Mesh(
-            new THREE.BoxGeometry(house.width, house.foundation.height, house.depth),
-                new THREE.MeshStandardMaterial({
-                    map: new THREE.TextureLoader().load("/images/concrete", texture => {
-                        texture.wrapS = THREE.RepeatWrapping;
-                        texture.wrapT = THREE.RepeatWrapping;
-                        texture.repeat.set(11, 11);
-                    }),
-                    side: THREE.DoubleSide
-                }),
+        // const foundation = new THREE.Mesh(
+        //     new THREE.BoxGeometry(house.width, house.foundation.height, house.depth),
+        //         new THREE.MeshStandardMaterial({
+        //             map: new THREE.TextureLoader().load("/images/concrete", texture => {
+        //                 texture.wrapS = THREE.RepeatWrapping;
+        //                 texture.wrapT = THREE.RepeatWrapping;
+        //                 texture.repeat.set(11, 11);
+        //             }),
+        //             side: THREE.DoubleSide
+        //         }),
                 
-        )
-        foundation.position.set(0, floorY + .1, 0)
-        floorY += floorHeight
-        foundation.frustrumCulled = true
-        this.parts.push(foundation)
-        scene.add(foundation)
+        // )
+        // foundation.position.set(0, floorY + .1, 0)
+        // floorY += floorHeight
+        // foundation.frustrumCulled = true
+        // this.parts.push(foundation)
+        // scene.add(foundation)
 
 
 
@@ -1954,9 +1962,10 @@ class Terrain {
             cypress: {
                 height: randomInRange(25, 40),
                 width: randomInRange(1, 1.9),
-                colors: ['#93b449', '#6b881c', '#a9cc4e'], // Cypress leaf colors
+                colors: CYPRESSGREENS, // Cypress leaf colors
                 trimmed: Math.random() < 0.5 ? true : false
-            }
+            },
+
         };
 
         const twoPi = Math.PI * 2;
@@ -2312,13 +2321,20 @@ class Terrain {
                     /* TERRAIN FEATURES */
                     const CLIFF = Math.abs(triangleMesh.normal.y) < 0.4 && (Math.abs(triangleMesh.normal.x) > 0.4 || Math.abs(triangleMesh.normal.z) > 0.4)
                     const SIDEYARD = isIn(trianglePosition, 'sideyard')
+                    const BACKYARD = isIn(trianglePosition, 'backyard')
 
                     if (SIDEYARD) {
-                        console.log('creating a cypress at', trianglePosition.x, trianglePosition.y, trianglePosition.z)
                         var cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
                         var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
-                        console.log("Created a 'cypress' tree!")
-                        // this.grounds.push(triangle)
+                    }
+
+                    if (BACKYARD) {
+                        var pos = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
+                        var lathe = Lathe(trianglePosition.x, trianglePosition.y, trianglePosition.z, CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)])
+                        lathe.position.copy(pos)
+                        this.grasses.push(
+                            lathe
+                        )
                     }
 
                     if (CLIFF) {
@@ -2386,8 +2402,8 @@ class Terrain {
             }),
             side: THREE.DoubleSide,
             wireframe: true,
-            transparent: false,
-            opacity: 1
+            transparent: true,
+            opacity: 0
         });
 
         const mesh = new THREE.Mesh(planeGeometry, material);
@@ -2924,22 +2940,26 @@ class Terrain {
                 ((ground.triangle.a.y + ground.triangle.a.y + ground.triangle.c.y)/ 3),
                 ((ground.triangle.a.z + ground.triangle.a.z + ground.triangle.c.z)/ 3)
             )
-            if (ground.parent && center.distanceTo(user.camera.position) > 50) {
+            if (ground.parent && center.distanceTo(user.camera.position) > 100) {
                 scene.remove(ground);
-            } else if (!ground.parent && center.distanceTo(user.camera.position) < 50/*&& isInSOP(center, sopCenter, this.sop.grounds)*/) {
+            } else if (!ground.parent && center.distanceTo(user.camera.position) < 100/*&& isInSOP(center, sopCenter, this.sop.grounds)*/) {
                 scene.add(ground);
             }
         })
 
         // Remove triangles outside the SOP from the scene
-        this.grasses.forEach((grassResult) => {
-            var trianglePosition = this.trianglePosition(grassResult.triangle.a, grassResult.triangle.b, grassResult.triangle.c)
-            if (grassResult.mesh.parent && !isInSOP(trianglePosition, sopCenter, this.sop.grasses)) {
-                scene.remove(grassResult.mesh);
-                scene.remove(grassResult.ground)
-            } else if (!grassResult.mesh.parent && isInSOP(trianglePosition, sopCenter, this.sop.grasses)) {
-                scene.add(grassResult.mesh);
-                scene.add(grassResult.ground)
+        this.grasses.forEach(lathe => {
+            const pos = lathe.position.distanceTo(user.camera.position)
+            if (lathe.parent && pos > 50) {
+                scene.remove(lathe)
+            } else if (!lathe.parent && pos < 50) {
+                scene.add(lathe)
+            } else if (lathe.parent) {
+                lathe.rotation.y += 0.01;
+                if (lathe.rotation.y > Math.PI * 2) {
+                    lathe.rotation.y = 0
+                }
+                lathe.needsUpdate = true
             }
         });
 
@@ -3900,7 +3920,7 @@ window.Animate = function() {
 
         window.sky.update()
         window.terrain.updateTerrain()
-
+        UndulateWater() 
         window.user.handleMovement()
        
 
@@ -3909,9 +3929,9 @@ window.Animate = function() {
 
 
 
-        UndulateWater() 
+        
 
-    }
+}
 
 
 
