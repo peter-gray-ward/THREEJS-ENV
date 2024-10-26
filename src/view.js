@@ -2920,9 +2920,9 @@ class Terrain {
 
         this.grounds.forEach(ground => {
             const center = new THREE.Vector3(
-                ground.triangle.a.x, ground.triangle.a.x, ground.triangle.c.x,
-                ground.triangle.a.y, ground.triangle.a.y, ground.triangle.c.y,
-                ground.triangle.a.z, ground.triangle.a.z, ground.triangle.c.z
+                ((ground.triangle.a.x + ground.triangle.a.x + ground.triangle.c.x)/ 3),
+                ((ground.triangle.a.y + ground.triangle.a.y + ground.triangle.c.y)/ 3),
+                ((ground.triangle.a.z + ground.triangle.a.z + ground.triangle.c.z)/ 3)
             )
             if (ground.parent && center.distanceTo(user.camera.position) > 50) {
                 scene.remove(ground);
