@@ -48,7 +48,7 @@ const boardwalk = {
     }
 }
 // Define the side yard boundaries extending from the house foundation
-var sideYardStartZ = house.center.z - house.foundation.depth / 2 - 30;  // Extend outwards on the -Z side
+var sideYardStartZ = house.center.z - house.foundation.depth / 2 - 50;  // Extend outwards on the -Z side
 var sideYardEndZ = house.center.z - house.foundation.depth / 2 - 5;    // Extend outwards on the +Z side
 var sideYardStartX = house.center.x - house.foundation.width / 2 - 30;  // Extend outwards on the -X side
 var sideYardEndX = house.center.x + house.foundation.width / 2 + 30;    // Extend outwards on the +X side
@@ -72,6 +72,26 @@ function isIn(v, which) {
     }
 }
 
+
+function randomPointOnTriangle(A, B, C) {
+    // Generate two random numbers between 0 and 1
+    let u = Math.random();
+    let v = Math.random();
+
+    // If u + v > 1, flip the coordinates to keep the point inside the triangle
+    if (u + v > 1) {
+        u = 1 - u;
+        v = 1 - v;
+    }
+
+    // Calculate the random point P on the triangle
+    const P = new THREE.Vector3();
+    P.addScaledVector(A, 1 - u - v);
+    P.addScaledVector(B, u);
+    P.addScaledVector(C, v);
+
+    return P;
+}
 
 var twoPi = Math.PI * 2
 function piBy01() {
@@ -580,8 +600,10 @@ class Sky {
 
 
     update() {
-        this.time += 0.001;  // Control the speed of the sun's movement
-
+        this.time = Math.PI - 0.01;  // Control the speed of the sun's movement
+        if (this.time > Math.PI * 2) {
+            this.time = 0
+        }
         // Sun's position: moving along the x and y axes while keeping z fixed at 0
         var sunX = this.sceneRadius * Math.cos(this.time);  // Sun moves along the x-axis
         var sunY = this.sceneRadius * Math.sin(this.time);  // Sun rises and falls along the y-axis
@@ -643,7 +665,7 @@ class Sky {
                 // Define base sky colors
                 var nightColor = new THREE.Color(0x001a33);  // Dark blue for night sky
                 var dayColor = new THREE.Color(0x87ceeb);  // Light blue for day sky
-                var middayColor = new THREE.Color(0xffffff);  // Bright white for noon
+                var middayColor = new THREE.Color(0x87ceeb);  // Bright white for noon
 
                 var blendedColor;
                 var horizonMargin = 50
@@ -1819,10 +1841,6 @@ class Terrain {
         scene.add(trunk);
     }
 
-
-
-
-
     setGrandCentralPillar() {
         // Set up the axis object to define colors for positive and negative directions
         var axis = {
@@ -1973,11 +1991,6 @@ class Terrain {
                     if (isIn(v, 'sideyard')) {
                         console.log('changing', v.y, house.center.y)
                         v.y = house.center.y
-                    } else if (!inField) {
-                        if (Math.random() < 0.05) {
-                            var tree = this.createTree(v.x, v.y, v.z, 1);
-                            this.trees.push(tree);
-                        }
                     }
                 }
 
@@ -2138,7 +2151,8 @@ class Terrain {
 
                         if (isIn(trianglePosition, 'sideyard')) {
                             console.log('creating a cypress at', trianglePosition.x, trianglePosition.y, trianglePosition.z)
-                            var cypressTree = this.createFlora(trianglePosition.x, trianglePosition.y, trianglePosition.z, 'cypress')
+                            var cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
+                            var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
                             console.log("Created a 'cypress' tree!")
                         }
 
@@ -2168,25 +2182,7 @@ class Terrain {
                             mesh.triangle = triangle
                             mesh.indices = [0, 1, 2]; // Simple index array for each triangle
                             this.cliffs.push(mesh);
-                        } else if (!inCastle && !inBoardwalk) {
-                            if (Math.random() < 0.03) {
-                                var bushel = [1, 2, 3]
-                                for (var lathe of bushel) {
-                                    var plantWidth = randomInRange(.5, 13)
-                                    var plantHeight = randomInRange(1, 25)
-                                     var plant = Lathe(
-                                        (triangle.a.x + triangle.b.x + triangle.c.x) / 3,
-                                        (triangle.a.y + triangle.b.y + triangle.c.y) / 3 + plantHeight / 2,
-                                        (triangle.a.z + triangle.b.z + triangle.c.z) / 3 ,
-                                        null,
-                                        new THREE.Color(0.1, Math.random(), Math.random() * 0.5), 
-                                        plantWidth,
-                                        plantHeight
-                                    )
-                                    plant.rotation.y = Math.random()
-                                    this.plants.push(plant)
-                                }
-                            }
+                        
                         }
                     })
                         
@@ -2583,93 +2579,96 @@ class Terrain {
 
         this.cliffs = []
 
+        console.log("clustering " + clusters.length + " cliffs clusters")
+
         clusters.forEach(cluster => {
+            console.log("this cluster has " + cluster.length + " triangles")
+            var cliffGeometry = new THREE.BufferGeometry()
+            var points = []
             cluster.forEach(item => {
                 const triangle = item.triangle;
-                const index0 = item.indices[0];
-                const index1 = item.indices[1];
-                const index2 = item.indices[2];
+                // const index0 = item.indices[0];
+                // const index1 = item.indices[1];
+                // const index2 = item.indices[2];
 
-                // const a = new THREE.Vector3(
-                //     item.vertexPositions[index0 * 3],
-                //     item.vertexPositions[index0 * 3 + 1],
-                //     item.vertexPositions[index0 * 3 + 2]
-                // );
-                // const b = new THREE.Vector3(
-                //     item.vertexPositions[index1 * 3],
-                //     item.vertexPositions[index1 * 3 + 1],
-                //     item.vertexPositions[index1 * 3 + 2]
-                // );
-                // const c = new THREE.Vector3(
-                //     item.vertexPositions[index2 * 3],
-                //     item.vertexPositions[index2 * 3 + 1],
-                //     item.vertexPositions[index2 * 3 + 2]
-                // );
                 const a = triangle.a
                 const b = triangle.b
                 const c = triangle.c
 
-                // Create geometry for this triangle
-                const geometry = new THREE.BufferGeometry();
-                const vertices = new Float32Array([
-                    a.x, a.y, a.z,
+                // // Create geometry for this triangle
+                // const geometry = new THREE.BufferGeometry();
+                // const vertices = new Float32Array([
+                //     a.x, a.y, a.z,
+                //     b.x, b.y, b.z,
+                //     c.x, c.y, c.z
+                // ]);
+                points.push(a.x, a.y, a.z,
                     b.x, b.y, b.z,
-                    c.x, c.y, c.z
-                ]);
-                const uvs = new Float32Array([
-                    0, 0,  // UV for vertex a
-                    1, 0,  // UV for vertex b
-                    0.5, 1 // UV for vertex c (or adjust to your triangle size)
-                ]);
+                    c.x, c.y, c.z)
+                // const uvs = new Float32Array([
+                //     0, 0,  // UV for vertex a
+                //     1, 0,  // UV for vertex b
+                //     0.5, 1 // UV for vertex c (or adjust to your triangle size)
+                // ]);
 
 
-                // Fix: Reverse the order of the cross product to flip the normal
-                const edge1 = new THREE.Vector3().subVectors(c, a);  // Use c - a instead of b - a
-                const edge2 = new THREE.Vector3().subVectors(b, a);  // Use b - a instead of c - a
-                const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();  // Cross product for normal
+                // // Fix: Reverse the order of the cross product to flip the normal
+                // const edge1 = new THREE.Vector3().subVectors(c, a);  // Use c - a instead of b - a
+                // const edge2 = new THREE.Vector3().subVectors(b, a);  // Use b - a instead of c - a
+                // const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();  // Cross product for normal
 
-                // Create the normal array (same normal for all 3 vertices in this flat triangle)
-                const normals = new Float32Array([
-                    normal.x, normal.y, normal.z,
-                    normal.x, normal.y, normal.z,
-                    normal.x, normal.y, normal.z
-                ]);
+                // // Create the normal array (same normal for all 3 vertices in this flat triangle)
+                // const normals = new Float32Array([
+                //     normal.x, normal.y, normal.z,
+                //     normal.x, normal.y, normal.z,
+                //     normal.x, normal.y, normal.z
+                // ]);
 
-                // Set position and normal attributes for the geometry
-                geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-                geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-                geometry.setAttribute('uvs', new THREE.BufferAttribute(uvs, 3));
+                // // Set position and normal attributes for the geometry
+                // geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+                // geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+                // geometry.setAttribute('uvs', new THREE.BufferAttribute(uvs, 3));
 
-                geometry.computeVertexNormals();
+                // geometry.computeVertexNormals();
 
-                // Load the texture for the cliff triangle
+                // // Load the texture for the cliff triangle
                 
 
-                // Create the material with the texture
-                const material = new THREE.MeshStandardMaterial({
-                    // map: rockwallTexture,
-                    color: 'gray',
-                    side: THREE.DoubleSide,
-                    wireframe: false
-                });
+                // // Create the material with the texture
+                // const material = new THREE.MeshStandardMaterial({
+                //     // map: rockwallTexture,
+                //     color: 'gray',
+                //     side: THREE.DoubleSide,
+                //     wireframe: false
+                // });
 
-                // Create the mesh for the triangle
-                const mesh = new THREE.Mesh(geometry, material);
-                mesh.receiveShadow = true;
-                mesh.castShadow = true;
-                mesh.position.y += .2;
+                // // Create the mesh for the triangle
+                // const mesh = new THREE.Mesh(geometry, material);
+                // mesh.receiveShadow = true;
+                // mesh.castShadow = true;
+                // mesh.position.y += .2;
 
-                // Store triangle for later use if needed
-                mesh.triangle = triangle;
+                // // Store triangle for later use if needed
+                // mesh.triangle = triangle;
 
-                triangle.normal = normal;
+                // triangle.normal = normal;
 
-                this.cliffs.push(triangle);
+                // this.cliffs.push(triangle);
 
-                console.log("creating a cliff cluster!")
+                // console.log("creating a cliff cluster!")
 
-                scene.add(mesh);
+                // scene.add(mesh);
             });
+            cliffGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(points), 3))
+            cliffGeometry.computeVertexNormals()
+            var cliff = new THREE.Mesh(cliffGeometry,
+                new THREE.MeshBasicMaterial({
+                    color: new THREE.Color(Math.random(), Math.random(), Math.random()),
+                    side: THREE.DoubleSide
+                })
+            )
+            cliff.position.y += 0.2
+            scene.add(cliff)
         });
     }
 
