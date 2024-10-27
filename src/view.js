@@ -500,7 +500,21 @@ function Lathe(x, y, z, color) {
 
 
 
+// function User(camera) {
+//     var leftArm = {
+//         shoulder: [],
+//         elbow: [],
+//         wrist: [],
+//         knuckleA: [],
+//         knuckleB: [],
+//         knuckleC: [],
+//         knuckleD: [],
+//         knuckleE: [],
+//         skin_tone: 'pink'
+//     }
 
+    
+// }
 
 
 
@@ -2002,63 +2016,20 @@ class Terrain {
             }
         }
         instancedMesh.instanceMatrix.needsUpdate = true;
-        scene.add(instancedMesh);
+        // scene.add(instancedMesh);
 
         // Create the trunk
         const trunkGeometry = new THREE.CylinderGeometry(.05, tree[treeKind].width / 3, tree[treeKind].height / 5, 8);
         const trunkMaterial = new THREE.MeshStandardMaterial({ color: '#8B4513' });
         const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
         trunk.position.set(x, Y + tree[treeKind].height / 2, z);
-        scene.add(trunk);
+        // scene.add(trunk);
+
+        this.trees.push(new Terrain.Tree(trunk, instancedMesh))
     }
 
     setGrandCentralPillar() {
-        // Set up the axis object to define colors for positive and negative directions
-        var axis = {
-            x: {
-                neg: 'blue',  // Negative X direction (left)
-                pos: 'red'    // Positive X direction (right)
-            },
-            z: {
-                neg: 'green',  // Negative Z direction (backward)
-                pos: 'yellow'  // Positive Z direction (forward)
-            }
-        };
 
-        var cylinderLength = VM.map.quadrant * 2;
-
-        for (var xyz in axis) {
-            for (var polarity in axis[xyz]) {
-                var cylinderHelperGeometry = new THREE.CylinderGeometry(0.15, 0.5, cylinderLength, 32); // Radius 0.5, length 20 (horizontal)
-                var cylinderMaterialArgs = {
-                    color: axis[xyz][polarity] 
-                }
-                var cylinderMaterial = new THREE.MeshStandardMaterial(cylinderMaterialArgs);
-
-                // Create the cylinder mesh
-                var cylinder = new THREE.Mesh(cylinderHelperGeometry, cylinderMaterial);
-
-                // Position the cylinder based on the axis and polarity
-                if (xyz === 'x') {
-                    // For the X-axis, move the cylinder along the X-axis and rotate it to be horizontal
-                    cylinder.position.x = polarity === 'pos' ? cylinderLength / 2 : -cylinderLength / 2; // Positive or negative X
-                    cylinder.position.z = 0; // Keep it centered on the Z-axis
-                    cylinder.rotation.z = Math.PI / 2; // Rotate to lie horizontally along X
-                } else if (xyz === 'z') {
-                    // For the Z-axis, move the cylinder along the Z-axis and rotate it to be horizontal
-                    cylinder.position.z = polarity === 'pos' ? cylinderLength / 2 : -cylinderLength / 2; // Positive or negative Z
-                    cylinder.position.x = 0; // Keep it centered on the X-axis
-                    cylinder.rotation.x = Math.PI / 2; // Rotate to lie horizontally along Z
-                }
-
-                // Set the Y-position to an appropriate height (like a grid on the roof)
-                cylinder.position.y = 15;
-
-                // Add the cylinder to the scene
-                scene.add(cylinder);
-                pillars.push(cylinder)
-            }
-        }
     }
 
     go(centerX = 0, centerY = 0, centerZ = 0) {
@@ -2221,6 +2192,7 @@ class Terrain {
         // Create material (water-like material)
         var waterMaterial = new THREE.MeshStandardMaterial({
             color: 'royalblue',
+            map: new THREE.TextureLoader().load("/images/art-water.gif"),
             side: THREE.DoubleSide,
             opacity: 0.9,
             transparent: true
@@ -2288,7 +2260,6 @@ class Terrain {
 
         for (let i = 0; i < this.segments; i++) {
             for (let j = 0; j < this.segments; j++) {
-                // Calculate vertex indices for the current quad
                 let a = i + j * (this.segments + 1);
                 let b = (i + 1) + j * (this.segments + 1);
                 let c = (i + 1) + (j + 1) * (this.segments + 1);
@@ -2323,9 +2294,11 @@ class Terrain {
                     const SIDEYARD = isIn(trianglePosition, 'sideyard')
                     const BACKYARD = isIn(trianglePosition, 'backyard')
 
-                    if (SIDEYARD) {
-                        var cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                        var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
+                    if ((BACKYARD || SIDEYARD) && Math.random() < 0.1) {
+                        for (var tree_partner = 0; tree_partner < 3; tree_partner++) {
+                            var cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
+                            var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
+                        }
                     }
 
                     if (BACKYARD) {
@@ -2395,7 +2368,7 @@ class Terrain {
         // Apply the custom texture to the terrain
         const material = new THREE.MeshStandardMaterial({
             // vertexColors: true,  // Enable vertex colors
-            map: new THREE.TextureLoader().load("/images/ground-0.jpg", texture => {
+            map: new THREE.TextureLoader().load("/images/Leo.jpg", texture => {
                 texture.wrapS = THREE.ClampToEdgeWrapping; // Prevent repetition horizontally
                 texture.wrapT = THREE.ClampToEdgeWrapping; // Prevent repetition vertically
                 texture.repeat.set(1, 1); // Keep the texture at its original size
@@ -2950,9 +2923,9 @@ class Terrain {
         // Remove triangles outside the SOP from the scene
         this.grasses.forEach(lathe => {
             const pos = lathe.position.distanceTo(user.camera.position)
-            if (lathe.parent && pos > 50) {
+            if (lathe.parent && pos > this.sop.grasses) {
                 scene.remove(lathe)
-            } else if (!lathe.parent && pos < 50) {
+            } else if (!lathe.parent && pos < this.sop.grasses) {
                 scene.add(lathe)
             } else if (lathe.parent) {
                 lathe.rotation.y += 0.01;
@@ -3409,7 +3382,7 @@ class UserController {
         // Define the max angle for the arc (in radians)
         const maxAngle = THREE.MathUtils.degToRad(45);  // 45 degrees in radians
         window.addEventListener('mousemove', (event) => {
-            const sensitivity = 0.005;  // Adjust sensitivity
+            const sensitivity = 0.05;  // Adjust sensitivity
             this.yaw -= event.movementX * sensitivity;
             this.pitch -= event.movementY * sensitivity;
 

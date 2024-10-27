@@ -29,9 +29,9 @@ class Model {
         noiseHeight: t,
         segments: 50,
         sop: {
-            trees: t / 2,
-            grasses: 3000,
-            grounds: 3000,
+            trees: 8,
+            grasses: 8,
+            grounds: 20,
             cliffs: t / 2
         },
         grasses: [],
