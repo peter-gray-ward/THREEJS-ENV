@@ -7,6 +7,14 @@ import { SUBTRACTION, Brush, Evaluator } from '/lib/three-bvh-csg.js';
 import ViewModel from "/src/view-model.js";
 
 window.CYPRESSGREENS = ['#93b449', '#6b881c', '#a9cc4e']
+window.CYPRESSBRANCH = new THREE.TextureLoader().load("/images/branch.webp")
+window.TRUNKTEXTURE = new THREE.TextureLoader().load("/images/trees/bark/bark-2.jpg")
+window.cementTexture = new THREE.TextureLoader().load("/images/ground-0.jpg", texture => {
+    texture.wrapS = THREE.RepeatWrapping
+    texture.wrapT = THREE.RepeatWrapping
+    texture.rotation = Math.random() * Math.PI * 2
+    texture.repeat.set(100, 100)
+})
 var clock = new THREE.Clock()
 const evaluator = new Evaluator();
 
@@ -257,7 +265,7 @@ class GrassPatch {
 
 
 
-function TriangleMesh(vertices, a, b, c, terrainWidth, terrainHeight) {
+function TriangleMesh(vertices, a, b, c, terrainWidth, terrainHeight, map) {
 
     const triangleGeometry = new THREE.BufferGeometry();
 
@@ -286,7 +294,7 @@ function TriangleMesh(vertices, a, b, c, terrainWidth, terrainHeight) {
     const triangleMaterial = new THREE.MeshStandardMaterial({
         transparent: false,
         wireframe: false,
-        map: groundTexture,
+        map,
         side: THREE.DoubleSide
         // color: new THREE.Color(Math.random(), Math.random(), Math.random())
     });
@@ -561,10 +569,10 @@ class Sky {
 
         this.hemisphereLight = new THREE.HemisphereLight(0xfefeff, 0x444444, .05); // Sky and ground color
         this.hemisphereLight.position.set(0, 0, 0);
-        scene.add(this.hemisphereLight);
+        // scene.add(this.hemisphereLight);
 
 
-        this.sun = new THREE.DirectionalLight(0xffffff, 3);
+        this.sun = new THREE.DirectionalLight(0xffffff, 2);
         this.sun.position.set(0, sceneRadius, 0);
         scene.add(this.sun)
         this.sun.lookAt(0, 0, 0)
@@ -693,7 +701,14 @@ class Sky {
         if (this.time > Math.PI * 2) {
             this.time = 0
         }
-        this.time += 0.001
+
+        if (this.time > Math.PI) {
+            this.sun.intensity = 0
+        } else {
+            this.sun.intensity = 2
+        }
+
+        this.time += 0.0001
         // Sun's position: moving along the x and y axes while keeping z fixed at 0
         var sunX = this.sceneRadius * Math.cos(this.time);  // Sun moves along the x-axis
         var sunY = this.sceneRadius * Math.sin(this.time);  // Sun rises and falls along the y-axis
@@ -1834,26 +1849,56 @@ class Castle {
 const sphereGeometries = {};
 const leafMaterials = {};
 
-function getCachedSphereGeometry(radius) {
+function getCachedSphereGeometry(radius, map, transparent) {
     if (!sphereGeometries[radius]) {
         const geometry = new THREE.SphereGeometry(radius, 20, 20);
         
         // Randomize vertex positions for a leaf-like appearance
-        for (let i = 0; i < geometry.attributes.position.array.length; i += 3) {
-            geometry.attributes.position.array[i] += randomInRange(-0.3, 0.3);
-            geometry.attributes.position.array[i + 1] += randomInRange(-0.5, 0.5);
-            geometry.attributes.position.array[i + 2] += randomInRange(-0.3, 0.3);
-        }
+        if (transparent) {
+            for (let i = 0; i < geometry.attributes.position.array.length; i += 3) {
+                // Define a random factor to apply different shapes to different parts of the sphere
+                let layer = Math.floor(i / (geometry.attributes.position.array.length / 3));
+                
+                // Position-based variations
+                let offsetX = randomInRange(-0.2, 0.2) + layer * randomInRange(-0.05, 0.05);
+                let offsetY = randomInRange(-0.4, 0.4) + layer * randomInRange(-0.1, 0.1);
+                let offsetZ = randomInRange(-0.2, 0.2) + layer * randomInRange(-0.05, 0.05);
 
-        geometry.attributes.position.needsUpdate = true;
+                // Apply offset to create more organic shapes and layers
+                geometry.attributes.position.array[i] += offsetX;
+                geometry.attributes.position.array[i + 1] += offsetY;
+                geometry.attributes.position.array[i + 2] += offsetZ;
+            }
+            geometry.computeVertexNormals()
+            geometry.attributes.position.needsUpdate = true;
+
+        } else {
+            for (let i = 0; i < geometry.attributes.position.array.length; i += 3) {
+                geometry.attributes.position.array[i] += randomInRange(-0.3, 0.3);
+                geometry.attributes.position.array[i + 1] += randomInRange(-0.5, 0.5);
+                geometry.attributes.position.array[i + 2] += randomInRange(-0.3, 0.3);
+            }
+            geometry.computeVertexNormals()
+            geometry.attributes.position.needsUpdate = true;
+        }
         sphereGeometries[radius] = geometry;
     }
     return sphereGeometries[radius];
 }
 
-function getCachedLeafMaterial(color) {
+function getCachedLeafMaterial(color, map, transparent) {
     if (!leafMaterials[color]) {
-        leafMaterials[color] = new THREE.MeshStandardMaterial({ color, side: THREE.DoubleSide });
+        var leafMaterialArgs = { 
+            // color, 
+            side: THREE.DoubleSide,
+            color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
+            transparent: true,
+            opacity: 1
+        }
+        if (transparent) {
+            leafMaterialArgs.color = CYPRESSGREENS[0]
+        }
+        leafMaterials[color] = new THREE.MeshStandardMaterial(leafMaterialArgs);
     }
     return leafMaterials[color];
 }
@@ -1908,25 +1953,150 @@ class Terrain {
         this.go();
     }
 
+
+    static OrangeTreeSinCurve = class extends THREE.Curve { 
+        constructor( scale = 1 ) { 
+            super(); 
+            this.scale = scale; 
+        } 
+        getPoint( t, optionalTarget = new THREE.Vector3() ) { 
+            const tx = t * 3 - 1.5; 
+            const ty = Math.sin( 2 * Math.PI * t ); 
+            const tz = 0; 
+            return optionalTarget.set( tx, ty, tz ).multiplyScalar( this.scale ); 
+        } 
+    } 
+
+    static RandomizedTrunkCurve = class extends THREE.Curve {
+        constructor(x, y, z, segments) {
+            super();
+            this.points = [];
+
+            // Generate randomized trunk points
+            for (let i = 0; i < segments; i++) {
+                this.points.push(new THREE.Vector3(
+                    x + randomInRange(-0.1, 0.1),
+                    y + i * 0.2, // Assuming y should increase with each segment
+                    z + randomInRange(-0.1, 0.1)
+                ));
+            }
+        }
+
+        getPoint(t, optionalTarget = new THREE.Vector3()) {
+            // Interpolate between the points based on t
+            const pointIndex = (this.points.length - 1) * t;
+            const index1 = Math.floor(pointIndex);
+            const index2 = Math.min(index1 + 1, this.points.length - 1);
+
+            // Get the two points to interpolate between
+            const point1 = this.points[index1];
+            const point2 = this.points[index2];
+
+            // Linear interpolation
+            optionalTarget.lerpVectors(point1, point2, pointIndex - index1);
+            
+            return optionalTarget;
+        }
+    }
+
+
+    createOrangeTree(x, y, z) {
+        const segments = randomInRange(10, 15)
+        var tree = {
+            colors: {
+                leaf: ['#beb816','#d7dd87','#8c7414','#7cac0c','#84ac10','#5c8404'],
+                orange: ['#fac811','#cc4c04','#f6a712','#fbe816','#872b07']
+            },
+            trunk: {
+                curve: new Terrain.RandomizedTrunkCurve(x, y, z, segments),
+                segments, // More segments for smoother trunk
+                radius: 0.2
+            }
+        };
+
+        var trunkGeometry = new THREE.TubeGeometry(
+            tree.trunk.curve, 
+            tree.trunk.segments, 
+            tree.trunk.radius, 
+            8, 
+            false
+        );
+        
+        // trunkGeometry.setAttribute('color', new THREE.Float32BufferAttribute(trunkColors.flat(), 3));
+
+
+        var trunkMaterial = new THREE.MeshStandardMaterial({
+            // vertexColors: true,
+            color: 'green',
+            roughness: 0.8,
+            metalness: 0.1
+        });
+        
+        var trunkMesh = new THREE.Mesh(trunkGeometry, trunkMaterial);
+
+        return trunkMesh
+        // scene.add(trunkMesh)
+        
+        // Create foliage using randomly positioned spheres
+        // var foliageGroup = new THREE.Group();
+        // for (var i = 0; i < 50; i++) { // Create 50 leaves
+        //     var leafGeometry = new THREE.SphereGeometry(randomInRange(0.1, 0.2), 8, 8);
+        //     var leafMaterial = new THREE.MeshStandardMaterial({
+        //         color: orange.colors.leaf[Math.floor(Math.random() * orange.colors.leaf.length)]
+        //     });
+        //     var leafMesh = new THREE.Mesh(leafGeometry, leafMaterial);
+        //     leafMesh.position.set(
+        //         x + randomInRange(-1, 1),
+        //         y + orange.height - randomInRange(0, 1),
+        //         z + randomInRange(-1, 1)
+        //     );
+        //     foliageGroup.add(leafMesh);
+        // }
+
+        // // Add oranges
+        // for (var i = 0; i < 5; i++) { // Create 5 oranges
+        //     var orangeGeometry = new THREE.SphereGeometry(0.2, 12, 12);
+        //     var orangeMaterial = new THREE.MeshStandardMaterial({
+        //         color: orange.colors.orange[Math.floor(Math.random() * orange.colors.orange.length)]
+        //     });
+        //     var orangeMesh = new THREE.Mesh(orangeGeometry, orangeMaterial);
+        //     orangeMesh.position.set(
+        //         x + randomInRange(-0.5, 0.5),
+        //         y + orange.height - randomInRange(0.5, 1),
+        //         z + randomInRange(-0.5, 0.5)
+        //     );
+        //     foliageGroup.add(orangeMesh);
+        // }
+
+      
+    }
+
+
     createFlora(x, Y, z, treeKind) {
         const tree = {
             cypress: {
                 height: randomInRange(25, 40),
                 width: randomInRange(1, 1.9),
                 colors: CYPRESSGREENS, // Cypress leaf colors
-                trimmed: Math.random() < 0.5 ? true : false
-            },
-
+                trimmed: Math.random() < 0.5 ? true : false,
+                branch: {
+                    map: CYPRESSBRANCH
+                },
+                trunk: {
+                    map: TRUNKTEXTURE
+                }
+            }
         };
 
         const twoPi = Math.PI * 2;
         const colorArray = tree[treeKind].colors;
+        const transparent = Math.random() < 0.3
 
         // Create an instanced mesh for the leaves
         const instanceCount = Math.floor(tree[treeKind].height * 7); // Adjust count as needed
         const instancedMesh = new THREE.InstancedMesh(
-            getCachedSphereGeometry(tree[treeKind].width / 2),
-            getCachedLeafMaterial(colorArray[Math.floor(Math.random() * colorArray.length)]),
+            getCachedSphereGeometry(tree[treeKind].width / 2, tree[treeKind].branch.map, transparent),
+            getCachedLeafMaterial(colorArray[Math.floor(Math.random() * colorArray.length)], tree[treeKind].branch.map, transparent),
             instanceCount
         );
 
@@ -1956,10 +2126,16 @@ class Terrain {
         // scene.add(instancedMesh);
 
         // Create the trunk
-        const trunkGeometry = new THREE.CylinderGeometry(.05, randomInRange(0.1, 0.5), tree[treeKind].height * .7, 8);
-        const trunkMaterial = new THREE.MeshStandardMaterial({ color: '#8B4513' });
+        const trunkGeometry = new THREE.CylinderGeometry(.05, randomInRange(0.1, 0.5), tree[treeKind].height, 8);
+        const trunkMaterial = new THREE.MeshStandardMaterial({ 
+            color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
+            map:  TRUNKTEXTURE,
+            transparent: false
+        });
         const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-        trunk.position.set(x, Y + tree[treeKind].height / 2, z);
+        trunk.position.set(x, Y, z);
+        trunk.branches = []
+
         // scene.add(trunk);
 
         return new Terrain.Tree(trunk, instancedMesh)
@@ -2213,8 +2389,9 @@ class Terrain {
                 var inCastle = (v.x > -house.width / 2 && v.x < house.width / 2 && v.z > -house.depth / 2 && v.z < house.depth / 2)
                 var inCove = v.x >= landscape.field.width / 2 && v.z >= -landscape.field.depth && v.z <= landscape.field.depth / 3;
   
-                const t1 = TriangleMesh(vertices, a, b, d, this.width, this.height);
-                const t2 = TriangleMesh(vertices, b, c, d, this.width, this.height);
+                var Txture = cementTexture
+                const t1 = TriangleMesh(vertices, a, b, d, this.width, this.height, Txture);
+                const t2 = TriangleMesh(vertices, b, c, d, this.width, this.height, Txture);
 
                 [t1, t2].forEach((triangleMesh) => {
                     
@@ -2227,13 +2404,19 @@ class Terrain {
                     const CLIFF = Math.abs(triangleMesh.normal.y) < 0.4 && (Math.abs(triangleMesh.normal.x) > 0.4 || Math.abs(triangleMesh.normal.z) > 0.4)
                     const SIDEYARD = isIn(trianglePosition, 'sideyard')
                     const BACKYARD = isIn(trianglePosition, 'backyard')
-
+                    let cypressTreePosition
                     if ((SIDEYARD) || (BACKYARD && Math.random() < 0.05)) {
                         for (var tree_partner = 0; tree_partner < 3; tree_partner++) {
-                            var cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
+                            cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
                             var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
                             this.trees.push(cypressTree)
                         }
+                    }
+
+                    else if (BACKYARD) {
+                        var treePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
+                        var tree = this.createTree(treePosition.x, treePosition.y, treePosition.z)
+                        this.trees.push(tree)
                     }
 
                     if (BACKYARD) {
@@ -2260,6 +2443,7 @@ class Terrain {
         // this.createInstancedMeshGrounds()
 
         this.clusterCliffs()
+
         
         // Now, let's apply the grass density in groundColorMap to color the vertices
         const colors = [];
@@ -2303,15 +2487,11 @@ class Terrain {
         // Apply the custom texture to the terrain
         const material = new THREE.MeshStandardMaterial({
             // vertexColors: true,  // Enable vertex colors
-            map: new THREE.TextureLoader().load("/images/Leo.jpg", texture => {
-                texture.wrapS = THREE.ClampToEdgeWrapping; // Prevent repetition horizontally
-                texture.wrapT = THREE.ClampToEdgeWrapping; // Prevent repetition vertically
-                texture.repeat.set(1, 1); // Keep the texture at its original size
-            }),
+            map: new THREE.TextureLoader().load("/images/floor112.jpg"),
             side: THREE.DoubleSide,
-            wireframe: true,
-            transparent: true,
-            opacity: 0
+            wireframe: false,
+            transparent: false,
+            opacity: 1
         });
 
         const mesh = new THREE.Mesh(planeGeometry, material);
@@ -2812,6 +2992,9 @@ class Terrain {
         });
     }
 
+
+
+
     updateTerrain() {
         var sopCenter = user.camera.position
         // Helper function to determine if a point is within the SOP
@@ -2854,6 +3037,10 @@ class Terrain {
             if (ground.parent && center.distanceTo(user.camera.position) > 100) {
                 scene.remove(ground);
             } else if (!ground.parent && center.distanceTo(user.camera.position) < 100/*&& isInSOP(center, sopCenter, this.sop.grounds)*/) {
+                ground.material.transparent = true
+                ground.material.opacity += randomInRange(-0.05, 0.05)
+                if (ground.material.opacity > 1) ground.material.opacity = .9
+                if (ground.material.opacity < 0) ground.material.opacity = .1
                 scene.add(ground);
             }
         })
@@ -2887,19 +3074,20 @@ class Terrain {
     static Tree = class {
         constructor(trunk, foliage) {
             this.trunk = trunk; 
-            this.foliage = foliage;  
+            if (foliage) {
+                 this.foliage = foliage;  
+            }
             this.boundingBox = new THREE.Box3().setFromObject(this.trunk).union(new THREE.Box3().setFromObject(this.foliage));
         }
     }
 
-    createTree(x, y, z, alternate) {
+    createTree(x, y, z, alternate, treeKind) {
         const textureIndex = Math.floor(Math.random() * 7);
 
         var trunkHeight = randomInRange(3, 25)
         var trunkBaseRadius = randomInRange(.1, .8)
         var rr = alternate ? randomInRange(.01, .1) : randomInRange(.1, .5)
         var trunkCurve = []
-        var trunkRadius = []
         var zS = z
         var xS = x
         var yS = y;
@@ -2911,8 +3099,6 @@ class Terrain {
             if (Math.random() < 0.13) {
                 xS += randomInRange(-rr, rr)
             }
-            var r = trunkBaseRadius
-            trunkRadius.push(r)
             trunkCurve.push(
                 new THREE.Vector3(
                     xS,
@@ -2952,6 +3138,7 @@ class Terrain {
         sphere.receiveShadow = true
         sphere.position.set(xS, yS + (foliageRadius / 2), zS); // Set foliage position
         sphere.frustrumCulled = true
+        sphere.radius = foliageRadius
         scene.add(sphere);
 
         var { array, itemSize } = sphereGeometry.attributes.position
@@ -2973,6 +3160,13 @@ class Terrain {
 
         var segments = Math.floor(randomInRange(5, 11))
         var radialSegments = 15
+
+
+
+
+
+
+
 
         // Create the tube geometry
         const tubeGeometry = new THREE.TubeGeometry(path, segments, trunkBaseRadius);
@@ -3202,8 +3396,8 @@ class UserController {
                 this.ArrowLeft = true;
             } else if (key == 'ARROWRIGHT') {
                 this.ArrowRight = true;
-            } else if (key === 'ShiftLeft') {
-                this.leftShift = true;
+            } else if (key === 'SHIFT') {
+                this.run = true
             } else if (key === 'ShiftRight') {
                 this.rightShift = true;
             }
@@ -3233,8 +3427,8 @@ class UserController {
                 this.ArrowLeft = false;
             } else if (key == 'ARROWRIGHT') {
                 this.ArrowRight = false;
-            } else if (key === 'ShiftLeft') {
-                this.leftShift = false;
+            } else if (key === 'SHIFT') {
+                this.run = false;
             } else if (key === 'ShiftRight') {
                 this.rightShift = false;
             }
@@ -3361,28 +3555,28 @@ class UserController {
                 this.camera.getWorldDirection(direction);
                 direction.y = 0;  // Ignore vertical movement
                 direction.normalize();  // Ensure consistent vector length
-                forwardMovement.add(direction.multiplyScalar(this.wS));  // Move forward by this.wS
+                forwardMovement.add(direction.multiplyScalar(this.wS + (this.run ? 0.23 : 0)));  // Move forward by this.wS
             }
 
             if (this.s && !this._s) {
                 this.camera.getWorldDirection(direction);
                 direction.y = 0;
                 direction.normalize();  // Normalize for consistent movement
-                forwardMovement.sub(direction.multiplyScalar(this.sS));  // Move backward by this.sS
+                forwardMovement.sub(direction.multiplyScalar(this.sS + (this.run ? 0.23 : 0)));  // Move backward by this.sS
             }
 
             if ((this.a && !this._a)) {
                 this.camera.getWorldDirection(direction);
                 direction.y = 0;  // Keep movement in the horizontal plane
                 right.crossVectors(this.camera.up, direction).normalize();  // Calculate the right vector
-                rightMovement.add(right.multiplyScalar(this.aS));  // Move right
+                rightMovement.add(right.multiplyScalar(this.aS + (this.run ? 0.23 : 0)));  // Move right
             } 
 
             if ((this.d && !this._d)) {
                 this.camera.getWorldDirection(direction);
                 direction.y = 0;  // Keep movement in the horizontal plane
                 right.crossVectors(this.camera.up, direction).normalize();  // Calculate the right vector
-                rightMovement.sub(right.multiplyScalar(this.dS)); 
+                rightMovement.sub(right.multiplyScalar(this.dS + (this.run ? 0.23 : 0))); 
             }
 
 
@@ -3515,6 +3709,11 @@ class UserController {
                 } else {
                     this.camera.position.add(responseDirection.multiplyScalar(1));
                 }
+            }
+
+
+            if (this.isJumping) {
+                var closestGround = undefined
             }
         }
 
