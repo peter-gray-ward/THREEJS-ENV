@@ -7,6 +7,7 @@ import { SUBTRACTION, Brush, Evaluator } from '/lib/three-bvh-csg.js';
 import ViewModel from "/src/view-model.js";
 
 window.CYPRESSGREENS = ['#93b449', '#6b881c', '#a9cc4e']
+window.LATHECOLORS = ['#00ffff', '#ff00ff', '#ffff00']
 window.CYPRESSBRANCH = new THREE.TextureLoader().load("/images/branch.webp")
 window.TRUNKTEXTURE = new THREE.TextureLoader().load("/images/trees/bark/bark-2.jpg")
 window.cementTexture = new THREE.TextureLoader().load("/images/ground-0.jpg", texture => {
@@ -492,8 +493,8 @@ function TriangleGrid(vertices, a, b, c) {
     return triangles
 }
 
-function Lathe(x, y, z, color) {
-    const height = randomInRange(1.2, 3.2)
+function Lathe(x, y, z, radius, color) {
+    const height = radius * 2
     const group = new THREE.Group();
     
     // Define mesh material arguments
@@ -526,7 +527,7 @@ function Lathe(x, y, z, color) {
 
     // Create the lathe geometry
     const geometry = new THREE.LatheGeometry(points, data.segments, data.phiStart, data.phiLength);
-
+    geometry.computeVertexNormals()
     // Create the wireframe and mesh and add them to the group
     const mesh = new THREE.Mesh(geometry, meshMaterial);
     mesh.castShadow = true
@@ -2179,24 +2180,24 @@ class Terrain {
     createFlora(x, Y, z, treeKind) {
         const tree = {
             cypress: {
-                height: randomInRange(25, 40),
+                height: randomInRange(4, 30),
                 width: randomInRange(1, 1.9),
                 colors: CYPRESSGREENS, // Cypress leaf colors
                 trimmed: Math.random() < 0.5 ? true : false,
                 branch: {
-                    map: CYPRESSBRANCH
+                    map: random1()
                 },
                 trunk: {
                     map: TRUNKTEXTURE
                 }
             },
             'alternative-cypress': {
-                height: randomInRange(2, 6),
+                height: randomInRange(4, 6),
                 width: randomInRange(1, 1.9),
                 colors: CYPRESSGREENS, // Cypress leaf colors
                 trimmed: false,
                 branch: {
-                    map: CYPRESSBRANCH
+                    map: random1()
                 },
                 trunk: {
                     map: TRUNKTEXTURE
@@ -2211,16 +2212,22 @@ class Terrain {
             getCachedLeafMaterial(tree[treeKind].colors[0], tree[treeKind].branch.map), // Initial color
             instanceCount
         );
+        instancedMesh.frustrumCulled = true
 
         // Define gradient colors for leaves
         const startColor = new THREE.Color(tree[treeKind].colors[0]); // Darker color at the base
         const endColor = new THREE.Color(tree[treeKind].colors[tree[treeKind].colors.length - 1]); // Lighter color at the top
 
         let index = 0;
-        for (let y = Y; y < Y + tree[treeKind].height * 2; y += 1) {
+        var none = Math.random() < 0.85
+        var ydiff = 0
+        for (let y = Y; y < Y + tree[treeKind].height; y += 1) {
             const progress = (y - Y) / tree[treeKind].height;
             let radiusAtY = (1 - progress) * (tree[treeKind].width / 2) * randomInRange(0.83, 2.25);
             if (radiusAtY < 0.5) radiusAtY = 0.5;
+            if (none && ydiff++ < 1.2) {
+                radiusAtY = 0
+            }
 
             const interpolatedColor = startColor.clone().lerp(endColor, progress);
 
@@ -2251,10 +2258,10 @@ class Terrain {
         // Create the trunk
         const trunkGeometry = new THREE.CylinderGeometry(
             0.05,//radiusTop : Float, 
-            randomInRange(0.2, 0.5),//radiusBottom : Float, 
+            tree[treeKind].height * .01,//radiusBottom : Float, 
             tree[treeKind].height,//height : Float, 
             3,//radialSegments : Integer, 
-            1,//heightSegments : Integer, 
+            7,//heightSegments : Integer, 
              true,//openEnded : Boolean, 
              Math.random() * Math.PI * 2,//thetaStart : Float, 
              Math.PI * 2//thetaLength : Float
@@ -2264,7 +2271,7 @@ class Terrain {
             transparent: false
         });
         const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-        trunk.position.set(x, Y, z);
+        trunk.position.set(x, Y + tree[treeKind].height / 2, z);
         trunk.branches = [];
         trunk.castShadow = true;
         trunk.receiveShadow = true;
@@ -2552,7 +2559,13 @@ class Terrain {
                             this.trees.push(alternativeCypressTree)
                         } else if (Math.random() < 0.1) {
                             var pos = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                            var lathe = Lathe(trianglePosition.x, trianglePosition.y, trianglePosition.z, CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)])
+                            var lathe = Lathe(
+                                trianglePosition.x, 
+                                trianglePosition.y,
+                                 trianglePosition.z,
+                                 randomInRange(3, 30),
+                                 LATHECOLORS[Math.floor(Math.random() * LATHECOLORS.length)]
+                            )
                             lathe.position.copy(pos)
                             this.grasses.push(
                                 lathe
@@ -3146,10 +3159,10 @@ class Terrain {
 
         this.trees.forEach((tree) => {
             // Add or remove tree based on SOP (Screen-oriented projection) center check
-            if (tree.trunk.parent && !isInSOP(tree.trunk.position, sopCenter, 100)) {
+            if (tree.trunk.parent && !isInSOP(tree.trunk.position, sopCenter, this.sop.grasses)) {
                 scene.remove(tree.trunk);
                 scene.remove(tree.foliage);
-            } else if (!tree.trunk.parent && isInSOP(tree.trunk.position, sopCenter, 100)) {
+            } else if (!tree.trunk.parent && isInSOP(tree.trunk.position, sopCenter, this.sop.grasses)) {
                 scene.add(tree.trunk);
                 scene.add(tree.foliage);
             }
@@ -3519,7 +3532,7 @@ class UserController {
                 this.d = true;
             } else if (key == ' ') {
                 this.isJumping = true;
-                this.jumpVelocity = 0.4;
+                this.jumpVelocity = 1;
             } else if (key == 'ARROWUP') {
                 this.ArrowUp = true;
             } else if (key == 'ARROWDOWN') {
@@ -3645,7 +3658,7 @@ class UserController {
 
         // Define the max angle for the arc (in radians)
         const maxAngle = THREE.MathUtils.degToRad(45);  // 45 degrees in radians
-        window.addEventListener('mousemove', (event) => {
+        document.querySelector('canvas').addEventListener('mousemove', (event) => {
             const sensitivity = 0.0085;  // Adjust sensitivity
             this.yaw -= event.movementX * sensitivity;
             this.pitch -= event.movementY * sensitivity;
@@ -4086,11 +4099,17 @@ class View {
         // window.user.camera.position.set(33.953909365281795, 2.610000001490116, 23.053098469337314);
         window.user.camera.position.set(24, landscape.field.center.y + 10, 0)
 
-        window.user.camera.lookAt(
-            new THREE.Vector3(1000000, 0, 0)
-        )
+        var time = new Date().getTime()
 
-        
+        var lookingInterval = setInterval(function() {
+            window.user.camera.lookAt(
+                new THREE.Vector3(1000000, 0, 0)
+            )
+            console.log('diff', new Date().getTime() - time)
+            if (new Date().getTime() - time > 1000) {
+                clearInterval(lookingInterval)
+            }
+        }, 300)
         
     }
 
