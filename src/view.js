@@ -1844,6 +1844,7 @@ function getCachedSphereGeometry(radius) {
             geometry.attributes.position.array[i + 1] += randomInRange(-0.5, 0.5);
             geometry.attributes.position.array[i + 2] += randomInRange(-0.3, 0.3);
         }
+
         geometry.attributes.position.needsUpdate = true;
         sphereGeometries[radius] = geometry;
     }
@@ -1857,7 +1858,8 @@ function getCachedLeafMaterial(color) {
     return leafMaterials[color];
 }
 
- const tree = {
+
+const tree = {
         cypress: {
             height: randomInRange(15, 20),
             width: randomInRange(1, 1.9),
@@ -1905,72 +1907,7 @@ class Terrain {
     init() {
         this.go();
     }
-/*
-    createFlora(x, Y, z, treeKind) {
-        const tree = {
-            cypress: {
-                height: randomInRange(15, 20),
-                width: randomInRange(1, 1.9),
-                colors: ['#93b449', '#6b881c', '#a9cc4e'], // Cypress leaf colors
-                trimmed: Math.random() < 0.5 ? true : false
-            }
-        };
-        const howManyTreeColors = tree[treeKind].colors.length;
-        const twoPi = Math.PI * 2;
 
-        // Loop through each height step to build the tree
-        for (let y = Y; y < Y + tree[treeKind].height; y += randomInRange(0.5, 1.2)) {
-            // Calculate the radius at the current height (larger at the base, smaller at the top)
-            const progress = (y - Y) / tree[treeKind].height; // A value from 0 (base) to 1 (top)
-            let radiusAtY = (1 - progress) * (tree[treeKind].width / 2); // Shrinks as 'y' increases
-            
-            // Apply some randomness to the radius to create irregularity
-            radiusAtY *= randomInRange(0.7, 1.3); 
-
-            if (radiusAtY < 0.3) radiusAtY = 0.3; // Prevent the radius from becoming too small
-
-            for (let p = 0; p < twoPi; p += randomInRange(0.6, 1.0)) {
-                // Randomize the outward angle for each branch to create folds
-                const randomAngle = randomInRange(-0.4, 0.4);  // Outward angles for folds
-                const randomHeightAdjustment = randomInRange(-0.3, 0.3); // Add irregularity in height
-
-                // Randomize the leaf color
-                const leafColor = tree[treeKind].colors[Math.floor(Math.random() * howManyTreeColors)];
-
-                const sphereGeo = getCachedSphereGeometry(radiusAtY) // Adjust radius for each level
-                const leafMaterial = getCachedLeafMaterial(leafColor)
-
-                const leaf = new THREE.Mesh(sphereGeo, leafMaterial);
-                leaf.castShadow = true;
-                leaf.receiveShadow = true;
-
-                // Randomize x and z positions slightly to break the cylindrical pattern
-                const xPos = x + (radiusAtY * Math.cos(p + randomAngle)) + randomInRange(-0.2, 0.2);
-                const zPos = z + (radiusAtY * Math.sin(p + randomAngle)) + randomInRange(-0.2, 0.2);
-
-                // Vary y position to simulate uneven folds
-                leaf.position.set(xPos, y + randomHeightAdjustment, zPos);
-
-                // Modify the vertices of the sphere for added irregularity
-                for (let i = 0; i < sphereGeo.attributes.position.array.length; i += 3) {
-                    sphereGeo.attributes.position.array[i] += randomInRange(-0.3, 0.3);
-                    sphereGeo.attributes.position.array[i + 1] += randomInRange(-0.5, 0.5);
-                    sphereGeo.attributes.position.array[i + 2] += randomInRange(-0.3, 0.3);
-                }
-
-                scene.add(leaf);
-            }
-        }
-
-        // Create the trunk with a gradual taper
-        const trunkGeometry = new THREE.CylinderGeometry(tree[treeKind].width / 6, tree[treeKind].width / 3, tree[treeKind].height, 8); // Slightly thicker at the base
-        const trunkMaterial = new THREE.MeshStandardMaterial({ color: '#8B4513' });
-        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-        trunk.position.set(x, Y + tree[treeKind].height / 2, z);
-        scene.add(trunk);
-    }
-
-*/
     createFlora(x, Y, z, treeKind) {
         const tree = {
             cypress: {
@@ -1986,7 +1923,7 @@ class Terrain {
         const colorArray = tree[treeKind].colors;
 
         // Create an instanced mesh for the leaves
-        const instanceCount = Math.floor(tree[treeKind].height * 5); // Adjust count as needed
+        const instanceCount = Math.floor(tree[treeKind].height * 7); // Adjust count as needed
         const instancedMesh = new THREE.InstancedMesh(
             getCachedSphereGeometry(tree[treeKind].width / 2),
             getCachedLeafMaterial(colorArray[Math.floor(Math.random() * colorArray.length)]),
@@ -1997,17 +1934,17 @@ class Terrain {
         let index = 0;
         for (let y = Y; y < Y + tree[treeKind].height * 2; y  += 1) {
             const progress = (y - Y) / tree[treeKind].height;
-            let radiusAtY = (1 - progress) * (tree[treeKind].width / 2) * randomInRange(0.7, 1.3);
+            let radiusAtY = (1 - progress) * (tree[treeKind].width / 2) * randomInRange(.83, 2.25);
 
-            if (radiusAtY < 0.3) radiusAtY = 0.3;
+            if (radiusAtY < 0.5) radiusAtY = 0.5
 
             for (let p = 0; p < twoPi && index < instanceCount; p += randomInRange(0.6, 1.0)) {
                 const matrix = new THREE.Matrix4();
                 const randomAngle = randomInRange(-0.4, 0.4);
                 const randomHeightAdjustment = randomInRange(-0.3, 0.3);
 
-                const xPos = x + (radiusAtY * Math.cos(p + randomAngle)) + randomInRange(-0.2, 0.2);
-                const zPos = z + (radiusAtY * Math.sin(p + randomAngle)) + randomInRange(-0.2, 0.2);
+                const xPos = x + (radiusAtY * Math.cos(p + randomAngle)) + randomInRange(-.75, .75);
+                const zPos = z + (radiusAtY * Math.sin(p + randomAngle)) + randomInRange(-.75, .75);
                 const yPos = y + randomHeightAdjustment;
 
                 matrix.setPosition(xPos, yPos, zPos);
@@ -2019,18 +1956,15 @@ class Terrain {
         // scene.add(instancedMesh);
 
         // Create the trunk
-        const trunkGeometry = new THREE.CylinderGeometry(.05, tree[treeKind].width / 3, tree[treeKind].height / 5, 8);
+        const trunkGeometry = new THREE.CylinderGeometry(.05, randomInRange(0.1, 0.5), tree[treeKind].height * .7, 8);
         const trunkMaterial = new THREE.MeshStandardMaterial({ color: '#8B4513' });
         const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
         trunk.position.set(x, Y + tree[treeKind].height / 2, z);
         // scene.add(trunk);
 
-        this.trees.push(new Terrain.Tree(trunk, instancedMesh))
+        return new Terrain.Tree(trunk, instancedMesh)
     }
 
-    setGrandCentralPillar() {
-
-    }
 
     go(centerX = 0, centerY = 0, centerZ = 0) {
         console.log("what?")
@@ -2294,10 +2228,11 @@ class Terrain {
                     const SIDEYARD = isIn(trianglePosition, 'sideyard')
                     const BACKYARD = isIn(trianglePosition, 'backyard')
 
-                    if ((BACKYARD || SIDEYARD) && Math.random() < 0.1) {
+                    if ((SIDEYARD) || (BACKYARD && Math.random() < 0.05)) {
                         for (var tree_partner = 0; tree_partner < 3; tree_partner++) {
                             var cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
                             var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
+                            this.trees.push(cypressTree)
                         }
                     }
 
@@ -2889,15 +2824,18 @@ class Terrain {
         }
 
         // Remove triangles outside the SOP from the scene
+
         this.trees.forEach((tree) => {
-            if (tree.foliage.parent && !isInSOP(tree.foliage.position, sopCenter, this.sop.trees)) {
+            // Add or remove tree based on SOP (Screen-oriented projection) center check
+            if (tree.trunk.parent && !isInSOP(tree.trunk.position, sopCenter, 100)) {
                 scene.remove(tree.trunk);
                 scene.remove(tree.foliage);
-            } else if (!tree.foliage.parent && isInSOP(tree.foliage.position, sopCenter, this.sop.trees)) {
+            } else if (!tree.trunk.parent && isInSOP(tree.trunk.position, sopCenter, 100)) {
                 scene.add(tree.trunk);
                 scene.add(tree.foliage);
             }
         });
+
 
         this.plants.forEach(plant => {
             if (plant.parent && !isInSOP(plant.position.clone(), sopCenter, this.sop.grasses)) {
@@ -3177,7 +3115,7 @@ class UserController {
         this.aS = .1
         this.sS = .1
         this.dS = .1
-        this.tS = .1
+        this.tS = .05
         this.mousedown = false
         this.shift = false
         this.space = false;
@@ -3398,19 +3336,6 @@ class UserController {
         });
 
 
-
-
-        // Optional: Update screen size on resize
-        window.addEventListener('resize', () => {
-          screenWidth = window.innerWidth;
-          screenHeight = window.innerHeight;
-        });
-
-        // Mouse up event
-        // document.addEventListener('mouseup', () => {
-        //   isMouseDown = false;
-        // });
-
     }
 
     handleMovement() {
@@ -3567,7 +3492,8 @@ class UserController {
             const raycaster = new THREE.Raycaster(this.camera.position, dir.normalize());
 
             const intersectsTrees = raycaster.intersectObjects(this.terrain.trees.flatMap(tree => [tree.trunk, tree.foliage]), true);
-            if (intersectsTrees.length > 0 && intersectsTrees[0].distance < .5) {
+            if (intersectsTrees.length > 0 && intersectsTrees[0].distance < 1) {
+                console.log("intersecting a tree")
                 const responseDirection = this.camera.position.clone().sub(intersectsTrees[0].point).normalize();
                 this.camera.position.add(responseDirection.multiplyScalar(1));
 
@@ -3779,27 +3705,16 @@ class View {
 
         window.terrain.setCamera(window.user.camera);
 
-        // Call this once to initialize wave parameters for all triangles
-        // initializeTriangleRotationWaves(terrain.water.geometry.attributes.position.array.length / 9);
-
-    
-        window.terrain.setGrandCentralPillar()
 
         var castleBaseCenter = new THREE.Vector3(0, 0, 0)
 
         window.castle = new Castle(castleBaseCenter);
-        // window.castle = { parts: [] }
 
         console.log('added castle')
 
 
         
         this.addUser();
-
-     
-        // // [Timeline("Start")]
-        
-
 
         Animate();
 
