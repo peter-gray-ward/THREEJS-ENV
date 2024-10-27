@@ -87,6 +87,41 @@ function isIn(v, which) {
     }
 }
 
+function random1() {
+    var randoms = [
+        new THREE.TextureLoader().load("/images/bierstadt.jpg", texture => {
+            texture.wrapS = THREE.RepeatWrapping
+            texture.wrapT = THREE.RepeatWrapping
+            texture.repeat.set(11, 11)
+        }),
+        new THREE.TextureLoader().load("/images/bread4.jpg", texture => {
+            texture.wrapS = THREE.RepeatWrapping
+            texture.wrapT = THREE.RepeatWrapping
+            texture.repeat.set(11, 11)
+        }),
+        new THREE.TextureLoader().load("/images/cole.jpg", texture => {
+            texture.wrapS = THREE.RepeatWrapping
+            texture.wrapT = THREE.RepeatWrapping
+            texture.repeat.set(11, 11)
+        }),
+        new THREE.TextureLoader().load("/images/dante2.jpg", texture => {
+            texture.wrapS = THREE.RepeatWrapping
+            texture.wrapT = THREE.RepeatWrapping
+            texture.repeat.set(11, 11)
+        }),
+        new THREE.TextureLoader().load("/images/dumbledore.jpg", texture => {
+            texture.wrapS = THREE.RepeatWrapping
+            texture.wrapT = THREE.RepeatWrapping
+            texture.repeat.set(11, 11)
+        }),
+        new THREE.TextureLoader().load("/images/dumbledore.jpg", texture => {
+            texture.wrapS = THREE.RepeatWrapping
+            texture.wrapT = THREE.RepeatWrapping
+            texture.repeat.set(11, 11)
+        }),
+    ]
+    return randoms[Math.floor(Math.random() * randoms.length)]
+}
 
 function randomPointOnTriangle(A, B, C) {
     // Generate two random numbers between 0 and 1
@@ -559,7 +594,7 @@ function colorshade(rgb) {
 }
 
 class Sky {
-
+    time = 0.05
     constructor(user) {
         this.counter = 0;
         this.user = user;
@@ -567,12 +602,12 @@ class Sky {
         this.full_circle = 2 * Math.PI;
         this.time = 0;
 
-        this.hemisphereLight = new THREE.HemisphereLight(0xfefeff, 0x444444, .05); // Sky and ground color
+        this.hemisphereLight = new THREE.AmbientLight(0xfefeff, .09); // Sky and ground color
         this.hemisphereLight.position.set(0, 0, 0);
-        // scene.add(this.hemisphereLight);
+        scene.add(this.hemisphereLight);
 
 
-        this.sun = new THREE.DirectionalLight(0xffffff, 2);
+        this.sun = new THREE.DirectionalLight(0xffffff, .2);
         this.sun.position.set(0, sceneRadius, 0);
         scene.add(this.sun)
         this.sun.lookAt(0, 0, 0)
@@ -631,7 +666,6 @@ class Sky {
     }
 
     createDome() {
-        this.time = Math.PI / 2;
         var gridSize = 90;  // Larger grid size for more detail at the horizon
         var radius = this.sceneRadius;
         var points = [];  // Array to hold positions for all points in the dome
@@ -1889,14 +1923,11 @@ function getCachedSphereGeometry(radius, map, transparent) {
 function getCachedLeafMaterial(color, map, transparent) {
     if (!leafMaterials[color]) {
         var leafMaterialArgs = { 
-            // color, 
-            side: THREE.DoubleSide,
             color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
+            map: random1(),
+            side: THREE.DoubleSide,
             transparent: true,
             opacity: 1
-        }
-        if (transparent) {
-            leafMaterialArgs.color = CYPRESSGREENS[0]
         }
         leafMaterials[color] = new THREE.MeshStandardMaterial(leafMaterialArgs);
     }
@@ -2072,6 +2103,79 @@ class Terrain {
     }
 
 
+    // createFlora(x, Y, z, treeKind) {
+    //     const tree = {
+    //         cypress: {
+    //             height: randomInRange(25, 40),
+    //             width: randomInRange(1, 1.9),
+    //             colors: CYPRESSGREENS, // Cypress leaf colors
+    //             trimmed: Math.random() < 0.5 ? true : false,
+    //             branch: {
+    //                 map: CYPRESSBRANCH
+    //             },
+    //             trunk: {
+    //                 map: TRUNKTEXTURE
+    //             }
+    //         }
+    //     };
+
+    //     const twoPi = Math.PI * 2;
+    //     const colorArray = tree[treeKind].colors;
+    //     const transparent = Math.random() < 0.3
+
+    //     // Create an instanced mesh for the leaves
+    //     const instanceCount = Math.floor(tree[treeKind].height * 7); // Adjust count as needed
+    //     const instancedMesh = new THREE.InstancedMesh(
+    //         getCachedSphereGeometry(tree[treeKind].width / 2, tree[treeKind].branch.map, transparent),
+    //         getCachedLeafMaterial(colorArray[Math.floor(Math.random() * colorArray.length)], tree[treeKind].branch.map, transparent),
+    //         instanceCount
+    //     );
+
+    //     // Populate instanced mesh with randomized transformations
+    //     let index = 0;
+    //     for (let y = Y; y < Y + tree[treeKind].height * 2; y  += 1) {
+    //         const progress = (y - Y) / tree[treeKind].height;
+    //         let radiusAtY = (1 - progress) * (tree[treeKind].width / 2) * randomInRange(.83, 2.25);
+
+    //         if (radiusAtY < 0.5) radiusAtY = 0.5
+
+    //         for (let p = 0; p < twoPi && index < instanceCount; p += randomInRange(0.6, 1.0)) {
+    //             const matrix = new THREE.Matrix4();
+    //             const randomAngle = randomInRange(-0.4, 0.4);
+    //             const randomHeightAdjustment = randomInRange(-0.3, 0.3);
+
+    //             const xPos = x + (radiusAtY * Math.cos(p + randomAngle)) + randomInRange(-.75, .75);
+    //             const zPos = z + (radiusAtY * Math.sin(p + randomAngle)) + randomInRange(-.75, .75);
+    //             const yPos = y + randomHeightAdjustment;
+
+    //             matrix.setPosition(xPos, yPos, zPos);
+    //             matrix.scale(new THREE.Vector3(radiusAtY, radiusAtY, radiusAtY));
+    //             instancedMesh.setMatrixAt(index++, matrix);
+    //         }
+    //     }
+    //     instancedMesh.instanceMatrix.needsUpdate = true;
+    //     instancedMesh.castShadow = true
+    //     instancedMesh.receiveShadow = true
+    //     // scene.add(instancedMesh);
+
+    //     // Create the trunk
+    //     const trunkGeometry = new THREE.CylinderGeometry(.05, randomInRange(0.1, 0.5), tree[treeKind].height, 8);
+    //     const trunkMaterial = new THREE.MeshStandardMaterial({ 
+    //         // color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
+    //         map:  TRUNKTEXTURE,
+    //         transparent: false
+    //     });
+    //     const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+    //     trunk.position.set(x, Y, z);
+    //     trunk.branches = []
+    //     trunk.castShadow = true
+    //     trunk.receiveShadow = true
+
+    //     // scene.add(trunk);
+
+    //     return new Terrain.Tree(trunk, instancedMesh)
+    // }
+
     createFlora(x, Y, z, treeKind) {
         const tree = {
             cypress: {
@@ -2085,61 +2189,89 @@ class Terrain {
                 trunk: {
                     map: TRUNKTEXTURE
                 }
+            },
+            'alternative-cypress': {
+                height: randomInRange(2, 6),
+                width: randomInRange(1, 1.9),
+                colors: CYPRESSGREENS, // Cypress leaf colors
+                trimmed: false,
+                branch: {
+                    map: CYPRESSBRANCH
+                },
+                trunk: {
+                    map: TRUNKTEXTURE
+                }
             }
         };
 
         const twoPi = Math.PI * 2;
-        const colorArray = tree[treeKind].colors;
-        const transparent = Math.random() < 0.3
-
-        // Create an instanced mesh for the leaves
         const instanceCount = Math.floor(tree[treeKind].height * 7); // Adjust count as needed
         const instancedMesh = new THREE.InstancedMesh(
-            getCachedSphereGeometry(tree[treeKind].width / 2, tree[treeKind].branch.map, transparent),
-            getCachedLeafMaterial(colorArray[Math.floor(Math.random() * colorArray.length)], tree[treeKind].branch.map, transparent),
+            getCachedSphereGeometry(tree[treeKind].width / 2, tree[treeKind].branch.map),
+            getCachedLeafMaterial(tree[treeKind].colors[0], tree[treeKind].branch.map), // Initial color
             instanceCount
         );
 
-        // Populate instanced mesh with randomized transformations
-        let index = 0;
-        for (let y = Y; y < Y + tree[treeKind].height * 2; y  += 1) {
-            const progress = (y - Y) / tree[treeKind].height;
-            let radiusAtY = (1 - progress) * (tree[treeKind].width / 2) * randomInRange(.83, 2.25);
+        // Define gradient colors for leaves
+        const startColor = new THREE.Color(tree[treeKind].colors[0]); // Darker color at the base
+        const endColor = new THREE.Color(tree[treeKind].colors[tree[treeKind].colors.length - 1]); // Lighter color at the top
 
-            if (radiusAtY < 0.5) radiusAtY = 0.5
+        let index = 0;
+        for (let y = Y; y < Y + tree[treeKind].height * 2; y += 1) {
+            const progress = (y - Y) / tree[treeKind].height;
+            let radiusAtY = (1 - progress) * (tree[treeKind].width / 2) * randomInRange(0.83, 2.25);
+            if (radiusAtY < 0.5) radiusAtY = 0.5;
+
+            const interpolatedColor = startColor.clone().lerp(endColor, progress);
 
             for (let p = 0; p < twoPi && index < instanceCount; p += randomInRange(0.6, 1.0)) {
                 const matrix = new THREE.Matrix4();
                 const randomAngle = randomInRange(-0.4, 0.4);
                 const randomHeightAdjustment = randomInRange(-0.3, 0.3);
 
-                const xPos = x + (radiusAtY * Math.cos(p + randomAngle)) + randomInRange(-.75, .75);
-                const zPos = z + (radiusAtY * Math.sin(p + randomAngle)) + randomInRange(-.75, .75);
+                const xPos = x + (radiusAtY * Math.cos(p + randomAngle)) + randomInRange(-0.75, 0.75);
+                const zPos = z + (radiusAtY * Math.sin(p + randomAngle)) + randomInRange(-0.75, 0.75);
                 const yPos = y + randomHeightAdjustment;
 
                 matrix.setPosition(xPos, yPos, zPos);
                 matrix.scale(new THREE.Vector3(radiusAtY, radiusAtY, radiusAtY));
-                instancedMesh.setMatrixAt(index++, matrix);
+                instancedMesh.setMatrixAt(index, matrix);
+
+                // Set color for each instance based on height progress
+                // instancedMesh.setColorAt(index, new THREE.Color(1,1,1));
+
+                index++;
             }
         }
+
         instancedMesh.instanceMatrix.needsUpdate = true;
-        // scene.add(instancedMesh);
+        instancedMesh.castShadow = true;
+        instancedMesh.receiveShadow = true;
 
         // Create the trunk
-        const trunkGeometry = new THREE.CylinderGeometry(.05, randomInRange(0.1, 0.5), tree[treeKind].height, 8);
-        const trunkMaterial = new THREE.MeshStandardMaterial({ 
-            color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
-            map:  TRUNKTEXTURE,
+        const trunkGeometry = new THREE.CylinderGeometry(
+            0.05,//radiusTop : Float, 
+            randomInRange(0.2, 0.5),//radiusBottom : Float, 
+            tree[treeKind].height,//height : Float, 
+            3,//radialSegments : Integer, 
+            1,//heightSegments : Integer, 
+             true,//openEnded : Boolean, 
+             Math.random() * Math.PI * 2,//thetaStart : Float, 
+             Math.PI * 2//thetaLength : Float
+        );
+        const trunkMaterial = new THREE.MeshStandardMaterial({
+            map: TRUNKTEXTURE,
             transparent: false
         });
         const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
         trunk.position.set(x, Y, z);
-        trunk.branches = []
+        trunk.branches = [];
+        trunk.castShadow = true;
+        trunk.receiveShadow = true;
 
-        // scene.add(trunk);
-
-        return new Terrain.Tree(trunk, instancedMesh)
+        return new Terrain.Tree(trunk, instancedMesh);
     }
+
 
 
     go(centerX = 0, centerY = 0, centerZ = 0) {
@@ -2414,19 +2546,23 @@ class Terrain {
                     }
 
                     else if (BACKYARD) {
-                        var treePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                        var tree = this.createTree(treePosition.x, treePosition.y, treePosition.z)
-                        this.trees.push(tree)
+                        if (Math.random() < 0.1) {
+                            var alternativeCypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
+                            var alternativeCypressTree = this.createFlora(alternativeCypressTreePosition.x, alternativeCypressTreePosition.y, alternativeCypressTreePosition.z, 'alternative-cypress')
+                            this.trees.push(alternativeCypressTree)
+                        } else if (Math.random() < 0.1) {
+                            var pos = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
+                            var lathe = Lathe(trianglePosition.x, trianglePosition.y, trianglePosition.z, CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)])
+                            lathe.position.copy(pos)
+                            this.grasses.push(
+                                lathe
+                            )
+                        }
+
+
+                        
                     }
 
-                    if (BACKYARD) {
-                        var pos = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                        var lathe = Lathe(trianglePosition.x, trianglePosition.y, trianglePosition.z, CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)])
-                        lathe.position.copy(pos)
-                        this.grasses.push(
-                            lathe
-                        )
-                    }
 
                     if (CLIFF) {
                         this.cliffs.push(triangle)
@@ -3084,7 +3220,7 @@ class Terrain {
     createTree(x, y, z, alternate, treeKind) {
         const textureIndex = Math.floor(Math.random() * 7);
 
-        var trunkHeight = randomInRange(3, 25)
+        var trunkHeight = randomInRange(2.2, 5.2)
         var trunkBaseRadius = randomInRange(.1, .8)
         var rr = alternate ? randomInRange(.01, .1) : randomInRange(.1, .5)
         var trunkCurve = []
@@ -3114,19 +3250,16 @@ class Terrain {
         const greenValue = Math.floor(Math.random() * 256);
         const color = new THREE.Color(Math.random() < 0.05 ? randomInRange(0, 0.5) : 0, greenValue / 255, 0);
         const foliageIndex = textureIndex > 4 ? textureIndex - 3 : textureIndex;
-        // const foliageTexture = this.textures.foliage[Math.floor(Math.random() * 7)];
+        const foliageTexture = CYPRESSBRANCH
 
-        // Set how many times the texture should repeat in the U and V directions
-        // foliageTexture.wrapS = THREE.RepeatWrapping; // Repeat horizontally
-        // foliageTexture.wrapT = THREE.RepeatWrapping; // Repeat vertically
+        foliageTexture.wrapS = THREE.RepeatWrapping; // Repeat horizontally
+        foliageTexture.wrapT = THREE.RepeatWrapping; // Repeat vertically
 
-        // Adjust these values to control the repetition frequency
-        // foliageTexture.repeat.set(10, 10); // Increase these numbers for more repetitions and smaller texture
+        foliageTexture.repeat.set(10, 10); // Increase these numbers for more repetitions and smaller texture
 
         let sphereMaterial = new THREE.MeshStandardMaterial({
-            color,
-            // map: foliageTexture,
-            transparent: false
+            map: random1(),
+            transparent: true
         });
 
         // 
@@ -3150,7 +3283,7 @@ class Terrain {
                 var y = array[vertexIndex + 2]
 
                 array[vertexIndex] = randomInRange(x - (foliageRadius * 1.1), x + foliageRadius * 1.1)
-                array[vertexIndex + 1] = randomInRange(y - (foliageRadius * 1.1), y + foliageRadius * 1.1)
+                array[vertexIndex + 1] = y
                 array[vertexIndex + 2] = randomInRange(z - (foliageRadius * 1.1), z + foliageRadius * 1.1)
             }
         }
@@ -3172,8 +3305,7 @@ class Terrain {
         const tubeGeometry = new THREE.TubeGeometry(path, segments, trunkBaseRadius);
 
         const material = new THREE.MeshStandardMaterial({ 
-            // map: this.textures.barks[textureIndex],
-            color: 'red',
+            map: TRUNKTEXTURE,
             side: THREE.DoubleSide
         });
 
@@ -3514,7 +3646,7 @@ class UserController {
         // Define the max angle for the arc (in radians)
         const maxAngle = THREE.MathUtils.degToRad(45);  // 45 degrees in radians
         window.addEventListener('mousemove', (event) => {
-            const sensitivity = 0.05;  // Adjust sensitivity
+            const sensitivity = 0.0085;  // Adjust sensitivity
             this.yaw -= event.movementX * sensitivity;
             this.pitch -= event.movementY * sensitivity;
 
@@ -3954,7 +4086,9 @@ class View {
         // window.user.camera.position.set(33.953909365281795, 2.610000001490116, 23.053098469337314);
         window.user.camera.position.set(24, landscape.field.center.y + 10, 0)
 
-        window.user.camera.lookAt(sky.sphere.position)
+        window.user.camera.lookAt(
+            new THREE.Vector3(1000000, 0, 0)
+        )
 
         
         
