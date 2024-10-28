@@ -154,4 +154,6 @@ def get_src(filename):
     return send_file(file_path, mimetype='text/javascript')
 
 if __name__ == '__main__':
-    app.run(port=8080)
+    port = int(os.getenv("PORT", 8080))  # Fallback to 8080 if PORT is not set
+    app.run(host="0.0.0.0", port=port)
+
