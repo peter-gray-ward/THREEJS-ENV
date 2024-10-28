@@ -603,7 +603,7 @@ class Sky {
         this.full_circle = 2 * Math.PI;
         this.time = 0;
 
-        this.hemisphereLight = new THREE.AmbientLight(0xfefeff, .09); // Sky and ground color
+        this.hemisphereLight = new THREE.AmbientLight(0xfefeff, .02); // Sky and ground color
         this.hemisphereLight.position.set(0, 0, 0);
         scene.add(this.hemisphereLight);
 
@@ -1987,7 +1987,7 @@ function DisrganizeFoliage(mesh) {
 
 function getCachedSphereGeometry(radius, map, transparent) {
     if (!sphereGeometries[radius]) {
-        const geometry = new THREE.SphereGeometry(radius, 3, 3);
+        const geometry = new THREE.SphereGeometry(radius, Math.floor(randomInRange(3, 10)), Math.floor(randomInRange(3, 10)));
         
         if (transparent) {
             for (let i = 0; i < geometry.attributes.position.array.length; i += 3) {
@@ -2010,8 +2010,15 @@ function getCachedSphereGeometry(radius, map, transparent) {
             geometry.llod = []
             geometry.hlod = []
             for (let i = 0; i < geometry.attributes.position.array.length; i += 3) {
-                geometry.llod.push(geometry.attributes.position.array[i], geometry.attributes.position.array[i + 1], geometry.attributes.position.array[i + 2])
-                geometry.hlod.push(geometry.attributes.position.array[i], geometry.attributes.position.array[i + 1], geometry.attributes.position.array[i + 2])
+                if (Math.random() < 0.5) {
+
+                    // Apply offset to create more organic shapes and layers
+                    geometry.attributes.position.array[i] += randomInRange(-radius / 2, radius / 2);
+                    geometry.attributes.position.array[i + 1] += randomInRange(-radius / 3, radius / 3);;
+                    geometry.attributes.position.array[i + 2] += randomInRange(-radius / 2, radius / 2);;
+                }
+                // geometry.llod.push(geometry.attributes.position.array[i], geometry.attributes.position.array[i + 1], geometry.attributes.position.array[i + 2])
+                // geometry.hlod.push(geometry.attributes.position.array[i], geometry.attributes.position.array[i + 1], geometry.attributes.position.array[i + 2])
            }
             geometry.computeVertexNormals()
             geometry.attributes.position.needsUpdate = true;
@@ -2025,11 +2032,11 @@ function getCachedSphereGeometry(radius, map, transparent) {
 function getCachedLeafMaterial(color, map, transparent) {
     if (!leafMaterials[color]) {
         var leafMaterialArgs = { 
-            //color: 0xffffff,//CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
-             map: new THREE.TextureLoader().load("/images/branch.webp"),
+            color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
+            map: Math.random() < 0.5 ? new THREE.TextureLoader().load("/images/branch.webp") : new THREE.TextureLoader().load("/images/sunflower2.jpg"),
             side: THREE.DoubleSide,
             transparent: true,
-            opacity: 1
+            // opacity: .8
         }
         leafMaterials[color] = new THREE.MeshStandardMaterial(leafMaterialArgs);
     }
@@ -2283,8 +2290,8 @@ class Terrain {
     createFlora(x, Y, z, treeKind) {
         const tree = {
             cypress: {
-                height: randomInRange(11.1, 110),
-                width: randomInRange(1, 1.9),
+                height: randomInRange(11.1, 60),
+                width: randomInRange(1, 2.9),
                 colors: CYPRESSGREENS, // Cypress leaf colors
                 trimmed: Math.random() < 0.5 ? true : false,
                 branch: {
@@ -2296,7 +2303,7 @@ class Terrain {
             },
             'alternative-cypress': {
                 height: randomInRange(11, 16),
-                width: randomInRange(1, 1.9),
+                width: randomInRange(1, 2.9),
                 colors: CYPRESSGREENS, // Cypress leaf colors
                 trimmed: false,
                 branch: {
@@ -2328,7 +2335,7 @@ class Terrain {
             const progress = (y - Y) / tree[treeKind].height;
             let radiusAtY = (1 - progress) * (tree[treeKind].width / 2) * randomInRange(0.83, 2.25);
             if (radiusAtY < 1) radiusAtY = 1;
-            if (none && ydiff++ < 8 && tree[treeKind].width > 1.5) {
+            if (none && ydiff++ < 8) {
                 radiusAtY = 0
             } else if (none) {
                 radiusAtY *= randomInRange(1, 4)
@@ -2664,7 +2671,7 @@ class Terrain {
                     else if (BACKYARD) {
                         if (Math.random() < 0.3) {
                             var alternativeCypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                            var alternativeCypressTree = this.createFlora(alternativeCypressTreePosition.x, alternativeCypressTreePosition.y, alternativeCypressTreePosition.z, 'alternative-cypress')
+                            var alternativeCypressTree = this.createFlora(alternativeCypressTreePosition.x, alternativeCypressTreePosition.y, alternativeCypressTreePosition.z, `${Math.random() < 0.2 ? 'alternative-' : ''}cypress`)
                             this.trees.push(alternativeCypressTree)
                         } else if (Math.random() < 0.1) {
                             var pos = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
