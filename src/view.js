@@ -22,11 +22,6 @@ window.cementTexture = new THREE.TextureLoader().load("/images/ground-0.jpg", te
 var clock = new THREE.Clock()
 const evaluator = new Evaluator();
 
-var floorTexture = new THREE.TextureLoader().load("/images/floor2.jpg", texture => {
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(2, 2);
-})
 const groundTexture = new THREE.TextureLoader().load("/images/ground-0.jpg")
 
 var landscape = {
@@ -95,42 +90,6 @@ function isIn(v, which) {
     default:
         return false;
     }
-}
-
-function random1() {
-    var randoms = [
-        new THREE.TextureLoader().load("/images/bierstadt.jpg", texture => {
-            texture.wrapS = THREE.RepeatWrapping
-            texture.wrapT = THREE.RepeatWrapping
-            texture.repeat.set(4, 4)
-        }),
-        new THREE.TextureLoader().load("/images/bread4.jpg", texture => {
-            texture.wrapS = THREE.RepeatWrapping
-            texture.wrapT = THREE.RepeatWrapping
-            texture.repeat.set(4, 4)
-        }),
-        new THREE.TextureLoader().load("/images/cole.jpg", texture => {
-            texture.wrapS = THREE.RepeatWrapping
-            texture.wrapT = THREE.RepeatWrapping
-            texture.repeat.set(4, 4)
-        }),
-        new THREE.TextureLoader().load("/images/dante2.jpg", texture => {
-            texture.wrapS = THREE.RepeatWrapping
-            texture.wrapT = THREE.RepeatWrapping
-            texture.repeat.set(4, 4)
-        }),
-        new THREE.TextureLoader().load("/images/dumbledore.jpg", texture => {
-            texture.wrapS = THREE.RepeatWrapping
-            texture.wrapT = THREE.RepeatWrapping
-            texture.repeat.set(4, 4)
-        }),
-        new THREE.TextureLoader().load("/images/dumbledore.jpg", texture => {
-            texture.wrapS = THREE.RepeatWrapping
-            texture.wrapT = THREE.RepeatWrapping
-            texture.repeat.set(4, 4)
-        }),
-    ]
-    return randoms[Math.floor(Math.random() * randoms.length)]
 }
 
 function randomPointOnTriangle(A, B, C) {
@@ -519,9 +478,10 @@ function Lathe(x, y, z, radius, color, map) {
     // Define mesh material arguments
     const meshMaterialArgs = { 
         side: THREE.DoubleSide, 
-        transparent: false,
-        wireframe: true,
-        metalness: 1
+        transparent: true,
+        wireframe: false,
+        metalness: 1,
+        opacity: 0.5
     }
     if (map) {
         meshMaterialArgs.map = map
@@ -1255,221 +1215,6 @@ class Castle {
             scene.add(step)
             this.parts.push(step)
         }
-
-        return
-        
-        var boxHeight = 5;
-        var wallHeight = boxHeight
-        var maxWidth = house.width;
-        var maxDepth = house.width;
-
-        for (var i = 0; i < 10; i++) {
-            var width = i < 5 ? maxWidth : maxWidth
-            var depth = i < 5 ? maxDepth : maxDepth
-
-            // Create the main box
-            var box = new THREE.Mesh(
-                new THREE.BoxGeometry(width, boxHeight, depth),
-                new THREE.MeshStandardMaterial({
-                    map: new THREE.TextureLoader().load("/images/wall4.jpg"),
-                    side: THREE.DoubleSide,
-                    transparent: true,
-                    opacity: 1
-                })
-            );
-            box.castShadow = true;
-            box.receiveShadow = true
-
-            var xPos = randomInRange(-width / 2, width / 2);
-            var yPos = (i * wallHeight) + wallHeight / 2
-            var zPos = randomInRange(-depth / 2, depth / 2);
-            box.position.set(0, yPos, 0);
-      
-
-            // Define wall thickness
-            var wallThickness = 0.2;
-            var windowThickness = 2
-            var wallMaterial = new THREE.MeshStandardMaterial({ 
-                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
-                    texture.wrapS = THREE.RepeatWrapping;
-                        texture.wrapT = THREE.RepeatWrapping;
-                        texture.repeat.set(11, 11);
-                }), side: THREE.DoubleSide 
-            });
-
-            // Window variables
-            var windowWidth = boxHeight / 4; // Fixed size for smaller windows
-            var windowHeight = boxHeight / 4;
-            var windowSpacing = windowWidth * 1.5;  // Spacing between windows
-
-            const evaluator = new Evaluator();
-
-            // Front Wall
-            var frontWallGeometry = new THREE.BoxGeometry(width, boxHeight, wallThickness);
-            var frontWallBrush = new Brush(frontWallGeometry);
-            frontWallBrush.position.set(0, yPos, depth / 2);
-            frontWallBrush.updateMatrixWorld();
-
-            // Create and subtract multiple windows for front wall
-            for (var w = 0; w < 5; w++) {
-                var windowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowThickness);
-                var windowBrush = new Brush(windowGeometry);
-                windowBrush.position.set(
-                    -width / 2 + windowWidth, // Avoid edges
-                    yPos,
-                    depth / 2 + windowThickness / 2 + 0.01
-                );
-                windowBrush.updateMatrixWorld();
-                frontWallBrush = evaluator.evaluate(frontWallBrush, windowBrush, SUBTRACTION); // Subtract the window
-            }
-
-            // Convert front wall geometry back to mesh
-            var frontMesh = new THREE.Mesh(frontWallBrush.geometry, new THREE.MeshStandardMaterial({
-                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
-                    texture.wrapS = THREE.RepeatWrapping;
-                        texture.wrapT = THREE.RepeatWrapping;
-                        texture.repeat.set(11, 11);
-                })
-            }));
-            frontMesh.frustrumCulled = true
-            this.parts.push(frontMesh)
-            scene.add(frontMesh);
-
-            // Back Wall
-            var backWallGeometry = new THREE.BoxGeometry(width, boxHeight, wallThickness);
-            var backWallBrush = new Brush(backWallGeometry);
-            backWallBrush.position.set(0, yPos, -depth / 2);
-            backWallBrush.updateMatrixWorld();
-
-            // Subtract multiple windows from back wall
-            for (var w = 0; w < 3; w++) {
-                var backWindowGeometry = new THREE.BoxGeometry(windowWidth, windowHeight, windowThickness);
-                var backWindowBrush = new Brush(backWindowGeometry);
-                backWindowBrush.position.set(
-                    width / 2 - windowWidth, 
-                    yPos - boxHeight / 4,
-                    -depth / 2 - windowThickness / 2 - 0.01
-                );
-                backWindowBrush.updateMatrixWorld();
-                backWallBrush = evaluator.evaluate(backWallBrush, backWindowBrush, SUBTRACTION);
-            }
-
-            // Convert back wall geometry back to mesh
-            var backMesh = new THREE.Mesh(backWallBrush.geometry, new THREE.MeshStandardMaterial({
-                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
-                    texture.wrapS = THREE.RepeatWrapping;
-                        texture.wrapT = THREE.RepeatWrapping;
-                        texture.repeat.set(11, 11);
-                })
-            }));
-            backMesh.frustrumCulled = true
-            this.parts.push(backMesh)
-            scene.add(backMesh);
-
-            // Left Wall
-            var leftWallGeometry = new THREE.BoxGeometry(wallThickness, boxHeight, depth);
-            var leftWallBrush = new Brush(leftWallGeometry);
-            leftWallBrush.position.set(-width / 2, yPos, 0);
-            leftWallBrush.updateMatrixWorld();
-
-            // Subtract multiple windows from left wall
-            for (var w = 0; w < 3; w++) {
-                var leftWindowGeometry = new THREE.BoxGeometry(windowThickness, windowHeight, windowWidth);
-                var leftWindowBrush = new Brush(leftWindowGeometry);
-                var lwb_x = -width / 2 - windowThickness / 2 - 0.01
-                var lwb_y = yPos + boxHeight / 4
-                var lwb_z = -depth / 2 + windowHeight
-
-                leftWindowBrush.position.set(lwb_x, lwb_y, lwb_z);
-                leftWindowBrush.updateMatrixWorld();
-                leftWallBrush = evaluator.evaluate(leftWallBrush, leftWindowBrush, SUBTRACTION);
-
-                
-            }
-
-            // Convert left wall geometry back to mesh
-            var leftMesh = new THREE.Mesh(leftWallBrush.geometry, new THREE.MeshStandardMaterial({
-                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
-                    texture.wrapS = THREE.RepeatWrapping;
-                        texture.wrapT = THREE.RepeatWrapping;
-                        texture.repeat.set(11, 11);
-                })
-            }));
-            leftMesh.frustrumCulled = true
-            this.parts.push(leftMesh)
-            scene.add(leftMesh);
-
-            // Right Wall
-            var rightWallGeometry = new THREE.BoxGeometry(wallThickness, boxHeight, depth);
-            var rightWallBrush = new Brush(rightWallGeometry);
-            rightWallBrush.position.set(width / 2, yPos, 0);
-            rightWallBrush.updateMatrixWorld();
-
-            // Subtract multiple windows from right wall
-            for (var w = 0; w < 3; w++) {
-                var rightWindowGeometry = new THREE.BoxGeometry(windowThickness * 3, windowHeight * 2, windowWidth);
-                var rightWindowBrush = new Brush(rightWindowGeometry);
-                var rwb_x = width / 2 + windowThickness / 2 + 0.01
-                var rwb_y = yPos + boxHeight / 4
-                var rwb_z = depth / 2 - windowHeight
-                rightWindowBrush.position.set(rwb_x, rwb_y, rwb_z);
-                rightWindowBrush.updateMatrixWorld();
-                rightWallBrush = evaluator.evaluate(rightWallBrush, rightWindowBrush, SUBTRACTION);
-                
-
-                // if (i % 2 == 0) {
-                //     var lwb_sx = rwb_x
-                //     for (var lwb_sy = lwb_y - windowHeight; lwb_sy > 0; lwb_sy -= .2) {
-                //         var stepGeo = new THREE.BoxGeometry(.3, .2, .8)
-                //         stepGeo.computeVertexNormals()
-                //         var stepMat = new THREE.MeshStandardMaterial({
-                //             side: THREE.DoubleSide, map: new THREE.TextureLoader().load("/images/floor1111.jpg")
-                //         })
-                //         var step = new THREE.Mesh(stepGeo, stepMat)
-                //         step.castShadow = true
-                //         step.receiveShadow = true
-                //         step.position.set(lwb_sx, lwb_sy, rwb_z)
-                //         lwb_sx += .3
-                //         this.parts.push(step)
-                //         scene.add(step)
-                //     }
-                // }
-            }
-
-            // Convert right wall geometry back to mesh
-            var rightMesh = new THREE.Mesh(rightWallBrush.geometry, new THREE.MeshStandardMaterial({
-                map: new THREE.TextureLoader().load("/images/wall4.jpg", texture => {
-                    texture.wrapS = THREE.RepeatWrapping;
-                        texture.wrapT = THREE.RepeatWrapping;
-                        texture.repeat.set(11, 11);
-                })
-            }));
-            rightMesh.frustrumCulled = true
-            this.parts.push(rightMesh)
-            scene.add(rightMesh);
-
-            // Top and bottom walls remain unchanged
-            var topWall = new THREE.Mesh(new THREE.BoxGeometry(width, wallThickness, depth), wallMaterial);
-            topWall.position.set(0, yPos + (boxHeight / 2), 0);
-            topWall.frustrumCulled = true
-            this.parts.push(topWall)
-            scene.add(topWall);
-
-            var bottomWall = new THREE.Mesh(new THREE.BoxGeometry(width, wallThickness, depth), new THREE.MeshStandardMaterial({
-                side: THREE.DoubleSide,
-                map: new THREE.TextureLoader().load("/images/floor19.jpg")
-            }));
-            bottomWall.position.set(0, yPos - (boxHeight / 3), 0);
-            bottomWall.frustrumCulled = true
-            this.parts.push(bottomWall)
-            scene.add(bottomWall);
-        }
-
-               
-        var backyardTree = terrain.createTree(29, 0, 21);
-        terrain.trees.push(backyardTree);
-
-
     }
 
     createHarryPotterLampPost(x, y, z) {
@@ -1519,7 +1264,7 @@ class Castle {
         scene.add(filament);
 
         // Add a point light to represent the light source, with daylight color
-        const pointLight = new THREE.PointLight(0xfff7e8, 5, 15); // Soft white light
+        const pointLight = new THREE.PointLight(0xfff7e8, 105, 15); // Soft white light
         pointLight.position.set(x, y + lampHeight + 0.5, z);
         pointLight.castShadow = true; // Enable shadows if needed
         scene.add(pointLight);
@@ -2070,7 +1815,6 @@ function getCachedLeafMaterial(color, map, transparent) {
         }
         leafMaterials[color] = new THREE.MeshStandardMaterial(leafMaterialArgs);
     }
-    leafMaterials.map = random1()
     leafMaterials.needsUpdate = true
     return leafMaterials[color];
 }
@@ -2701,7 +2445,7 @@ class Terrain {
                             })
                         )
                         var ballPosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                        epcot.position.set(ballPosition.x, ballPosition.y + r, ballPosition.z)
+                        epcot.position.set(ballPosition.x, ballPosition.y + r / 2, ballPosition.z)
                         if (Math.random() < 0.5) {
                             epcot.rotation.y = Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2
                         } else {
@@ -2727,21 +2471,21 @@ class Terrain {
                         }
                     }
 
-                    // if (isIn(Math.random() < 0.01) {
-                    //     var pos = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                    //     var building = Lathe(
-                    //         trianglePosition.x, 
-                    //         trianglePosition.y,
-                    //          trianglePosition.z,
-                    //          randomInRange(3, 30),
-                    //          LATHECOLORS[Math.floor(Math.random() * LATHECOLORS.length)],
-                    //          new THREE.TextureLoader().load("/images/poppy-field.jpg")
-                    //     )
-                    //     building.position.copy(pos)
-                    //     this.grasses.push(building)
+                    if (!CLIFF && !BACKYARD && !SIDEYARD && Math.random() < 0.03) {
+                        var pos = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
+                        var building = Lathe(
+                            trianglePosition.x, 
+                            trianglePosition.y,
+                             trianglePosition.z,
+                             randomInRange(13, 40),
+                             LATHECOLORS[Math.floor(Math.random() * LATHECOLORS.length)],
+                             new THREE.TextureLoader().load("/images/poppy-field.jpg")
+                        )
+                        building.position.copy(pos)
+                        this.grasses.push(building)
 
 
-                    // }
+                    }
 
 
                     if (CLIFF) {
@@ -2802,10 +2546,8 @@ class Terrain {
 
         // Apply the custom texture to the terrain
         const material = new THREE.MeshStandardMaterial({
-            // vertexColors: true,  // Enable vertex colors
-            map: new THREE.TextureLoader().load("/images/floor112.jpg"),
             side: THREE.DoubleSide,
-            wireframe: false,
+            wireframe: true,
             transparent: false,
             opacity: 1
         });
