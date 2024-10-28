@@ -137,6 +137,10 @@ def favicon():
     response.headers['Expires'] = '0'
     return response
 
+@app.route('/static/lib/<path:filename>')
+def custom_static(filename):
+    return send_file('static/lib', filename, mimetype='application/javascript')
+
 @app.route('/images/<path:subpath>')
 def get_image(subpath):
     file_path = os.path.join('images', subpath)

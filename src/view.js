@@ -1,4 +1,7 @@
-import * as THREE from '/lib/three.module.min.js';
+import * as THREE from '/lib/Three.module.min.js';
+
+
+
 import { UnrealBloomPass } from '/lib/UnrealBloomPass.js';
 import { EffectComposer } from '/lib/EffectComposer.js';
 import { RenderPass } from '/lib/RenderPass.js';
