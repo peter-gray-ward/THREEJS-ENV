@@ -40,6 +40,7 @@ var landscape = {
         depth: 35
     }
 }
+landscape = { ...landscape, ...landscape.field }
 
 var house = {
     center: landscape.field.center,
@@ -73,21 +74,26 @@ var sideYardEndY = house.center.y + house.foundation.height / 2;        // Match
 // Function to check if point `v` is within the side yard boundaries
 function isIn(v, which) {
     switch (which) {
-        case 'sideyard':
-            return (
-                v.x >= sideYardStartX && 
-                v.x <= sideYardEndX &&
-                v.y >= sideYardStartY && 
-                v.y <= sideYardEndY &&
-                v.z >= sideYardStartZ && 
-                v.z <= sideYardEndZ
-            );
-        case 'backyard':
-            return (
-                v.x <= house.center.x - house.foundation.width / 2
-            )
-        default:
-            return false;
+    case 'yard':
+        return v.x > landscape.center.x - landscape.width / 2
+            && v.x < landscape.center.x + landscape.width / 2
+            && v.z > landscape.center.z - landscape.width / 2
+            && v.z < landscape.center.z + landscape.width / 2
+    case 'sideyard':
+        return (
+            v.x >= sideYardStartX && 
+            v.x <= sideYardEndX &&
+            v.y >= sideYardStartY && 
+            v.y <= sideYardEndY &&
+            v.z >= sideYardStartZ && 
+            v.z <= sideYardEndZ
+        );
+    case 'backyard':
+        return (
+            v.x <= house.center.x - house.foundation.width / 2
+        )
+    default:
+        return false;
     }
 }
 
@@ -145,6 +151,16 @@ function randomPointOnTriangle(A, B, C) {
     P.addScaledVector(C, v);
 
     return P;
+}
+
+var RANDOMIMAGES = []
+for (var i = 0; i < 100; i++) {
+    var xhr = new XMLHttpRequest()
+    xhr.open('GET', '/random-image?time=' + Math.random())
+    xhr.addEventListener('load', function() {
+        RANDOMIMAGES.push(this.response)
+    })
+    xhr.send()
 }
 
 var twoPi = Math.PI * 2
@@ -2649,6 +2665,26 @@ class Terrain {
 
                     /* TERRAIN FEATURES */
                     const CLIFF = Math.abs(triangleMesh.normal.y) < 0.4 && (Math.abs(triangleMesh.normal.x) > 0.4 || Math.abs(triangleMesh.normal.z) > 0.4)
+                    const YARD = isIn(trianglePosition, 'yard')
+
+                    if (YARD) {
+                        var r = randomInRange(.1, 3)
+                        var epcot = new THREE.Mesh(
+                            new THREE.SphereGeometry(r, 3, 3),
+                            new THREE.MeshStandardMaterial({
+                                color: new THREE.Color(Math.random(), Math.random(), Math.random()),
+                                map: new THREE.TextureLoader().load(RANDOMIMAGES[Math.floor(Math.random() * RANDOMIMAGES.length)]),
+                                metalness: 1
+                            })
+                        )
+                        var ballPosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
+                        epcot.position.set(ballPosition.x, ballPosition.y + r, ballPosition.z)
+                        scene.add(epcot)
+                    }
+
+
+
+
                     const SIDEYARD = isIn(trianglePosition, 'sideyard')
                     const BACKYARD = isIn(trianglePosition, 'backyard')
                     let cypressTreePosition
@@ -3314,7 +3350,7 @@ class Terrain {
             } else if (!lathe.parent && pos < this.sop.grasses) {
                 scene.add(lathe)
             } else if (lathe.parent) {
-                lathe.rotation.y += 0.01;
+                lathe.rotation.y += randomInRange(0, Math.PI * 2 * .85);
                 if (lathe.rotation.y > Math.PI * 2) {
                     lathe.rotation.y = 0
                 }

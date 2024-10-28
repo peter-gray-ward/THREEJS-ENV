@@ -1,5 +1,10 @@
 from flask import Flask, jsonify, send_file, request, make_response
 import os
+import urllib.parse
+import urllib.request
+import random
+import json
+from io import BytesIO
 
 app = Flask(__name__)
 
@@ -123,6 +128,19 @@ class Model:
         self.user = user
 
 # Routes
+flowers = [
+    "Rose", "Tulip", "Daisy", "Sunflower", "Lily", 
+    "Orchid", "Daffodil", "Marigold", "Lavender", "Chrysanthemum",
+    "Peony", "Hyacinth", "Begonia", "Carnation", "Iris",
+    "Poppy", "Gladiolus", "Lilac", "Hibiscus", "Dahlia",
+    "Zinnia", "Aster", "Primrose", "Petunia", "Jasmine",
+    "Magnolia", "Camellia", "Freesia", "Gardenia", "Azalea",
+    "Heather", "Bluebell", "Amaryllis", "Foxglove", "Snapdragon",
+    "Anemone", "Buttercup", "Crocus", "Snowdrop", "Violet",
+    "Forget-me-not", "Lotus", "Verbena", "Sweet Pea", "Impatiens",
+    "Bouvardia", "Bleeding Heart", "Ranunculus", "Yarrow", "Cosmos"
+]
+
 
 @app.route('/')
 def index():
@@ -140,6 +158,34 @@ def favicon():
 @app.route('/static/lib/<path:filename>')
 def custom_static(filename):
     return send_file('static/lib', filename, mimetype='application/javascript')
+
+@app.route('/random-image', methods=('GET',))
+def random_image():
+    base_url = "https://pixabay.com/api/"
+    api_key = "25483695-93658ed46b8876fc2d6419379"
+
+    # Set up query parameters
+    params = {
+        "key": api_key,
+        "q": random.choice(flowers),
+        "image_type": "photo",
+        "pretty": "true"
+    }
+
+    # Encode the parameters and create the URL
+    url = f"{base_url}?{urllib.parse.urlencode(params)}"
+
+    # Make the request and parse the response
+    try:
+        with urllib.request.urlopen(url) as response:
+            data = json.loads(response.read().decode())
+
+            image = random.choice(data['hits'])
+            image = image['largeImageURL']
+            return image
+    except urllib.error.URLError as e:
+        print(f"Error: {e.reason}")
+        return None
 
 @app.route('/images/<path:subpath>')
 def get_image(subpath):
