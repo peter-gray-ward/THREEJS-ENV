@@ -3543,7 +3543,7 @@ class UserController {
                 this.d = true;
             } else if (key == ' ') {
                 this.isJumping = true;
-                this.jumpVelocity = 1;
+                this.jumpVelocity = this.run ? 1 : 0.2;
             } else if (key == 'ARROWUP') {
                 this.ArrowUp = true;
             } else if (key == 'ARROWDOWN') {
