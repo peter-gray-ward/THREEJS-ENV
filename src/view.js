@@ -2033,7 +2033,7 @@ function getCachedLeafMaterial(color, map, transparent) {
     if (!leafMaterials[color]) {
         var leafMaterialArgs = { 
             color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
-            map: Math.random() < 0.5 ? new THREE.TextureLoader().load("/images/branch.webp") : new THREE.TextureLoader().load("/images/sunflower2.jpg"),
+            // map: Math.random() < 0.5 ? new THREE.TextureLoader().load("/images/branch.webp") : new THREE.TextureLoader().load("/images/sunflower2.jpg"),
             side: THREE.DoubleSide,
             transparent: true,
             // opacity: .8
