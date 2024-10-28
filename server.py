@@ -128,6 +128,15 @@ class Model:
 def index():
     return send_file('index.html')
 
+@app.route('/favicon')
+def favicon():
+    file_path = os.path.join('favicon.ico')
+    response = make_response(send_file(file_path))
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
 @app.route('/images/<path:subpath>')
 def get_image(subpath):
     file_path = os.path.join('images', subpath)
