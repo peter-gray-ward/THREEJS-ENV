@@ -1999,6 +1999,13 @@ function getCachedSphereGeometry(radius, map, transparent) {
                 let offsetY = randomInRange(-0.4, 0.4) + layer * randomInRange(-0.1, 0.1);
                 let offsetZ = randomInRange(-0.2, 0.2) + layer * randomInRange(-0.05, 0.05);
 
+                if (Math.random() < 0.8) {
+                    offsetX += randomInRange(-radius / 2, radius / 2)
+                } else if (Math.random() < 0.8) {
+                    offsetZ += randomInRange(-radius / 2, radius / 2)
+                    offsetY += randomInRange(0, radius / 2)
+                }
+
                 // Apply offset to create more organic shapes and layers
                 geometry.attributes.position.array[i] += offsetX;
                 geometry.attributes.position.array[i + 1] += offsetY;
@@ -2033,7 +2040,7 @@ function getCachedLeafMaterial(color, map, transparent) {
     if (!leafMaterials[color]) {
         var leafMaterialArgs = { 
             color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
-            // map: Math.random() < 0.5 ? new THREE.TextureLoader().load("/images/branch.webp") : new THREE.TextureLoader().load("/images/sunflower2.jpg"),
+            map: Math.random() < 0.5 ? new THREE.TextureLoader().load("/images/branch.webp") : new THREE.TextureLoader().load("/images/sunflower2.jpg"),
             side: THREE.DoubleSide,
             transparent: true,
             // opacity: .8
@@ -2291,7 +2298,7 @@ class Terrain {
         const tree = {
             cypress: {
                 height: randomInRange(11.1, 60),
-                width: randomInRange(1, 2.9),
+                width: randomInRange(1, 2),
                 colors: CYPRESSGREENS, // Cypress leaf colors
                 trimmed: Math.random() < 0.5 ? true : false,
                 branch: {
