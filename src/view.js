@@ -519,7 +519,9 @@ function Lathe(x, y, z, radius, color, map) {
     // Define mesh material arguments
     const meshMaterialArgs = { 
         side: THREE.DoubleSide, 
-        transparent: false, 
+        transparent: false,
+        wireframe: true,
+        metalness: 1
     }
     if (map) {
         meshMaterialArgs.map = map
@@ -2089,6 +2091,7 @@ class Terrain {
     // Grass
     segments = 79
     visited = { }
+    paintings = [ ]
     constructor(options) {
         // this.grassTexture = new THREE.TextureLoader().load("/images/nasturtiums1.jpg")
         this.Grass = [
@@ -2706,8 +2709,8 @@ class Terrain {
                             epcot.rotation.y = Math.PI / randomInRange(1, 2)
                         }
                         scene.add(epcot)
+                        this.paintings.push(epcot)
                     }
-
 
 
 
@@ -2725,27 +2728,18 @@ class Terrain {
                         }
                     }
 
-                    else if (BACKYARD) {
-                        if (Math.random() < 0.3) {
-                            var alternativeCypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                            var alternativeCypressTree = this.createFlora(alternativeCypressTreePosition.x, alternativeCypressTreePosition.y, alternativeCypressTreePosition.z, `${Math.random() < 0.2 ? 'alternative-' : ''}cypress`)
-                            this.trees.push(alternativeCypressTree)
-                        } else if (Math.random() < 0.1) {
-                            var pos = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                            var lathe = Lathe(
-                                trianglePosition.x, 
-                                trianglePosition.y,
-                                 trianglePosition.z,
-                                 randomInRange(3, 30),
-                                 LATHECOLORS[Math.floor(Math.random() * LATHECOLORS.length)]
-                            )
-                            lathe.position.copy(pos)
-                            console.log("made but did not include a lathe")
-                            this.grasses.push(lathe)
-                        }
-
-
-                        
+                    if (Math.random() < 0.01) {
+                        var pos = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
+                        var building = Lathe(
+                            trianglePosition.x, 
+                            trianglePosition.y,
+                             trianglePosition.z,
+                             randomInRange(3, 30),
+                             LATHECOLORS[Math.floor(Math.random() * LATHECOLORS.length)],
+                             new THREE.TextureLoader().load("/images/poppy-field.jpg")
+                        )
+                        building.position.copy(pos)
+                        this.grasses.push(building)
                     }
 
 
@@ -4123,6 +4117,8 @@ class View {
         var castleBaseCenter = new THREE.Vector3(0, 0, 0)
 
         window.castle = new Castle(castleBaseCenter);
+
+        window.castle.parts.push(...terrain.paintings)
 
         console.log('added castle')
 
