@@ -2667,7 +2667,7 @@ class Terrain {
                     const CLIFF = Math.abs(triangleMesh.normal.y) < 0.4 && (Math.abs(triangleMesh.normal.x) > 0.4 || Math.abs(triangleMesh.normal.z) > 0.4)
                     const YARD = isIn(trianglePosition, 'yard')
 
-                    if (YARD) {
+                    if (YARD && Math.random() < 0.1) {
                         var r = randomInRange(.1, 3)
                         var epcot = new THREE.Mesh(
                             new THREE.SphereGeometry(r, 3, 3),
