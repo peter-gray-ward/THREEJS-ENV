@@ -93,32 +93,32 @@ function random1() {
         new THREE.TextureLoader().load("/images/bierstadt.jpg", texture => {
             texture.wrapS = THREE.RepeatWrapping
             texture.wrapT = THREE.RepeatWrapping
-            texture.repeat.set(11, 11)
+            texture.repeat.set(4, 4)
         }),
         new THREE.TextureLoader().load("/images/bread4.jpg", texture => {
             texture.wrapS = THREE.RepeatWrapping
             texture.wrapT = THREE.RepeatWrapping
-            texture.repeat.set(11, 11)
+            texture.repeat.set(4, 4)
         }),
         new THREE.TextureLoader().load("/images/cole.jpg", texture => {
             texture.wrapS = THREE.RepeatWrapping
             texture.wrapT = THREE.RepeatWrapping
-            texture.repeat.set(11, 11)
+            texture.repeat.set(4, 4)
         }),
         new THREE.TextureLoader().load("/images/dante2.jpg", texture => {
             texture.wrapS = THREE.RepeatWrapping
             texture.wrapT = THREE.RepeatWrapping
-            texture.repeat.set(11, 11)
+            texture.repeat.set(4, 4)
         }),
         new THREE.TextureLoader().load("/images/dumbledore.jpg", texture => {
             texture.wrapS = THREE.RepeatWrapping
             texture.wrapT = THREE.RepeatWrapping
-            texture.repeat.set(11, 11)
+            texture.repeat.set(4, 4)
         }),
         new THREE.TextureLoader().load("/images/dumbledore.jpg", texture => {
             texture.wrapS = THREE.RepeatWrapping
             texture.wrapT = THREE.RepeatWrapping
-            texture.repeat.set(11, 11)
+            texture.repeat.set(4, 4)
         }),
     ]
     return randoms[Math.floor(Math.random() * randoms.length)]
@@ -741,7 +741,7 @@ class Sky {
             this.sun.intensity = 2
         }
 
-        this.time += 0.01
+        this.time += 0.001
 
         var sunTheta = this.time
         var sunPhi = 2 * Math.PI
@@ -1962,14 +1962,33 @@ class Castle {
     }
 }
 
+
+
 const sphereGeometries = {};
 const leafMaterials = {};
 
+function OrganizeFoliage(mesh) {
+        for (let i = 0; i < mesh.geometry.attributes.position.array.length; i += 3) {
+            mesh.geometry.attributes.position.array[i] += mesh.geometry.hlod[i];
+            mesh.geometry.attributes.position.array[i + 1] += mesh.geometry.hlod[i + 1];
+            mesh.geometry.attributes.position.array[i + 2] += mesh.geometry.hlod[i + 2];
+        }
+        mesh.geometry.needsUpdate = true
+}
+
+function DisrganizeFoliage(mesh) {
+        for (let i = 0; i < mesh.geometry.attributes.position.array.length; i += 3) {
+            mesh.geometry.attributes.position.array[i] += mesh.geometry.llod[i];
+            mesh.geometry.attributes.position.array[i + 1] += mesh.geometry.llod[i + 1];
+            mesh.geometry.attributes.position.array[i + 2] += mesh.geometry.llod[i + 2];
+        }
+        mesh.geometry.needsUpdate = true
+}
+
 function getCachedSphereGeometry(radius, map, transparent) {
     if (!sphereGeometries[radius]) {
-        const geometry = new THREE.SphereGeometry(radius, 20, 20);
+        const geometry = new THREE.SphereGeometry(radius, 3, 3);
         
-        // Randomize vertex positions for a leaf-like appearance
         if (transparent) {
             for (let i = 0; i < geometry.attributes.position.array.length; i += 3) {
                 // Define a random factor to apply different shapes to different parts of the sphere
@@ -1987,16 +2006,17 @@ function getCachedSphereGeometry(radius, map, transparent) {
             }
             geometry.computeVertexNormals()
             geometry.attributes.position.needsUpdate = true;
-
         } else {
+            geometry.llod = []
+            geometry.hlod = []
             for (let i = 0; i < geometry.attributes.position.array.length; i += 3) {
-                geometry.attributes.position.array[i] += randomInRange(-0.3, 0.3);
-                geometry.attributes.position.array[i + 1] += randomInRange(-0.5, 0.5);
-                geometry.attributes.position.array[i + 2] += randomInRange(-0.3, 0.3);
-            }
+                geometry.llod.push(geometry.attributes.position.array[i], geometry.attributes.position.array[i + 1], geometry.attributes.position.array[i + 2])
+                geometry.hlod.push(geometry.attributes.position.array[i], geometry.attributes.position.array[i + 1], geometry.attributes.position.array[i + 2])
+           }
             geometry.computeVertexNormals()
             geometry.attributes.position.needsUpdate = true;
         }
+
         sphereGeometries[radius] = geometry;
     }
     return sphereGeometries[radius];
@@ -2005,14 +2025,16 @@ function getCachedSphereGeometry(radius, map, transparent) {
 function getCachedLeafMaterial(color, map, transparent) {
     if (!leafMaterials[color]) {
         var leafMaterialArgs = { 
-            color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
-            map: random1(),
+            //color: 0xffffff,//CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
+             map: new THREE.TextureLoader().load("/images/branch.webp"),
             side: THREE.DoubleSide,
             transparent: true,
             opacity: 1
         }
         leafMaterials[color] = new THREE.MeshStandardMaterial(leafMaterialArgs);
     }
+    leafMaterials.map = random1()
+    leafMaterials.needsUpdate = true
     return leafMaterials[color];
 }
 
@@ -2261,7 +2283,7 @@ class Terrain {
     createFlora(x, Y, z, treeKind) {
         const tree = {
             cypress: {
-                height: randomInRange(11.1, 100),
+                height: randomInRange(11.1, 110),
                 width: randomInRange(1, 1.9),
                 colors: CYPRESSGREENS, // Cypress leaf colors
                 trimmed: Math.random() < 0.5 ? true : false,
@@ -2306,7 +2328,7 @@ class Terrain {
             const progress = (y - Y) / tree[treeKind].height;
             let radiusAtY = (1 - progress) * (tree[treeKind].width / 2) * randomInRange(0.83, 2.25);
             if (radiusAtY < 1) radiusAtY = 1;
-            if (none && ydiff++ < 8) {
+            if (none && ydiff++ < 8 && tree[treeKind].width > 1.5) {
                 radiusAtY = 0
             } else if (none) {
                 radiusAtY *= randomInRange(1, 4)
@@ -2628,16 +2650,19 @@ class Terrain {
                     const SIDEYARD = isIn(trianglePosition, 'sideyard')
                     const BACKYARD = isIn(trianglePosition, 'backyard')
                     let cypressTreePosition
-                    if ((SIDEYARD) || (BACKYARD && Math.random() < 0.05)) {
-                        for (var tree_partner = 0; tree_partner < 3; tree_partner++) {
+                    if ((SIDEYARD && Math.random() < 0.5) /*|| (BACKYARD && Math.random() < 0.05)*/) {
+                        for (var tree_partner = 0; tree_partner < 2; tree_partner++) {
                             cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
                             var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
+                           // Assuming llod is an array or typed array containing the position data
+                            // cypressTree.foliage.geometry.setAttribute('position', new THREE.Float32BufferAttribute(cypressTree.foliage.geometry.llod, 3));
+
                             this.trees.push(cypressTree)
                         }
                     }
 
                     else if (BACKYARD) {
-                        if (Math.random() < 0.1) {
+                        if (Math.random() < 0.3) {
                             var alternativeCypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
                             var alternativeCypressTree = this.createFlora(alternativeCypressTreePosition.x, alternativeCypressTreePosition.y, alternativeCypressTreePosition.z, 'alternative-cypress')
                             this.trees.push(alternativeCypressTree)
@@ -3243,11 +3268,13 @@ class Terrain {
         this.trees.forEach((tree) => {
             // Add or remove tree based on SOP (Screen-oriented projection) center check
             if (tree.trunk.parent && !isInSOP(tree.trunk.position, sopCenter, this.sop.trees)) {
-                scene.remove(tree.trunk);
-                scene.remove(tree.foliage);
+                /* Disorganize */
+                scene.remove(tree.foliage)
+                scene.remove(tree.trunk)
             } else if (!tree.trunk.parent && isInSOP(tree.trunk.position, sopCenter, this.sop.trees)) {
-                scene.add(tree.trunk);
-                scene.add(tree.foliage);
+                /* Organize */
+                scene.add(tree.foliage)
+                scene.add(tree.trunk)
             }
         });
 
@@ -3312,112 +3339,6 @@ class Terrain {
             this.boundingBox = new THREE.Box3().setFromObject(this.trunk).union(new THREE.Box3().setFromObject(this.foliage));
         }
     }
-
-    createTree(x, y, z, alternate, treeKind) {
-        const textureIndex = Math.floor(Math.random() * 7);
-
-        var trunkHeight = randomInRange(2.2, 5.2)
-        var trunkBaseRadius = randomInRange(.1, .8)
-        var rr = alternate ? randomInRange(.01, .1) : randomInRange(.1, .5)
-        var trunkCurve = []
-        var zS = z
-        var xS = x
-        var yS = y;
-
-        for (; yS < y + trunkHeight; yS += 0.02) {
-            if (Math.random() < 0.13) {
-                zS += randomInRange(-rr, rr)
-            }
-            if (Math.random() < 0.13) {
-                xS += randomInRange(-rr, rr)
-            }
-            trunkCurve.push(
-                new THREE.Vector3(
-                    xS,
-                    yS, 
-                    zS
-                )
-            )
-        }
-
-        // Default foliage (spherical)
-        var foliageRadius = randomInRange(trunkHeight * .3, 2.85)
-        const sphereGeometry = new THREE.SphereGeometry(foliageRadius, 10, 10);
-        const greenValue = Math.floor(Math.random() * 256);
-        const color = new THREE.Color(Math.random() < 0.05 ? randomInRange(0, 0.5) : 0, greenValue / 255, 0);
-        const foliageIndex = textureIndex > 4 ? textureIndex - 3 : textureIndex;
-        const foliageTexture = CYPRESSBRANCH
-
-        foliageTexture.wrapS = THREE.RepeatWrapping; // Repeat horizontally
-        foliageTexture.wrapT = THREE.RepeatWrapping; // Repeat vertically
-
-        foliageTexture.repeat.set(10, 10); // Increase these numbers for more repetitions and smaller texture
-
-        let sphereMaterial = new THREE.MeshStandardMaterial({
-            map: random1(),
-            transparent: true
-        });
-
-        // 
-        // createFoliageBunch(x, y, z)
-        //
-        
-        const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-        sphere.castShadow = true
-        sphere.receiveShadow = true
-        sphere.position.set(xS, yS + (foliageRadius / 2), zS); // Set foliage position
-        sphere.frustrumCulled = true
-        sphere.radius = foliageRadius
-        scene.add(sphere);
-
-        var { array, itemSize } = sphereGeometry.attributes.position
-        for (let i = 0; i < 21; i++) {
-            for (var j = 0; j < 21; j++) {
-                var vertexIndex = (i * (21 + 1) + j) * itemSize
-                var x = array[vertexIndex]
-                var z = array[vertexIndex + 1]
-                var y = array[vertexIndex + 2]
-
-                array[vertexIndex] = randomInRange(x - (foliageRadius * 1.1), x + foliageRadius * 1.1)
-                array[vertexIndex + 1] = y
-                array[vertexIndex + 2] = randomInRange(z - (foliageRadius * 1.1), z + foliageRadius * 1.1)
-            }
-        }
-
-
-        const path = new THREE.CatmullRomCurve3(trunkCurve);
-
-        var segments = Math.floor(randomInRange(5, 11))
-        var radialSegments = 15
-
-
-
-
-
-
-
-
-        // Create the tube geometry
-        const tubeGeometry = new THREE.TubeGeometry(path, segments, trunkBaseRadius);
-
-        const material = new THREE.MeshStandardMaterial({ 
-            map: TRUNKTEXTURE,
-            side: THREE.DoubleSide
-        });
-
-        // Create the mesh
-        const tubeMesh = new THREE.Mesh(tubeGeometry, material);
-        tubeMesh.castShadow = true
-        tubeMesh.receiveShadow = true
-        tubeMesh.position.y -= 2
-
-        // Add the mesh to the scene
-        tubeMesh.frustrumCulled = true
-        scene.add(tubeMesh);
-
-        return new Terrain.Tree(tubeMesh, sphere);
-    }
-
 
 
     createGrassBlade(instancedMesh, triangle, bladePositions, i) {
