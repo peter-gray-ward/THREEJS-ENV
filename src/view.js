@@ -3510,6 +3510,8 @@ class UserController {
     constructor(terrain) {
         this.terrain = terrain;
         this.isJumping = false;
+        this.touchdown = false
+        this.touchposition = {x:0,y:0}
         this.w = false;
         this.a = false;
         this.s = false;

@@ -161,31 +161,67 @@ def custom_static(filename):
 
 @app.route('/random-image', methods=('GET',))
 def random_image():
-    base_url = "https://pixabay.com/api/"
-    api_key = "25483695-93658ed46b8876fc2d6419379"
+    with open('./art-images.json', 'r') as file:
+        arts = json.load(file)
+        return random.choice(arts)
 
-    # Set up query parameters
-    params = {
-        "key": api_key,
-        "q": random.choice(flowers),
-        "image_type": "photo",
-        "pretty": "true"
-    }
+# @app.route('/random-image', methods=('GET',))
+# def random_image_endpoint():
+#     base_url = "https://pixabay.com/api/"
+#     api_key = "25483695-93658ed46b8876fc2d6419379"
 
-    # Encode the parameters and create the URL
-    url = f"{base_url}?{urllib.parse.urlencode(params)}"
+#     # Set up query parameters
+#     params = {
+#         "key": api_key,
+#         "q": random.choice([
+#             "da Vinci",
+#             "Michelangelo",
+#             "van Gogh",
+#             "Picasso",
+#             "Monet",
+#             "Dalí",
+#             "Kahlo",
+#             "Rembrandt",
+#             "Matisse",
+#             "Pollock",
+#             "Warhol",
+#             "O'Keeffe",
+#             "Manet",
+#             "Klimt",
+#             "Cézanne",
+#             "Degas",
+#             "Chagall",
+#             "Rodin",
+#             "Magritte",
+#             "Renoir"
+#         ]
+#         ),
+#         "image_type": "photo",
+#         "pretty": "true"
+#     }
 
-    # Make the request and parse the response
-    try:
-        with urllib.request.urlopen(url) as response:
-            data = json.loads(response.read().decode())
+#     # Encode the parameters and create the URL
+#     url = f"{base_url}?{urllib.parse.urlencode(params)}"
 
-            image = random.choice(data['hits'])
-            image = image['largeImageURL']
-            return image
-    except urllib.error.URLError as e:
-        print(f"Error: {e.reason}")
-        return None
+#     # Make the request and parse the response
+#     try:
+#         with urllib.request.urlopen(url) as response:
+#             data = json.loads(response.read().decode())
+
+#             image = random.choice(data['hits'])
+#             image = image['largeImageURL']
+
+#             with open('./art-images.json', 'r') as file:
+#                 art_images = json.load(file)
+#                 art_images.append(image)
+            
+#                 with open('./art-images.json', 'w') as file:
+#                     json.dump(art_images, file, indent=2)
+
+#             return image
+#     except urllib.error.URLError as e:
+#         print(f"Error: {e.reason}")
+#         return None
 
 @app.route('/images/<path:subpath>')
 def get_image(subpath):
