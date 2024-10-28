@@ -626,6 +626,18 @@ class Sky {
         this.hemisphereLight.position.set(0, 0, 0);
         scene.add(this.hemisphereLight);
 
+        this.decklight = new THREE.RectAreaLight(
+            0xfefeff,
+            5,
+            boardwalk.width,
+            10
+        )
+        this.decklight.position.set(
+            boardwalk.center.x, 
+            boardwalk.center.y + 3, 
+            boardwalk.center.z - boardwalk.depth / 2
+        )
+        scene.add(this.decklight)
 
         this.sun = new THREE.DirectionalLight(0xffffff, .2);
         this.sun.position.set(0, sceneRadius, 0);
@@ -808,11 +820,17 @@ class Sky {
             } else if (this.time > 0 && this.time < 0.1) {
                 // Dawn to morning transition
                 let dawnBlend = this.sun.position.y / (this.sceneRadius * 0.3);
-                color = new THREE.Color().lerpColors(colorDawn, colorMorning, dawnBlend);
+                color = new THREE.Color().lerpColors(
+                    new THREE.Color('pink'), 
+                    new THREE.Color('orange'), 
+                    dawnBlend);
             } else {
                 // Morning to daylight transition
                 let dayBlend = (this.sun.position.y - this.sceneRadius * 0.3) / (this.sceneRadius * 0.7);
-                color = new THREE.Color().lerpColors(colorMorning, colorDay, dayBlend);
+                color = new THREE.Color().lerpColors(
+                    new THREE.Color('aliceblue'), 
+                    new THREE.Color('#9cebff'), 
+                    dayBlend);
             }
             this.sky[i].material.color.copy(color)
 
@@ -1158,8 +1176,11 @@ class Castle {
 
 
         const intensity = .1;
-        const light_foundation = new THREE.RectAreaLight( 0xffffff, intensity,  house.width, house.width );
-        light_foundation.position.set( 0, 5, 0 );
+        const light_foundation = new THREE.RectAreaLight( 0xffffff, intensity,  
+            house.width * 2, 
+            house.depth * 2 
+        );
+        light_foundation.position.set( -house.width / 2, 5, -house.depth / 2 );
         light_foundation.lookAt( 0, 0, 0 );
         scene.add( light_foundation )
 
@@ -2667,18 +2688,23 @@ class Terrain {
                     const CLIFF = Math.abs(triangleMesh.normal.y) < 0.4 && (Math.abs(triangleMesh.normal.x) > 0.4 || Math.abs(triangleMesh.normal.z) > 0.4)
                     const YARD = isIn(trianglePosition, 'yard')
 
-                    if (YARD && Math.random() < 0.1) {
-                        var r = randomInRange(.1, 3)
+                    if (YARD && Math.random() < 0.2) {
+                        var r = randomInRange(.5, 11)
                         var epcot = new THREE.Mesh(
-                            new THREE.SphereGeometry(r, 3, 3),
+                            new THREE.BoxGeometry(r, r, r * .1),
                             new THREE.MeshStandardMaterial({
-                                color: new THREE.Color(Math.random(), Math.random(), Math.random()),
-                                map: new THREE.TextureLoader().load(RANDOMIMAGES[Math.floor(Math.random() * RANDOMIMAGES.length)]),
-                                metalness: 1
+                                color: 0xffffff,//new THREE.Color(Math.random(), Math.random(), Math.random()),
+                                map: new THREE.TextureLoader().load(RANDOMIMAGES[Math.floor(Math.random() * RANDOMIMAGES.length)])
+                                // metalness: 1
                             })
                         )
                         var ballPosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
                         epcot.position.set(ballPosition.x, ballPosition.y + r, ballPosition.z)
+                        if (Math.random() < 0.5) {
+                            epcot.rotation.y = Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2
+                        } else {
+                            epcot.rotation.y = Math.PI / randomInRange(1, 2)
+                        }
                         scene.add(epcot)
                     }
 
@@ -2711,11 +2737,11 @@ class Terrain {
                                 trianglePosition.y,
                                  trianglePosition.z,
                                  randomInRange(3, 30),
-                                 LATHECOLORS[Math.floor(Math.random() * LATHECOLORS.length)],
-                                 new THREE.TextureLoader().load(`/images/floor${Math.random() < 0.5 ? 5 : (Math.random() < 0.5 ? 6 : 9)}.jpg`)
+                                 LATHECOLORS[Math.floor(Math.random() * LATHECOLORS.length)]
                             )
                             lathe.position.copy(pos)
                             console.log("made but did not include a lathe")
+                            this.grasses.push(lathe)
                         }
 
 
@@ -3350,7 +3376,7 @@ class Terrain {
             } else if (!lathe.parent && pos < this.sop.grasses) {
                 scene.add(lathe)
             } else if (lathe.parent) {
-                lathe.rotation.y += randomInRange(0, Math.PI * 2 * .85);
+                lathe.rotation.y += .001;
                 if (lathe.rotation.y > Math.PI * 2) {
                     lathe.rotation.y = 0
                 }
