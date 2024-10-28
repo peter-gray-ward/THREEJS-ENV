@@ -113,14 +113,14 @@ function randomPointOnTriangle(A, B, C) {
 }
 
 var RANDOMIMAGES = []
-for (var i = 0; i < 100; i++) {
-    var xhr = new XMLHttpRequest()
-    xhr.open('GET', '/random-image?time=' + Math.random())
-    xhr.addEventListener('load', function() {
-        RANDOMIMAGES.push(this.response)
-    })
-    xhr.send()
-}
+// for (var i = 0; i < 100; i++) {
+//     var xhr = new XMLHttpRequest()
+//     xhr.open('GET', '/random-image?time=' + Math.random())
+//     xhr.addEventListener('load', function() {
+//         RANDOMIMAGES.push(this.response)
+//     })
+//     xhr.send()
+// }
 
 var twoPi = Math.PI * 2
 function piBy01() {
@@ -478,7 +478,7 @@ function Lathe(x, y, z, radius, color, map) {
     // Define mesh material arguments
     const meshMaterialArgs = { 
         side: THREE.DoubleSide, 
-        transparent: true,
+        transparent: false,
         wireframe: false,
         metalness: 1,
         opacity: 0.5
@@ -1105,23 +1105,23 @@ class Castle {
         const foundationY = house.center.y - (house.foundation.height / 2)
         var floorY = foundationY
 
-        // const foundation = new THREE.Mesh(
-        //     new THREE.BoxGeometry(house.width, house.foundation.height, house.depth),
-        //         new THREE.MeshStandardMaterial({
-        //             map: new THREE.TextureLoader().load("/images/concrete", texture => {
-        //                 texture.wrapS = THREE.RepeatWrapping;
-        //                 texture.wrapT = THREE.RepeatWrapping;
-        //                 texture.repeat.set(11, 11);
-        //             }),
-        //             side: THREE.DoubleSide
-        //         }),
+        const foundation = new THREE.Mesh(
+            new THREE.BoxGeometry(house.width, house.foundation.height, house.depth),
+                new THREE.MeshStandardMaterial({
+                    map: new THREE.TextureLoader().load("/images/seraphic-metallic-texture-polished-concrete.avif", texture => {
+                        texture.wrapS = THREE.RepeatWrapping;
+                        texture.wrapT = THREE.RepeatWrapping;
+                        texture.repeat.set(11, 11);
+                    }),
+                    side: THREE.DoubleSide
+                }),
                 
-        // )
-        // foundation.position.set(0, floorY + .1, 0)
-        // floorY += floorHeight
-        // foundation.frustrumCulled = true
-        // this.parts.push(foundation)
-        // scene.add(foundation)
+        )
+        foundation.position.set(0, floorY + .1, 0)
+        floorY += floorHeight
+        foundation.frustrumCulled = true
+        this.parts.push(foundation)
+        scene.add(foundation)
 
         
         this.createHarryPotterLampPost(
@@ -2433,34 +2433,27 @@ class Terrain {
                     /* TERRAIN FEATURES */
                     const CLIFF = Math.abs(triangleMesh.normal.y) < 0.4 && (Math.abs(triangleMesh.normal.x) > 0.4 || Math.abs(triangleMesh.normal.z) > 0.4)
                     const YARD = isIn(trianglePosition, 'yard')
-
-                    if (YARD && Math.random() < 0.2) {
-                        var r = randomInRange(.5, 11)
-                        var epcot = new THREE.Mesh(
-                            new THREE.BoxGeometry(r, r, r * .1),
-                            new THREE.MeshStandardMaterial({
-                                color: 0xffffff,//new THREE.Color(Math.random(), Math.random(), Math.random()),
-                                map: new THREE.TextureLoader().load(RANDOMIMAGES[Math.floor(Math.random() * RANDOMIMAGES.length)])
-                                // metalness: 1
-                            })
-                        )
-                        var ballPosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                        epcot.position.set(ballPosition.x, ballPosition.y + r / 2, ballPosition.z)
-                        if (Math.random() < 0.5) {
-                            epcot.rotation.y = Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2
-                        } else {
-                            epcot.rotation.y = Math.PI / randomInRange(1, 2)
-                        }
-                        scene.add(epcot)
-                        this.paintings.push(epcot)
-                    }
-
-
-
-                    const SIDEYARD = isIn(trianglePosition, 'sideyard')
-                    const BACKYARD = isIn(trianglePosition, 'backyard')
                     let cypressTreePosition
-                    if ((SIDEYARD && Math.random() < 0.85) || (BACKYARD && Math.random() < 0.05)) {
+
+                    if (false && Math.random() < 0.2) {
+                        // var r = randomInRange(.5, 11)
+                        // var epcot = new THREE.Mesh(
+                        //     new THREE.BoxGeometry(r, r, r * .1),
+                        //     new THREE.MeshStandardMaterial({
+                        //         color: 0xffffff,//new THREE.Color(Math.random(), Math.random(), Math.random()),
+                        //         map: new THREE.TextureLoader().load(RANDOMIMAGES[Math.floor(Math.random() * RANDOMIMAGES.length)])
+                        //         // metalness: 1
+                        //     })
+                        // )
+                        // var ballPosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
+                        // epcot.position.set(ballPosition.x, ballPosition.y + r / 2, ballPosition.z)
+                        // if (Math.random() < 0.5) {
+                        //     epcot.rotation.y = Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2
+                        // } else {
+                        //     epcot.rotation.y = Math.PI / randomInRange(1, 2)
+                        // }
+                        // scene.add(epcot)
+                        // this.paintings.push(epcot)
                         for (var tree_partner = 0; tree_partner < 2; tree_partner++) {
                             cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
                             var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
@@ -2471,21 +2464,36 @@ class Terrain {
                         }
                     }
 
-                    if (!CLIFF && !BACKYARD && !SIDEYARD && Math.random() < 0.03) {
-                        var pos = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                        var building = Lathe(
-                            trianglePosition.x, 
-                            trianglePosition.y,
-                             trianglePosition.z,
-                             randomInRange(13, 40),
-                             LATHECOLORS[Math.floor(Math.random() * LATHECOLORS.length)],
-                             new THREE.TextureLoader().load("/images/poppy-field.jpg")
-                        )
-                        building.position.copy(pos)
-                        this.grasses.push(building)
 
 
+                    const SIDEYARD = isIn(trianglePosition, 'sideyard')
+                    const BACKYARD = isIn(trianglePosition, 'backyard')
+                    if ((SIDEYARD && Math.random() < 0.85) || (BACKYARD && Math.random() < 0.1)) {
+                        for (var tree_partner = 0; tree_partner < 2; tree_partner++) {
+                            cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
+                            var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
+                           // Assuming llod is an array or typed array containing the position data
+                            // cypressTree.foliage.geometry.setAttribute('position', new THREE.Float32BufferAttribute(cypressTree.foliage.geometry.llod, 3));
+
+                            this.trees.push(cypressTree)
+                        }
                     }
+
+                    // if (!CLIFF && !SIDEYARD && Math.random() < 0.03) {
+                    //     var pos = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
+                    //     var building = Lathe(
+                    //         trianglePosition.x, 
+                    //         trianglePosition.y,
+                    //          trianglePosition.z,
+                    //          randomInRange(13, 40),
+                    //          LATHECOLORS[Math.floor(Math.random() * LATHECOLORS.length)],
+                    //          new THREE.TextureLoader().load("/images/poppy-field.jpg")
+                    //     )
+                    //     building.position.copy(pos)
+                    //     this.grasses.push(building)
+
+
+                    // }
 
 
                     if (CLIFF) {
@@ -3318,7 +3326,6 @@ class UserController {
         );
     }
 
-
     addEventListener() {
         window.addEventListener('keydown', (e) => {
             const key = e.key.toUpperCase();
@@ -3481,6 +3488,41 @@ class UserController {
             }
         });
 
+        window.addEventListener('touchdown', e => { this.touchdown = true; this.touchposition = { x: e.clientX, y: e.clientY }})
+        window.addEventListener('touchmove', e => {
+            if (!this.touchposition) {
+                this.touchposition = { x: e.clientX, y: e.clientY };
+            }
+            
+            var diff = { x: this.touchposition.x - e.clientX, y: this.touchposition.y - e.clientY };
+            
+            // Check if the user moved 100 pixels up or down
+            var is100PxUp = diff.y >= 100;
+            var is100pxDown = diff.y <= -100;
+
+            if (is100PxUp) {
+                // Move camera forward along its local Z-axis
+                this.camera.translateZ(-1);
+            }
+
+            if (is100pxDown) {
+                // Move camera backward along its local Z-axis
+                this.camera.translateZ(1);
+            }
+
+            // Check horizontal touch position to move left or right
+            var pos = { x: e.clientX, y: e.clientY };
+            if (pos.x < window.innerWidth / 2) {
+                // Move camera left along its local X-axis
+                this.camera.translateX(-1);
+            } else {
+                // Move camera right along its local X-axis
+                this.camera.translateX(1);
+            }
+
+            // Update touch position to current position for the next event
+            this.touchposition = { x: e.clientX, y: e.clientY };
+        });
 
     }
 
@@ -3568,11 +3610,8 @@ class UserController {
 
         // Apply movement after collision handling
         this.camera.position.add(combinedMovement);
-     
-
     }
         
-
     handleCollision() {
         const cameraBox = new THREE.Box3().setFromCenterAndSize(
             this.camera.position.clone(),
@@ -3668,7 +3707,6 @@ class UserController {
                 var closestGround = undefined
             }
         }
-
     }
 
     getClosestPointOnBox(box, point) {
@@ -3678,7 +3716,6 @@ class UserController {
 
         return new THREE.Vector3(clampedX, clampedY, clampedZ);
     }
-
 
     // Handle tree collision
     handleTreeCollision(intersection, direction, responseForce) {
