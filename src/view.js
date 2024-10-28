@@ -1990,32 +1990,14 @@ function DisrganizeFoliage(mesh) {
 
 function getCachedSphereGeometry(radius, map, transparent) {
     if (!sphereGeometries[radius]) {
-        const geometry = new THREE.SphereGeometry(radius, Math.floor(randomInRange(3, 10)), Math.floor(randomInRange(3, 10)));
+        const geometry = new THREE.SphereGeometry(
+            randomInRange(radius - 1, radius + 1), 
+            Math.floor(randomInRange(3, 10)), 
+            Math.floor(randomInRange(3, 10))
+        );
         
         if (transparent) {
-            for (let i = 0; i < geometry.attributes.position.array.length; i += 3) {
-                // Define a random factor to apply different shapes to different parts of the sphere
-                let layer = Math.floor(i / (geometry.attributes.position.array.length / 3));
-                
-                // Position-based variations
-                let offsetX = randomInRange(-0.2, 0.2) + layer * randomInRange(-0.05, 0.05);
-                let offsetY = randomInRange(-0.4, 0.4) + layer * randomInRange(-0.1, 0.1);
-                let offsetZ = randomInRange(-0.2, 0.2) + layer * randomInRange(-0.05, 0.05);
-
-                if (Math.random() < 0.8) {
-                    offsetX += randomInRange(-radius / 2, radius / 2)
-                } else if (Math.random() < 0.8) {
-                    offsetZ += randomInRange(-radius / 2, radius / 2)
-                    offsetY += randomInRange(0, radius / 2)
-                }
-
-                // Apply offset to create more organic shapes and layers
-                geometry.attributes.position.array[i] += offsetX;
-                geometry.attributes.position.array[i + 1] += offsetY;
-                geometry.attributes.position.array[i + 2] += offsetZ;
-            }
-            geometry.computeVertexNormals()
-            geometry.attributes.position.needsUpdate = true;
+            
         } else {
             geometry.llod = []
             geometry.hlod = []
@@ -2339,9 +2321,12 @@ class Terrain {
         const endColor = new THREE.Color(tree[treeKind].colors[tree[treeKind].colors.length - 1]); // Lighter color at the top
 
         let index = 0;
-        var none = Math.random() < 0.85
+        var none = true //Math.random() < 0.5
         var ydiff = 0
         for (let y = Y; y < Y + tree[treeKind].height; y += 1) {
+            if (tree[treeKind].height > 20 && Math.random() < 0.5) {
+                continue
+            }
             const progress = (y - Y) / tree[treeKind].height;
             let radiusAtY = (1 - progress) * (tree[treeKind].width / 2) * randomInRange(0.83, 2.25);
             if (radiusAtY < 1) radiusAtY = 1;
@@ -2667,7 +2652,7 @@ class Terrain {
                     const SIDEYARD = isIn(trianglePosition, 'sideyard')
                     const BACKYARD = isIn(trianglePosition, 'backyard')
                     let cypressTreePosition
-                    if ((SIDEYARD && Math.random() < 0.5) /*|| (BACKYARD && Math.random() < 0.05)*/) {
+                    if ((SIDEYARD && Math.random() < 0.85) /*|| (BACKYARD && Math.random() < 0.05)*/) {
                         for (var tree_partner = 0; tree_partner < 2; tree_partner++) {
                             cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
                             var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')

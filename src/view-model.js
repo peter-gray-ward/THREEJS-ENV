@@ -23,7 +23,7 @@ export default class ViewModel {
 
         // await view.init();
         var xhr = new XMLHttpRequest();
-        xhr.open("GET", `https://sleepy-tundra-44541-fc5db6787027.herokuapp.com/load/${username}`, true);
+        xhr.open("GET", `/load/${username}`, true);
         xhr.addEventListener('load', async () => {
             const model = JSON.parse(xhr.response);
             console.log("model loaded", model);
