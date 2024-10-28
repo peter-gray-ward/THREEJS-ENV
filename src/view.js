@@ -2564,7 +2564,7 @@ class Terrain {
         // Create material (water-like material)
         var waterMaterial = new THREE.MeshStandardMaterial({
             color: 'royalblue',
-            map: new THREE.TextureLoader().load("/images/art-water.gif"),
+            // map: new THREE.TextureLoader().load("/images/art-water.gif"),
             side: THREE.DoubleSide,
             opacity: 0.9,
             transparent: true
