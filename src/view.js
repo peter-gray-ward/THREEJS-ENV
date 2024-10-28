@@ -628,19 +628,7 @@ class Sky {
         this.hemisphereLight.position.set(0, 0, 0);
         scene.add(this.hemisphereLight);
 
-        this.decklight = new THREE.RectAreaLight(
-            0xfefeff,
-            5,
-            boardwalk.width,
-            10
-        )
-        this.decklight.position.set(
-            boardwalk.center.x, 
-            boardwalk.center.y + 3, 
-            boardwalk.center.z - boardwalk.depth / 2
-        )
-        scene.add(this.decklight)
-
+        
         this.sun = new THREE.DirectionalLight(0xffffff, .2);
         this.sun.position.set(0, sceneRadius, 0);
         scene.add(this.sun)
@@ -1175,17 +1163,6 @@ class Castle {
         // this.parts.push(foundation)
         // scene.add(foundation)
 
-
-
-        const intensity = .1;
-        const light_foundation = new THREE.RectAreaLight( 0xffffff, intensity,  
-            house.width * 2, 
-            house.depth * 2 
-        );
-        light_foundation.position.set( -house.width / 2, 5, -house.depth / 2 );
-        light_foundation.lookAt( 0, 0, 0 );
-        scene.add( light_foundation )
-
         
         this.createHarryPotterLampPost(
             boardwalk.center.x - boardwalk.width / 2 + 1, 
@@ -1205,6 +1182,7 @@ class Castle {
             new THREE.MeshStandardMaterial(opts)
         );
         tilePlane.receiveShadow = true;
+        tilePlane.castShadow = true
         tilePlane.position.set(boardwalk.center.x, boardwalk.center.y, boardwalk.center.z);
         this.parts.push(tilePlane)
         tilePlane.frustrumCulled = true
@@ -1511,21 +1489,42 @@ class Castle {
         lampPostCap.position.set(x, y + lampHeight, z); // Position at the top of the post
         scene.add(lampPostCap);
 
-        // Add a light to the lamp post
-        const pointLight = new THREE.PointLight(0xffa5f0, 10, 10); // Orangish-yellow light
-        pointLight.position.set(x, y + lampHeight + 0.5, z); // Slightly above the cap
-        scene.add(pointLight);
+        // Define the lightbulb shape using LatheGeometry (profile of half-bulb)
+        const bulbShape = new THREE.Shape();
+        bulbShape.moveTo(0, 0);
+        bulbShape.lineTo(0.1, 0);    // Bottom width of bulb
+        bulbShape.quadraticCurveTo(0.3, 0.5, 0.1, 1);  // Curve out for bulb shape
+        bulbShape.lineTo(0, 1);      // Taper off to the top
 
-        // Optionally, add a sphere to represent the light bulb (glowing effect)
-        const bulbGeometry = new THREE.SphereGeometry(0.2, 8, 8);
-        const bulbMaterial = new THREE.MeshBasicMaterial({ color: 0xffa500, emissive: 0xffa500 });
+        // Create LatheGeometry from the shape
+        const bulbGeometry = new THREE.LatheGeometry(bulbShape.getPoints(20), 32);
+        const bulbMaterial = new THREE.MeshPhysicalMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.5,
+            metalness: 0,
+            roughness: 0.1,
+            transmission: 0.9, // For a glass effect
+            side: THREE.DoubleSide
+        });
         const bulb = new THREE.Mesh(bulbGeometry, bulbMaterial);
-        bulb.position.set(x, y + lampHeight + 0.5, z);
+        bulb.position.set(x, y + lampHeight + 0.3, z); // Slightly above the cap
         scene.add(bulb);
 
-        // Optionally, add shadow to the light
-        pointLight.castShadow = true;
+        // Create the filament (wick) inside the bulb
+        const filamentGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.4, 8);
+        const filamentMaterial = new THREE.MeshStandardMaterial({ color: 0xffa500, emissive: 0xffcc00 });
+        const filament = new THREE.Mesh(filamentGeometry, filamentMaterial);
+        filament.position.set(x, y + lampHeight + 0.7, z); // Position inside the bulb
+        scene.add(filament);
+
+        // Add a point light to represent the light source, with daylight color
+        const pointLight = new THREE.PointLight(0xfff7e8, 5, 15); // Soft white light
+        pointLight.position.set(x, y + lampHeight + 0.5, z);
+        pointLight.castShadow = true; // Enable shadows if needed
+        scene.add(pointLight);
     }
+
 
     buildElevator() {
         // Elevator floor
@@ -2717,7 +2716,7 @@ class Terrain {
                     const SIDEYARD = isIn(trianglePosition, 'sideyard')
                     const BACKYARD = isIn(trianglePosition, 'backyard')
                     let cypressTreePosition
-                    if ((SIDEYARD && Math.random() < 0.85) /*|| (BACKYARD && Math.random() < 0.05)*/) {
+                    if ((SIDEYARD && Math.random() < 0.85) || (BACKYARD && Math.random() < 0.05)) {
                         for (var tree_partner = 0; tree_partner < 2; tree_partner++) {
                             cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
                             var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
@@ -2728,19 +2727,21 @@ class Terrain {
                         }
                     }
 
-                    if (Math.random() < 0.01) {
-                        var pos = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                        var building = Lathe(
-                            trianglePosition.x, 
-                            trianglePosition.y,
-                             trianglePosition.z,
-                             randomInRange(3, 30),
-                             LATHECOLORS[Math.floor(Math.random() * LATHECOLORS.length)],
-                             new THREE.TextureLoader().load("/images/poppy-field.jpg")
-                        )
-                        building.position.copy(pos)
-                        this.grasses.push(building)
-                    }
+                    // if (isIn(Math.random() < 0.01) {
+                    //     var pos = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
+                    //     var building = Lathe(
+                    //         trianglePosition.x, 
+                    //         trianglePosition.y,
+                    //          trianglePosition.z,
+                    //          randomInRange(3, 30),
+                    //          LATHECOLORS[Math.floor(Math.random() * LATHECOLORS.length)],
+                    //          new THREE.TextureLoader().load("/images/poppy-field.jpg")
+                    //     )
+                    //     building.position.copy(pos)
+                    //     this.grasses.push(building)
+
+
+                    // }
 
 
                     if (CLIFF) {
