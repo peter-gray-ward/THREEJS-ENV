@@ -587,19 +587,19 @@ function colorshade(rgb) {
 }
 
 class Sky {
-    time = Math.PI * 2 - 0.03
+    time = Math.PI - 0.1
     constructor(user) {
         this.counter = 0;
         this.user = user;
         this.sceneRadius = 550;
         this.full_circle = 2 * Math.PI;
 
-        this.hemisphereLight = new THREE.AmbientLight(0xfefeff, .02); // Sky and ground color
-        this.hemisphereLight.position.set(0, 0, 0);
-        scene.add(this.hemisphereLight);
+        // this.hemisphereLight = new THREE.AmbientLight(0xfefeff, .02); // Sky and ground color
+        // this.hemisphereLight.position.set(0, 0, 0);
+        // scene.add(this.hemisphereLight);
 
         
-        this.sun = new THREE.DirectionalLight(0xffffff, .2);
+        this.sun = new THREE.DirectionalLight(0xffffff, 3);
         this.sun.position.set(0, sceneRadius, 0);
         scene.add(this.sun)
         this.sun.lookAt(0, 0, 0)
@@ -930,6 +930,12 @@ class Sky {
 
         // Update the color attribute to apply changes
         colorAttribute.needsUpdate = true;
+
+        if (this.time > Math.PI + Math.PI / 16 && this.time < Math.PI * 2 - Math.PI / 16) {
+            this.sun.intensity = 0
+        } else {
+            this.sun.intensity = 3
+        }
 
         // Increment time for next update
         this.time += 0.005;
@@ -2285,6 +2291,7 @@ class Terrain {
             // map: new THREE.TextureLoader().load("/images/art-water.gif"),
             side: THREE.DoubleSide,
             opacity: 0.9,
+            wireframe: true,
             transparent: true
         });
 
