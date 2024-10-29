@@ -3269,7 +3269,7 @@ class UserController {
         this.aS = .1
         this.sS = .1
         this.dS = .1
-        this.tS = .05
+        this.tS = .4
         this.mousedown = false
         this.shift = false
         this.space = false;
@@ -3471,58 +3471,67 @@ class UserController {
         window.addEventListener('mouseup', e => { this.mouseDown = false })
 
         // Define the max angle for the arc (in radians)
-        const maxAngle = THREE.MathUtils.degToRad(45);  // 45 degrees in radians
-        document.querySelector('canvas').addEventListener('mousemove', (event) => {
-            const sensitivity = 0.0085;  // Adjust sensitivity
-            this.yaw -= event.movementX * sensitivity;
-            this.pitch -= event.movementY * sensitivity;
+        // const maxAngle = THREE.MathUtils.degToRad(45);  // 45 degrees in radians
+        // var lastTouchX
+        // document.querySelector('canvas').addEventListener('mousemove', (event) => {
+        //     // Get the canvas dimensions
+        //     const canvas = document.querySelector('canvas');
+        //     const centerX = canvas.clientWidth / 2;
+        //     const centerY = canvas.clientHeight / 2;
 
-            // Clamp the pitch so the camera doesn't flip
-            this.pitch = Math.max(-this.maxPitch, Math.min(this.maxPitch, this.pitch));
+        //     // Calculate distance from center of the screen
+        //     const deltaX = event.clientX - centerX;
+        //     const deltaY = event.clientY - centerY;
+        //     const distanceFromCenter = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
-            const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');  // Yaw-Pitch-Roll
-            this.camera.quaternion.setFromEuler(euler);  // Apply the rotation to the camera
+        //     // Scale the sensitivity based on distance from center
+        //     const baseSensitivity = 0.0085;  // Base sensitivity
+        //     const maxDistance = Math.sqrt(centerX * centerX + centerY * centerY);  // Max distance to edge of canvas
+        //     const scaledSensitivity = baseSensitivity * (distanceFromCenter / maxDistance);
 
-            if (this.mouseDown) {
-                this.moveForward()
+        //     // Apply scaled sensitivity to yaw and pitch adjustments
+        //     this.yaw -= event.movementX * scaledSensitivity;
+        //     this.pitch -= event.movementY * scaledSensitivity;
+
+        //     // Clamp the pitch to avoid flipping
+        //     this.pitch = Math.max(-this.maxPitch, Math.min(this.maxPitch, this.pitch));
+
+        //     const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');  // Yaw-Pitch-Roll
+        //     this.camera.quaternion.setFromEuler(euler);  // Apply rotation to the camera
+
+        //     // Move forward if mouse is down
+        //     if (this.mouseDown) {
+        //         this.moveForward();
+        //     }
+        // });
+
+        document.querySelector('canvas').addEventListener('touchmove', (event) => {
+            // Ensure two fingers are used for rotation
+            if (event.touches.length === 2) {
+                const touchX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+                
+                if (lastTouchX !== null) {
+                    const movementX = touchX - lastTouchX;
+                    const sensitivity = 0.005;  // Adjust this sensitivity for the two-finger rotation
+
+                    // Apply movement to yaw for Y-axis rotation
+                    this.yaw -= movementX * sensitivity;
+
+                    const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');  // Yaw-Pitch-Roll
+                    this.camera.quaternion.setFromEuler(euler);  // Apply rotation to the camera
+                }
+
+                lastTouchX = touchX;  // Update lastTouchX for the next touchmove
             }
+        });
+
+        // Reset lastTouchX when fingers are lifted
+        document.querySelector('canvas').addEventListener('touchend', () => {
+            lastTouchX = null;
         });
 
         window.addEventListener('touchdown', e => { this.touchdown = true; this.touchposition = { x: e.clientX, y: e.clientY }})
-        window.addEventListener('touchmove', e => {
-            if (!this.touchposition) {
-                this.touchposition = { x: e.clientX, y: e.clientY };
-            }
-            
-            var diff = { x: this.touchposition.x - e.clientX, y: this.touchposition.y - e.clientY };
-            
-            // Check if the user moved 100 pixels up or down
-            var is100PxUp = diff.y >= 100;
-            var is100pxDown = diff.y <= -100;
-
-            if (is100PxUp) {
-                // Move camera forward along its local Z-axis
-                this.camera.translateZ(-1);
-            }
-
-            if (is100pxDown) {
-                // Move camera backward along its local Z-axis
-                this.camera.translateZ(1);
-            }
-
-            // Check horizontal touch position to move left or right
-            var pos = { x: e.clientX, y: e.clientY };
-            if (pos.x < window.innerWidth / 2) {
-                // Move camera left along its local X-axis
-                this.camera.translateX(-1);
-            } else {
-                // Move camera right along its local X-axis
-                this.camera.translateX(1);
-            }
-
-            // Update touch position to current position for the next event
-            this.touchposition = { x: e.clientX, y: e.clientY };
-        });
+  
 
     }
 
