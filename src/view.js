@@ -93,6 +93,14 @@ function isIn(v, which) {
         return (
             v.x <= house.center.x - house.foundation.width / 2
         )
+    case 'dock':
+        return (
+            v.x > boardwalk.center.x + boardwalk.width / 2
+            && v.x < boardwalk.center.x + boardwalk.depth
+            && v.z > boardwalk.center.z - boardwalk.depth / 2
+            && v.z < boardwalk.center.z + boardwalk.depth / 2
+        )
+
     default:
         return false;
     }
@@ -2179,7 +2187,7 @@ class Terrain {
 
 
     go(centerX = 0, centerY = 0, centerZ = 0) {
-        console.log("what?")
+
         const centerKey = `${centerX}_${centerZ}`;
         this.terrainType = 'half'//['sparse', 'dense', 'half'][Math.floor(Math.random() * 3)];        
         this.cliffs = [];
@@ -2247,12 +2255,17 @@ class Terrain {
 
                 var inTheCove = (v.distanceTo(new THREE.Vector3(0,0,0) > 36) || (Math.random() < 0.3))
                     && !inField
-                    && v.x > 80 && v.z > 80
+                    && (v.x > 30 || v.z > 30)
+                    && !isIn(v, 'dock')
                 //v.x >= landscape.field.width / 2 && v.z >= -landscape.field.depth && v.z <= landscape.field.depth / 3
                 if (isIn(v, 'sideyard')) {
-                    console.log('changing', v.y, house.center.y)
+                    // console.log('changing', v.y, house.center.y)
                     v.y = house.center.y
                     inTheCove = false
+                }
+
+                if (isIn(v, 'dock')) {
+                    v.y = -20
                 }
 
                 if (inTheCove) {
@@ -2531,70 +2544,70 @@ class Terrain {
 
         
         // Now, let's apply the grass density in groundColorMap to color the vertices
-        const colors = [];
-        const gridSize = grassPatches.length;  // Assuming groundColorMap is a 2D array of the grid size
+        // const colors = [];
+        // const gridSize = grassPatches.length;  // Assuming groundColorMap is a 2D array of the grid size
 
 
-        for (let i = 0; i < gridSize; i++) {
-            for (let j = 0; j < gridSize; j++) {
-                const density = grassPatches[i][j];
+        // for (let i = 0; i < gridSize; i++) {
+        //     for (let j = 0; j < gridSize; j++) {
+        //         const density = grassPatches[i][j];
                 
 
-                // Ensure that color application and grass application use the same coordinates
-                const vertexIndex = i * (this.segments + 1) + j;  // Adjust based on segment count and grid
+        //         // Ensure that color application and grass application use the same coordinates
+        //         const vertexIndex = i * (this.segments + 1) + j;  // Adjust based on segment count and grid
 
-                colors.push(randomInRange(0.1, 0.3), randomInRange(0.11, 0.15), randomInRange(0, 0.08));  // RGB color for dark brown soil
-            }
-        }
+        //         colors.push(randomInRange(0.1, 0.3), randomInRange(0.11, 0.15), randomInRange(0, 0.08));  // RGB color for dark brown soil
+        //     }
+        // }
 
-        console.log("created random colors for the terrain canvas")
+        // console.log("created random colors for the terrain canvas")
 
         // Create red spheres at boundary positions
-        const sphereGeometry = new THREE.SphereGeometry(0.2, 8, 8);
-        const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        // const sphereGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+        // const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
 
         // ... rest of the existing code ...
 
         // Add this method to the Terrain class
         
 
-        this.colors = colors;
-        this.gridSize = gridSize;
+        // this.colors = colors;
+        // this.gridSize = gridSize;
 
-        // Apply vertex colors to the geometry
-        const planeGeometry = new THREE.BufferGeometry();
-        planeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        planeGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));  // Add vertex colors
-        planeGeometry.setIndex(indices);
-        planeGeometry.computeVertexNormals();
-        planeGeometry.computeBoundingBox();
+        // // Apply vertex colors to the geometry
+        // const planeGeometry = new THREE.BufferGeometry();
+        // planeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        // planeGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));  // Add vertex colors
+        // planeGeometry.setIndex(indices);
+        // planeGeometry.computeVertexNormals();
+        // planeGeometry.computeBoundingBox();
 
         // Apply the custom texture to the terrain
-        const material = new THREE.MeshStandardMaterial({
-            side: THREE.DoubleSide,
-            wireframe: true,
-            transparent: false,
-            opacity: 1
-        });
+        // const material = new THREE.MeshStandardMaterial({
+        //     side: THREE.DoubleSide,
+        //     wireframe: true,
+        //     transparent: false,
+        //     opacity: 1
+        // });
 
-        const mesh = new THREE.Mesh(planeGeometry, material);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
+        // const mesh = new THREE.Mesh(planeGeometry, material);
+        // mesh.castShadow = true;
+        // mesh.receiveShadow = true;
 
-        this.mesh = mesh;
-        this.mesh.name = "terrain"
-        this.mesh.noise = perlinNoise;
-        this.mesh.centerKey = centerKey;
+        // this.mesh = mesh;
+        // this.mesh.name = "terrain"
+        // this.mesh.noise = perlinNoise;
+        // this.mesh.centerKey = centerKey;
 
-        scene.add(mesh);
+        // scene.add(mesh);
 
        
-        this.meshes.push(this.mesh);
+        // this.meshes.push(this.mesh);
 
 
 
 
-        return this;
+        // return this;
     }
 
     createInstancedMeshGrounds() {
@@ -2664,7 +2677,7 @@ class Terrain {
         this.groundInstancedMesh.instanceMatrix.needsUpdate = true;
 
         // Finally, add the instanced mesh to the scene
-        scene.add(this.groundInstancedMesh);
+        // scene.add(this.groundInstancedMesh);
 
     }
 
@@ -2967,6 +2980,7 @@ class Terrain {
             }
         }
     }
+
     clusterCliffs() {
         const clusters = [];
 
@@ -2982,12 +2996,12 @@ class Terrain {
 
         this.cliffs = []
 
-        console.log("clustering " + clusters.length + " cliffs clusters")
+        // console.log("clustering " + clusters.length + " cliffs clusters")
 
 
 
         clusters.forEach(cluster => {
-            console.log("this cluster has " + cluster.length + " triangles")
+            // console.log("this cluster has " + cluster.length + " triangles")
             var cliffGeometry = new THREE.BufferGeometry()
             var points = []
             cluster.forEach(triangle => {
@@ -3060,7 +3074,7 @@ class Terrain {
 
                 this.cliffs.push(mesh);
 
-                console.log("creating a cliff cluster!")
+                // console.log("creating a cliff cluster!")
             });
             // cliffGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(points), 3))
             // cliffGeometry.computeVertexNormals()
@@ -3075,9 +3089,6 @@ class Terrain {
             // scene.add(cliff)
         });
     }
-
-
-
 
     updateTerrain() {
         var sopCenter = user.camera.position
@@ -3123,10 +3134,6 @@ class Terrain {
             if (ground.parent && center.distanceTo(user.camera.position) > 100) {
                 scene.remove(ground);
             } else if (!ground.parent && center.distanceTo(user.camera.position) < 100/*&& isInSOP(center, sopCenter, this.sop.grounds)*/) {
-                ground.material.transparent = true
-                ground.material.opacity += randomInRange(-0.05, 0.05)
-                if (ground.material.opacity > 1) ground.material.opacity = .9
-                if (ground.material.opacity < 0) ground.material.opacity = .1
                 scene.add(ground);
             }
         })
@@ -3154,9 +3161,7 @@ class Terrain {
             } else if (!cliff.parent && isInSOP(pos, sopCenter, this.sop.cliffs)) {
                 scene.add(cliff);
             }
-        });
-
-        
+        });       
     }
 
     getTriangleCenter(triangle) {
@@ -3962,21 +3967,21 @@ class View {
         // Add the wireframe to the scene
         window.scene.add(wireframeBox);
 
-        var mesh = terrain.meshes[0];
+        // var mesh = terrain.meshes[0];
 
-        //var [x, y, z] = [mesh.geometry.attributes.position.array[333], mesh.geometry.attributes.position.array[334] + 1, mesh.geometry.attributes.position.array[335]];
-        let x, y, z;
-        for (var i = 0; i < mesh.geometry.attributes.position.array.length; i += 3) {
-            var _x = Math.abs(mesh.geometry.attributes.position.array[i] - 20);
-            var _z = Math.abs(mesh.geometry.attributes.position.array[i + 2] - 20);
+        // //var [x, y, z] = [mesh.geometry.attributes.position.array[333], mesh.geometry.attributes.position.array[334] + 1, mesh.geometry.attributes.position.array[335]];
+        // let x, y, z;
+        // for (var i = 0; i < mesh.geometry.attributes.position.array.length; i += 3) {
+        //     var _x = Math.abs(mesh.geometry.attributes.position.array[i] - 20);
+        //     var _z = Math.abs(mesh.geometry.attributes.position.array[i + 2] - 20);
 
-            if (_x < 2 && _z < 2) {
-                x = mesh.geometry.attributes.position.array[i]
-                y = mesh.geometry.attributes.position.array[i + 1] + 1
-                z = mesh.geometry.attributes.position.array[i + 2]
-                break;
-            }
-        }
+        //     if (_x < 2 && _z < 2) {
+        //         x = mesh.geometry.attributes.position.array[i]
+        //         y = mesh.geometry.attributes.position.array[i + 1] + 1
+        //         z = mesh.geometry.attributes.position.array[i + 2]
+        //         break;
+        //     }
+        // }
 
         // window.user.camera.position.set(33.953909365281795, 2.610000001490116, 23.053098469337314);
         window.user.camera.position.set(24, landscape.field.center.y + 10, 0)

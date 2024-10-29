@@ -13,7 +13,7 @@ LEVEL = [
     "Cypress Garden"
 ]
 
-t = 200
+t = 100
 
 class User:
     def __init__(self, name, level, position):
@@ -38,10 +38,10 @@ class Model:
                 'noiseHeight': t,
                 'segments': 50,
                 'sop': {
-                    'trees': 155,
+                    'trees': 50,
                     'grasses': t / 3,
                     'grounds': 9999,
-                    'cliffs': t / 2
+                    'cliffs': 50
                 },
                 'grasses': [],
                 'grounds': [],
