@@ -9,6 +9,12 @@ import { CSG } from '/lib/CSG.js'
 import { SUBTRACTION, Brush, Evaluator } from '/lib/three-bvh-csg.js';
 import ViewModel from "/src/view-model.js";
 
+window.GROUND2 = new THREE.TextureLoader().load("/images/ground-2.JPG",texture => {
+    texture.wrapS = THREE.RepeatWrapping
+    texture.wrapT = THREE.RepeatWrapping
+    texture.rotation = Math.random() * Math.PI * 2
+    texture.repeat.set(100, 100)
+})
 window.CYPRESSGREENS = ['#93b449', '#6b881c', '#a9cc4e']
 window.LATHECOLORS = ['#00ffff', '#ff00ff', '#ffff00']
 window.CYPRESSBRANCH = new THREE.TextureLoader().load("/images/branch.webp")
@@ -2239,7 +2245,16 @@ class Terrain {
                     v.y = landscape.field.center.y;  // Flatten the terrain inside the castle
                 }
 
-                var inTheCove = v.x >= landscape.field.width / 2 && v.z >= -landscape.field.depth && v.z <= landscape.field.depth / 3;
+                var inTheCove = (v.distanceTo(new THREE.Vector3(0,0,0) > 36) || (Math.random() < 0.3))
+                    && !inField
+                    && v.x > 80 && v.z > 80
+                //v.x >= landscape.field.width / 2 && v.z >= -landscape.field.depth && v.z <= landscape.field.depth / 3
+                if (isIn(v, 'sideyard')) {
+                    console.log('changing', v.y, house.center.y)
+                    v.y = house.center.y
+                    inTheCove = false
+                }
+
                 if (inTheCove) {
 
 
@@ -2268,13 +2283,11 @@ class Terrain {
                         v.y = curveFactor * (v.y - targetHeight) + targetHeight;
                     }
 
-                } else {
 
-                    if (isIn(v, 'sideyard')) {
-                        console.log('changing', v.y, house.center.y)
-                        v.y = house.center.y
-                    }
-                }
+
+                } 
+
+
 
                 
                 // terrain vertices
@@ -2432,6 +2445,7 @@ class Terrain {
 
                     /* TERRAIN FEATURES */
                     const CLIFF = Math.abs(triangleMesh.normal.y) < 0.4 && (Math.abs(triangleMesh.normal.x) > 0.4 || Math.abs(triangleMesh.normal.z) > 0.4)
+                        || trianglePosition.x > 100 || trianglePosition.z > 100
                     const YARD = isIn(trianglePosition, 'yard')
                     let cypressTreePosition
 
@@ -2468,7 +2482,10 @@ class Terrain {
 
                     const SIDEYARD = isIn(trianglePosition, 'sideyard')
                     const BACKYARD = isIn(trianglePosition, 'backyard')
-                    if ((SIDEYARD && Math.random() < 0.85) || (BACKYARD && Math.random() < 0.1)) {
+                    if (
+                            ((SIDEYARD && Math.random() < 0.85) || (BACKYARD && Math.random() < 0.1))
+                            && (trianglePosition.z < house.center.z - house.depth / 2 && trianglePosition.x < 30)
+                        ) {
                         for (var tree_partner = 0; tree_partner < 2; tree_partner++) {
                             cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
                             var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
@@ -2967,6 +2984,8 @@ class Terrain {
 
         console.log("clustering " + clusters.length + " cliffs clusters")
 
+
+
         clusters.forEach(cluster => {
             console.log("this cluster has " + cluster.length + " triangles")
             var cliffGeometry = new THREE.BufferGeometry()
@@ -3021,9 +3040,10 @@ class Terrain {
 
                 // Create the material with the texture
                 const material = new THREE.MeshBasicMaterial({
-                    // map: rockwallTexture,
+                    // map: CYPRESSBRANCH,
                     color: new THREE.Color(Math.random(), Math.random(), Math.random()),
                     side: THREE.DoubleSide,
+                    transparent: false,
                     wireframe: false
                 });
 
@@ -3038,11 +3058,9 @@ class Terrain {
 
                 triangle.normal = normal;
 
-                this.cliffs.push(triangle);
+                this.cliffs.push(mesh);
 
                 console.log("creating a cliff cluster!")
-
-                scene.add(mesh);
             });
             // cliffGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(points), 3))
             // cliffGeometry.computeVertexNormals()
@@ -3126,6 +3144,15 @@ class Terrain {
                     lathe.rotation.y = 0
                 }
                 lathe.needsUpdate = true
+            }
+        });
+
+         this.cliffs.forEach(cliff => {
+            var pos = this.getTriangleCenter(cliff.triangle)
+            if (cliff.parent && !isInSOP(pos, sopCenter, this.sop.cliffs)) {
+                scene.remove(cliff);
+            } else if (!cliff.parent && isInSOP(pos, sopCenter, this.sop.cliffs)) {
+                scene.add(cliff);
             }
         });
 
@@ -3646,11 +3673,11 @@ class UserController {
             let minDistance = .5;
             let intersectionNormal = null;
 
-            terrain.cliffs.forEach(cliffTriangle => {
+            terrain.cliffs.forEach(cliff => {
 
-                const a = cliffTriangle.a;
-                const b = cliffTriangle.b;
-                const c = cliffTriangle.c;
+                const a = cliff.triangle.a;
+                const b = cliff.triangle.b;
+                const c = cliff.triangle.c;
 
                 const intersectionPoint = new THREE.Vector3();
 
@@ -3661,7 +3688,7 @@ class UserController {
 
                     if (distance < minDistance) {
                         minDistance = distance;
-                        closestIntersection = { normal: cliffTriangle.normal, point: intersects }
+                        closestIntersection = { normal: cliff.triangle.normal, point: intersects }
                     }
                 }
             });
