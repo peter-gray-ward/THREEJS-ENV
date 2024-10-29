@@ -587,7 +587,7 @@ function colorshade(rgb) {
 }
 
 class Sky {
-    time = Math.PI * 2 - 0.1
+    time = Math.PI - 0.1
     constructor(user) {
         this.counter = 0;
         this.user = user;
@@ -689,8 +689,8 @@ class Sky {
                 if (y > highestY) highestY = y;
 
                 // Lerp colors from sky blue to white based on the height (closer to horizon = more white)
-                var horizonFactor = Math.pow(Math.abs(y / radius), .35);  // 0 at horizon, 1 at top
-                var skyColor = new THREE.Color(0x00f0ff);  // Sky blue color
+                var horizonFactor = Math.pow(Math.abs(y / radius), 0.3);  // 0 at horizon, 1 at top
+                var skyColor = new THREE.Color(0xbde9ff);  // Sky blue color
                 var white = new THREE.Color(0xffffff);  // White at horizon
                 var color = new THREE.Color().lerpColors(white, skyColor, horizonFactor);  // Interpolate color
 
@@ -721,79 +721,220 @@ class Sky {
         scene.add(pointCloud);  // Add the point cloud to the scene
     }
 
+
+    // update() {
+    //     if (this.time > Math.PI * 2) {
+    //         this.time = 0;
+    //     }
+
+    //     var skyColor = new THREE.Color(0xbde9ff);
+    //     // Sun intensity peaks at noon and decreases to zero at sundown (Math.PI) and midnight (2 * Math.PI)
+    //     this.sun.intensity = Math.max(0, Math.sin(this.time));
+
+    //     this.time += 0.001;  // Adjust for cycle speed
+
+    //     // Calculate sun's position based on the time
+    //     var sunX = (this.sceneRadius * 0.95) * Math.cos(this.time);  // Moves along the x-axis
+    //     var sunY = (this.sceneRadius * 0.95) * Math.sin(this.time);  // Rises and falls along the y-axis
+    //     var sunZ = 0;
+
+    //     this.sun.position.set(sunX, sunY, sunZ);
+    //     this.sphere.position.set(sunX, sunY, sunZ);  // Optional visualization of the sun
+
+    //     // Iterate through the sky planes and update colors based on sun position and intensity
+    //     for (var i = 0; i < this.sky.length; i++) {
+            
+
+    //         var skyTheta = this.sky[i].theta;
+    //         var skyPhi = this.sky[i].phi;
+
+    //         // Calculate angular difference for intensity
+    //         var thetaDifference = Math.abs(this.time - skyTheta);
+    //         var phiDifference = Math.abs(2 * Math.PI - skyPhi);
+    //         thetaDifference = Math.min(thetaDifference, Math.PI * 2 - thetaDifference);
+
+    //         var intensity = Math.max(0, Math.cos(thetaDifference));
+
+    //         // Define colors for different times of day
+    //         var colorNight = new THREE.Color(0x001f3f);   // Dark night blue
+    //         var colorDawn = new THREE.Color(0xff4500);    // Dawn orange
+    //         var colorSunrise = new THREE.Color(0xff6347); // Sunrise red-orange
+    //         var colorDay = new THREE.Color(0x87ceeb);     // Daylight sky blue
+    //         var colorDusk = new THREE.Color(0xff4500);    // Dusk orange
+
+    //         // Calculate altitude factor for sunrise and sunset colors
+    //         let sunAltitudeFactor = Math.max(0, Math.sin(this.time));  // 1 at horizon, 0 at zenith
+    //         let color;
+    //         const skyDay = new THREE.Color(0xbde9ff);
+    //         const horizonDay = new THREE.Color(0xffffff);
+
+    //         const skyDawnDusk = new THREE.Color(0x74c1e8);
+    //         const horizonDawnDusk = new THREE.Color(0xffc0cb); // Light pink
+
+    //         const skyNight = new THREE.Color(0x001f3f);
+
+    //         // Set transitionFactor (0 = day, 1 = dawn/dusk, 2 = night)
+    //         let transitionFactor = (
+    //             this.time > Math.PI * 2 - Math.PI / 16 || this.time < Math.PI / 16
+    //         ) ? 1 : (
+    //             this.time < Math.PI ? 0 : 2
+    //         )
+
+    //         for (let i = 0; i < this.sky.length; i++) {
+    //             let x = this.sky[0].geometry.attributes.position.getX(i);
+    //             let y = this.sky[0].geometry.attributes.position.getY(i);
+    //             let z = this.sky[0].geometry.attributes.position.getZ(i);
+    //             let skyColor, horizonColor;
+    //             let distanceToSun = new THREE.Vector3(x, y, z).distanceTo(this.sun.position);
+
+    //             if (transitionFactor < 1) {
+    //                 // Day to dawn/dusk transition
+    //                 skyColor = new THREE.Color().lerpColors(skyDay, skyDawnDusk, transitionFactor);
+    //                 horizonColor = new THREE.Color().lerpColors(horizonDay, horizonDawnDusk, transitionFactor);
+    //             } else if (transitionFactor < 2) {
+    //                 // Dawn/dusk to night transition
+    //                 skyColor = new THREE.Color().lerpColors(skyDawnDusk, skyNight, transitionFactor - 1);
+    //                 horizonColor = new THREE.Color().lerpColors(horizonDawnDusk, skyNight, transitionFactor - 1);
+    //             } else {
+    //                 // Night
+    //                 skyColor = skyNight;
+    //                 horizonColor = skyNight; // No horizon effect at night
+    //             }
+
+    //             // Retain horizon effect based on the horizon factor of each vertex
+    //             let vertexHorizonFactor = Math.pow(Math.abs(this.sky[i].position.y / this.sceneRadius), 0.3);
+    //             let vertexColor
+
+    //             if (this.sky[i].position.distanceTo(this.sun.position) < 100) {
+    //                 vertexColor = new THREE.Color().lerpColors(horizonColor, new THREE.Color(0xffffff), vertexHorizonFactor);
+    //             } else {
+    //                 vertexColor = new THREE.Color().lerpColors(horizonColor, skyColor, vertexHorizonFactor);
+    //             }
+
+    //             // Update sky vertex color
+    //             this.sky[i].material.color.copy(vertexColor);
+    //             this.sky[i].material.needsUpdate = true;
+    //         }
+
+
+
+
+    //         // this.sky[i].material.color.copy(color);
+    //         // this.sky[i].material.needsUpdate = true;
+    //     }
+    // }
+
     update() {
-    if (this.time > Math.PI * 2) {
-        this.time = 0;
-    }
-
-    // Sun intensity peaks at noon and decreases to zero at sundown (Math.PI) and midnight (2 * Math.PI)
-    this.sun.intensity = Math.max(0, Math.sin(this.time));
-
-    this.time += 0.01;  // Adjust for cycle speed
-
-    // Calculate sun's position based on the time
-    var sunX = (this.sceneRadius * 0.95) * Math.cos(this.time);  // Moves along the x-axis
-    var sunY = (this.sceneRadius * 0.95) * Math.sin(this.time);  // Rises and falls along the y-axis
-    var sunZ = 0;
-
-    this.sun.position.set(sunX, sunY, sunZ);
-    this.sphere.position.set(sunX, sunY, sunZ);  // Optional visualization of the sun
-
-    // Iterate through the sky planes and update colors based on sun position and intensity
-    for (var i = 0; i < this.sky.length; i++) {
-        var skyTheta = this.sky[i].theta;
-        var skyPhi = this.sky[i].phi;
-
-        // Calculate angular difference for intensity
-        var thetaDifference = Math.abs(this.time - skyTheta);
-        var phiDifference = Math.abs(2 * Math.PI - skyPhi);
-        thetaDifference = Math.min(thetaDifference, Math.PI * 2 - thetaDifference);
-
-        var intensity = Math.max(0, Math.cos(thetaDifference));
-
-        // Define colors for different times of day
-        var colorNight = new THREE.Color(0x001f3f);   // Dark night blue
-        var colorDawn = new THREE.Color(0xff4500);    // Dawn orange
-        var colorSunrise = new THREE.Color(0xff6347); // Sunrise red-orange
-        var colorDay = new THREE.Color(0x87ceeb);     // Daylight sky blue
-        var colorDusk = new THREE.Color(0xff4500);    // Dusk orange
-
-        // Calculate altitude factor for sunrise and sunset colors
-        let sunAltitudeFactor = Math.max(0, Math.sin(this.time));  // 1 at horizon, 0 at zenith
-        let color;
-
-        if (this.time < Math.PI / 16) {
-            // Early dawn transition (night to red-orange sunrise, intensified near horizon)
-            color = new THREE.Color().lerpColors(colorNight, colorSunrise, (this.time / (Math.PI / 16)) * sunAltitudeFactor);
-        } else if (this.time < Math.PI / 9) {
-            // Sunrise transition (red-orange to daylight blue, intensified near horizon)
-            color = new THREE.Color().lerpColors(colorSunrise, colorDay, ((this.time - Math.PI / 16) / ((Math.PI / 9) - (Math.PI / 16))) * sunAltitudeFactor);
-        } else if (this.time < Math.PI / 2) {
-            // Mid-morning to noon (daylight blue)
-            color = new THREE.Color().lerpColors(colorDay, new THREE.Color("pink"), (this.time - Math.PI / 9) / ((Math.PI / 2) - (Math.PI / 9)));
-        } else if (this.time < Math.PI - Math.PI / 16) {
-            // Afternoon (daylight blue to pinkish dusk)
-            color = new THREE.Color().lerpColors(new THREE.Color("pink"), colorDay, (this.time - Math.PI / 2) / ((Math.PI - Math.PI / 16) - (Math.PI / 2)));
-        } else if (this.time < Math.PI && this.time > Math.PI - Math.PI / 16) {
-            // Sunset transition (daylight to dusk orange, intensified near horizon)
-            color = new THREE.Color().lerpColors(colorDay, colorDusk, ((this.time - (Math.PI - Math.PI / 16)) / (Math.PI / 16)) * sunAltitudeFactor);
-        } else if (this.time < Math.PI + Math.PI / 16) {
-            // Dusk transition (dusk orange to dark night, intensified near horizon)
-            color = new THREE.Color().lerpColors(colorDusk, colorNight, ((this.time - Math.PI) / (Math.PI / 16)) * sunAltitudeFactor);
-        } else if (this.time < Math.PI + Math.PI / 9) {
-            // Late dusk to full night (final transition to dark blue night)
-            color = new THREE.Color().lerpColors(colorDusk, colorNight, (this.time - (Math.PI + Math.PI / 16)) / ((Math.PI / 9) - (Math.PI / 16)));
-        } else {
-            // Full night
-            color = colorNight;
+        if (this.time > Math.PI * 2) {
+            this.time = 0;
         }
 
+        // Update the sun's position based on time
+        var sunX = (this.sceneRadius * 0.95) * Math.cos(this.time);
+        var sunY = (this.sceneRadius * 0.95) * Math.sin(this.time);
+        var sunZ = 0;
+        this.sun.position.set(sunX, sunY, sunZ);
+        this.sphere.position.set(sunX, sunY, sunZ);  // Optional visualization of the sun
+
+        // Base colors for each sky state
+        const skyDay = new THREE.Color(0xbde9ff);
+        const skyDawnDusk = new THREE.Color(0x74c1e8);
+        const skyNight = new THREE.Color(0x001f3f);
+        const horizonDay = new THREE.Color(0xffffff);
+        const horizonDawnDusk = new THREE.Color(0xffc0cb);
+
+        // Set transition factor based on time (0 for day, 1 for dawn/dusk, 2 for night)
+        let transitionFactor = (
+            (
+                this.time > Math.PI * 2 - Math.PI / 16
+                || this.time < Math.PI / 16
+            ) ||
+            (
+                this.time < Math.PI + Math.PI / 16
+                && this.time > Math.PI - Math.PI / 16
+            )
+        ) ? 1 : (
+            this.time < Math.PI ? 0 : 2
+        )
 
 
-        this.sky[i].material.color.copy(color);
-        this.sky[i].material.needsUpdate = true;
+        // Access geometry's color attribute to update individual vertex colors
+        const colorAttribute = this.sky[0].geometry.attributes.color;
+
+
+        for (let i = 0; i < colorAttribute.count; i++) {
+            // Retrieve position of each vertex
+            let x = this.sky[0].geometry.attributes.position.getX(i);
+            let y = this.sky[0].geometry.attributes.position.getY(i);
+            let z = this.sky[0].geometry.attributes.position.getZ(i);
+
+            // Calculate angular position in the x direction
+            let theta = Math.atan2(y, x); // Angle of the point in the horizontal plane
+            let sunsetAngle = Math.PI / 8; // Define the center angle for sunset/sunrise effect
+            let edgeFalloff = sunsetAngle * 1.5; // Define a wider range for gradual blending
+
+            // Define base sky and horizon colors based on transitionFactor
+            let skyColor, horizonColor;
+            if (transitionFactor < 1) {
+                skyColor = new THREE.Color().lerpColors(skyDay, skyDawnDusk, transitionFactor);
+                horizonColor = new THREE.Color().lerpColors(horizonDay, horizonDawnDusk, transitionFactor);
+            } else {
+                skyColor = new THREE.Color().lerpColors(skyDawnDusk, skyNight, transitionFactor - 1);
+                horizonColor = new THREE.Color().lerpColors(horizonDawnDusk, skyNight, transitionFactor - 1);
+            }
+
+            // Horizon effect: blend between horizon and sky color based on height
+            let horizonFactor = Math.pow(Math.abs(y / this.sceneRadius), 0.5);
+            let baseColor = new THREE.Color().lerpColors(horizonColor, skyColor, horizonFactor);
+
+            // Determine if vertex is within the sunset zone with a gradual transition
+            let thetaOffset = Math.abs(theta) - sunsetAngle;
+            let isNearSunsetZone = transitionFactor === 1 && Math.abs(theta) < edgeFalloff;
+
+            let sunsetBlendFactor = isNearSunsetZone
+                ? Math.max(0, 1 - (thetaOffset / (edgeFalloff - sunsetAngle)))
+                : 0;
+
+            // Blend between sunset color and base color within the sunset zone
+            let sunColors = transitionFactor == 1 ? [
+                new THREE.Color(0xffc099),  // Soft yellow
+                baseColor
+            ] : [
+                horizonColor,
+                skyColor
+            ]
+
+            let twilightspan = 300
+            let distanceFromCenter = new THREE.Vector3(x, y, z).distanceTo(this.sun.position);
+            let distanceFactor = Math.min(distanceFromCenter / twilightspan, 1); // Normalize to range [0, 1]
+            let colorIndex = Math.floor(distanceFactor * (sunColors.length - 1));
+            let nextColorIndex = Math.min(colorIndex + 1, sunColors.length - 1);
+            let blendFactor = distanceFactor * (sunColors.length - 1) - colorIndex;
+
+            let positionFactor = (Math.sin(x * 0.1 + y * 0.1 + z * 0.1) + 1) / 2; // Position-based blending factor (0 to 1)
+            // let colorIndex = Math.abs(Math.floor((x + y + z) * 0.1) % sunColors.length);
+            // let nextColorIndex = (colorIndex + 1) % sunColors.length;
+            let sunEffectColor = new THREE.Color(sunColors[Math.floor(Math.random() * sunColors.length)])
+            let vertexColor = new THREE.Color().lerpColors(sunColors[colorIndex], sunColors[nextColorIndex], blendFactor);
+
+            // Additional blending with white if the vertex is very close to the sun
+            let distanceToSun = new THREE.Vector3(x, y, z).distanceTo(this.sun.position);
+            let dist = transitionFactor == 1 ? twilightspan : 80
+            vertexColor = distanceToSun < dist
+                ? new THREE.Color().lerpColors(vertexColor, transitionFactor == 1 ? new THREE.Color(0xffffff) : baseColor, 1 - (distanceToSun / dist))
+                : baseColor;
+
+            // Set the color for this vertex in the color attribute
+            colorAttribute.setXYZ(i, vertexColor.r, vertexColor.g, vertexColor.b);
+        }
+
+        // Update the color attribute to apply changes
+        colorAttribute.needsUpdate = true;
+
+        // Increment time for next update
+        this.time += 0.005;
     }
-}
+
 
 
 
@@ -1858,80 +1999,6 @@ class Terrain {
 
       
     }
-
-
-    // createFlora(x, Y, z, treeKind) {
-    //     const tree = {
-    //         cypress: {
-    //             height: randomInRange(25, 40),
-    //             width: randomInRange(1, 1.9),
-    //             colors: CYPRESSGREENS, // Cypress leaf colors
-    //             trimmed: Math.random() < 0.5 ? true : false,
-    //             branch: {
-    //                 map: CYPRESSBRANCH
-    //             },
-    //             trunk: {
-    //                 map: TRUNKTEXTURE
-    //             }
-    //         }
-    //     };
-
-    //     const twoPi = Math.PI * 2;
-    //     const colorArray = tree[treeKind].colors;
-    //     const transparent = Math.random() < 0.3
-
-    //     // Create an instanced mesh for the leaves
-    //     const instanceCount = Math.floor(tree[treeKind].height * 7); // Adjust count as needed
-    //     const instancedMesh = new THREE.InstancedMesh(
-    //         getCachedSphereGeometry(tree[treeKind].width / 2, tree[treeKind].branch.map, transparent),
-    //         getCachedLeafMaterial(colorArray[Math.floor(Math.random() * colorArray.length)], tree[treeKind].branch.map, transparent),
-    //         instanceCount
-    //     );
-
-    //     // Populate instanced mesh with randomized transformations
-    //     let index = 0;
-    //     for (let y = Y; y < Y + tree[treeKind].height * 2; y  += 1) {
-    //         const progress = (y - Y) / tree[treeKind].height;
-    //         let radiusAtY = (1 - progress) * (tree[treeKind].width / 2) * randomInRange(.83, 2.25);
-
-    //         if (radiusAtY < 0.5) radiusAtY = 0.5
-
-    //         for (let p = 0; p < twoPi && index < instanceCount; p += randomInRange(0.6, 1.0)) {
-    //             const matrix = new THREE.Matrix4();
-    //             const randomAngle = randomInRange(-0.4, 0.4);
-    //             const randomHeightAdjustment = randomInRange(-0.3, 0.3);
-
-    //             const xPos = x + (radiusAtY * Math.cos(p + randomAngle)) + randomInRange(-.75, .75);
-    //             const zPos = z + (radiusAtY * Math.sin(p + randomAngle)) + randomInRange(-.75, .75);
-    //             const yPos = y + randomHeightAdjustment;
-
-    //             matrix.setPosition(xPos, yPos, zPos);
-    //             matrix.scale(new THREE.Vector3(radiusAtY, radiusAtY, radiusAtY));
-    //             instancedMesh.setMatrixAt(index++, matrix);
-    //         }
-    //     }
-    //     instancedMesh.instanceMatrix.needsUpdate = true;
-    //     instancedMesh.castShadow = true
-    //     instancedMesh.receiveShadow = true
-    //     // scene.add(instancedMesh);
-
-    //     // Create the trunk
-    //     const trunkGeometry = new THREE.CylinderGeometry(.05, randomInRange(0.1, 0.5), tree[treeKind].height, 8);
-    //     const trunkMaterial = new THREE.MeshStandardMaterial({ 
-    //         // color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
-    //         map:  TRUNKTEXTURE,
-    //         transparent: false
-    //     });
-    //     const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-    //     trunk.position.set(x, Y, z);
-    //     trunk.branches = []
-    //     trunk.castShadow = true
-    //     trunk.receiveShadow = true
-
-    //     // scene.add(trunk);
-
-    //     return new Terrain.Tree(trunk, instancedMesh)
-    // }
 
     createFlora(x, Y, z, treeKind) {
         const tree = {
@@ -3723,6 +3790,15 @@ class View {
         // console.log(VM);
 
         window.terrain = new Terrain(VM);
+        /* { 
+            cliffs: [],
+            trees: [],
+            grounds: [],
+            grasses: [],
+            water:  {},
+            updateTerrain: () => {}
+        } */
+        
 
         console.log("added terrain")
 
@@ -3734,14 +3810,14 @@ class View {
 
         console.log('added sky')
 
-        window.terrain.setCamera(window.user.camera);
+        // window.terrain.setCamera(window.user.camera);
 
 
         var castleBaseCenter = new THREE.Vector3(0, 0, 0)
 
         window.castle = new Castle(castleBaseCenter);
 
-        window.castle.parts.push(...terrain.paintings)
+        // window.castle.parts.push(...terrain.paintings)
 
         console.log('added castle')
 
@@ -3849,7 +3925,6 @@ window.Animate = function() {
 
         window.sky.update()
         window.terrain.updateTerrain()
-        UndulateWater() 
         window.user.handleMovement()
        
 
