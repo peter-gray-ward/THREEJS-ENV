@@ -587,7 +587,7 @@ function colorshade(rgb) {
 }
 
 class Sky {
-    time = Math.PI - 0.1
+    time = Math.PI * 2 - 0.03
     constructor(user) {
         this.counter = 0;
         this.user = user;
