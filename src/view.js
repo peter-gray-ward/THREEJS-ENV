@@ -921,7 +921,7 @@ class Sky {
             let distanceToSun = new THREE.Vector3(x, y, z).distanceTo(this.sun.position);
             let dist = transitionFactor == 1 ? twilightspan : 80
             vertexColor = distanceToSun < dist
-                ? new THREE.Color().lerpColors(vertexColor, transitionFactor == 1 ? new THREE.Color(0xffffff) : baseColor, 1 - (distanceToSun / dist))
+                ? new THREE.Color().lerpColors(transitionFactor == 1 ? vertexColor : baseColor, new THREE.Color(0xffffff), 1 - (distanceToSun / dist))
                 : baseColor;
 
             // Set the color for this vertex in the color attribute
@@ -3926,6 +3926,7 @@ window.Animate = function() {
         window.sky.update()
         window.terrain.updateTerrain()
         window.user.handleMovement()
+        UndulateWater()
        
 
         window.renderer.render(window.scene, window.user.camera);
