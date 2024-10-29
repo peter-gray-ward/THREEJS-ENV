@@ -38,10 +38,10 @@ class Model:
                 'noiseHeight': t,
                 'segments': 50,
                 'sop': {
-                    'trees': 100,
+                    'trees': 70,
                     'grasses': t / 3,
                     'grounds': 9999,
-                    'cliffs': 30
+                    'cliffs': 50
                 },
                 'grasses': [],
                 'grounds': [],
@@ -141,6 +141,11 @@ flowers = [
     "Bouvardia", "Bleeding Heart", "Ranunculus", "Yarrow", "Cosmos"
 ]
 
+cliffs = [
+    "cliff texture", "rock texture", "moss rock", "rock moss",
+    "rock face", "cliff texture"
+]
+
 
 @app.route('/')
 def index():
@@ -159,69 +164,47 @@ def favicon():
 def custom_static(filename):
     return send_file('static/lib', filename, mimetype='application/javascript')
 
-@app.route('/random-image', methods=('GET',))
+@app.route('/random-cliff-image', methods=('GET',))
 def random_image():
     with open('./art-images.json', 'r') as file:
         arts = json.load(file)
         return random.choice(arts)
 
-# @app.route('/random-image', methods=('GET',))
-# def random_image_endpoint():
-#     base_url = "https://pixabay.com/api/"
-#     api_key = "25483695-93658ed46b8876fc2d6419379"
+@app.route('/seed-random-image', methods=('GET',))
+def random_image_endpoint():
+    base_url = "https://pixabay.com/api/"
+    api_key = "25483695-93658ed46b8876fc2d6419379"
 
-#     # Set up query parameters
-#     params = {
-#         "key": api_key,
-#         "q": random.choice([
-#             "da Vinci",
-#             "Michelangelo",
-#             "van Gogh",
-#             "Picasso",
-#             "Monet",
-#             "Dalí",
-#             "Kahlo",
-#             "Rembrandt",
-#             "Matisse",
-#             "Pollock",
-#             "Warhol",
-#             "O'Keeffe",
-#             "Manet",
-#             "Klimt",
-#             "Cézanne",
-#             "Degas",
-#             "Chagall",
-#             "Rodin",
-#             "Magritte",
-#             "Renoir"
-#         ]
-#         ),
-#         "image_type": "photo",
-#         "pretty": "true"
-#     }
+    # Set up query parameters
+    params = {
+        "key": api_key,
+        "q": random.choice(cliffs),
+        "image_type": "photo",
+        "pretty": "true"
+    }
 
-#     # Encode the parameters and create the URL
-#     url = f"{base_url}?{urllib.parse.urlencode(params)}"
+    # Encode the parameters and create the URL
+    url = f"{base_url}?{urllib.parse.urlencode(params)}"
 
-#     # Make the request and parse the response
-#     try:
-#         with urllib.request.urlopen(url) as response:
-#             data = json.loads(response.read().decode())
+    # Make the request and parse the response
+    try:
+        with urllib.request.urlopen(url) as response:
+            data = json.loads(response.read().decode())
 
-#             image = random.choice(data['hits'])
-#             image = image['largeImageURL']
+            image = random.choice(data['hits'])
+            image = image['largeImageURL']
 
-#             with open('./art-images.json', 'r') as file:
-#                 art_images = json.load(file)
-#                 art_images.append(image)
+            with open('./art-images.json', 'r') as file:
+                art_images = json.load(file)
+                art_images.append(image)
             
-#                 with open('./art-images.json', 'w') as file:
-#                     json.dump(art_images, file, indent=2)
+                with open('./art-images.json', 'w') as file:
+                    json.dump(art_images, file, indent=2)
 
-#             return image
-#     except urllib.error.URLError as e:
-#         print(f"Error: {e.reason}")
-#         return None
+            return image
+    except urllib.error.URLError as e:
+        print(f"Error: {e.reason}")
+        return None
 
 @app.route('/images/<path:subpath>')
 def get_image(subpath):

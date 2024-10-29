@@ -9,6 +9,11 @@ import { CSG } from '/lib/CSG.js'
 import { SUBTRACTION, Brush, Evaluator } from '/lib/three-bvh-csg.js';
 import ViewModel from "/src/view-model.js";
 
+window.CONCRETE = new THREE.TextureLoader().load("/images/seraphic-metallic-texture-polished-concrete.avif", texture => {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(11, 11);
+})
 window.GROUND2 = new THREE.TextureLoader().load("/images/ground-2.JPG",texture => {
     texture.wrapS = THREE.RepeatWrapping
     texture.wrapT = THREE.RepeatWrapping
@@ -1122,11 +1127,7 @@ class Castle {
         const foundation = new THREE.Mesh(
             new THREE.BoxGeometry(house.width, house.foundation.height, house.depth),
                 new THREE.MeshStandardMaterial({
-                    map: new THREE.TextureLoader().load("/images/seraphic-metallic-texture-polished-concrete.avif", texture => {
-                        texture.wrapS = THREE.RepeatWrapping;
-                        texture.wrapT = THREE.RepeatWrapping;
-                        texture.repeat.set(11, 11);
-                    }),
+                    map: CONCRETE,
                     side: THREE.DoubleSide
                 }),
                 
@@ -2255,7 +2256,7 @@ class Terrain {
 
                 var inTheCove = (v.distanceTo(new THREE.Vector3(0,0,0) > 36) || (Math.random() < 0.3))
                     && !inField
-                    && (v.x > 30 || v.z > 30)
+                    && (v.x > 30 || (v.z < 30 && v.x > 0))
                     && !isIn(v, 'dock')
                 //v.x >= landscape.field.width / 2 && v.z >= -landscape.field.depth && v.z <= landscape.field.depth / 3
                 if (isIn(v, 'sideyard')) {
@@ -2269,7 +2270,7 @@ class Terrain {
                 }
 
                 if (inTheCove) {
-
+                    v.y = -20
 
                     if (v.x > maxX) {
                         maxX = v.x
@@ -2458,7 +2459,7 @@ class Terrain {
 
                     /* TERRAIN FEATURES */
                     const CLIFF = Math.abs(triangleMesh.normal.y) < 0.4 && (Math.abs(triangleMesh.normal.x) > 0.4 || Math.abs(triangleMesh.normal.z) > 0.4)
-                        || trianglePosition.x > 100 || trianglePosition.z > 100
+                        // || trianglePosition.x > 100 || trianglePosition.z > 100
                     const YARD = isIn(trianglePosition, 'yard')
                     let cypressTreePosition
 
@@ -2496,17 +2497,17 @@ class Terrain {
                     const SIDEYARD = isIn(trianglePosition, 'sideyard')
                     const BACKYARD = isIn(trianglePosition, 'backyard')
                     if (
-                            ((SIDEYARD && Math.random() < 0.85) || (BACKYARD && Math.random() < 0.1))
-                            && (trianglePosition.z < house.center.z - house.depth / 2 && trianglePosition.x < 30)
+                            ((SIDEYARD && Math.random() < 0.1) || (BACKYARD && Math.random() < 0.05))
+                            // && (trianglePosition.z < house.center.z - house.depth / 2 && trianglePosition.x < 30)
                         ) {
-                        for (var tree_partner = 0; tree_partner < 2; tree_partner++) {
+                        // for (var tree_partner = 0; tree_partner < 2; tree_partner++) {
                             cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
                             var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
                            // Assuming llod is an array or typed array containing the position data
                             // cypressTree.foliage.geometry.setAttribute('position', new THREE.Float32BufferAttribute(cypressTree.foliage.geometry.llod, 3));
 
                             this.trees.push(cypressTree)
-                        }
+                        // }
                     }
 
                     // if (!CLIFF && !SIDEYARD && Math.random() < 0.03) {
@@ -2999,9 +3000,20 @@ class Terrain {
         // console.log("clustering " + clusters.length + " cliffs clusters")
 
 
-
+        var cluster_color = new THREE.Color(Math.random(), Math.random(), Math.random())
+        // const cluster_image = new THREE.TextureLoader().load("/images/dry-rough-rock-face-texture.jpg")
         clusters.forEach(cluster => {
-            // console.log("this cluster has " + cluster.length + " triangles")
+            const cluster_image = new THREE.TextureLoader().load("/images/dry-rough-rock-face-texture.jpg", (texture) => {
+                // Randomly select an area of the texture
+                const zoomLevel = 3; // Adjust this value for more or less zoom
+                const randomX = Math.random() * (1 - 1 / zoomLevel);
+                const randomY = Math.random() * (1 - 1 / zoomLevel);
+
+                // Apply the offset and repeat to zoom into a specific part
+                texture.offset.set(randomX, randomY);
+                texture.repeat.set(zoomLevel, zoomLevel);
+                texture.needsUpdate = true;
+            });
             var cliffGeometry = new THREE.BufferGeometry()
             var points = []
             cluster.forEach(triangle => {
@@ -3054,8 +3066,8 @@ class Terrain {
 
                 // Create the material with the texture
                 const material = new THREE.MeshBasicMaterial({
-                    // map: CYPRESSBRANCH,
-                    color: new THREE.Color(Math.random(), Math.random(), Math.random()),
+                    map: cluster_image,
+                    // color: cluster_color,
                     side: THREE.DoubleSide,
                     transparent: false,
                     wireframe: false
@@ -3073,20 +3085,7 @@ class Terrain {
                 triangle.normal = normal;
 
                 this.cliffs.push(mesh);
-
-                // console.log("creating a cliff cluster!")
             });
-            // cliffGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(points), 3))
-            // cliffGeometry.computeVertexNormals()
-            // var cliff = new THREE.Mesh(cliffGeometry,
-            //     new THREE.MeshBasicMaterial({
-            //         color: new THREE.Color(Math.random(), Math.random(), Math.random()),
-            //         side: THREE.DoubleSide
-            //     })
-            // )
-            // cliff.position.y += 0.2
-            // this.cliffs.push(cliff)
-            // scene.add(cliff)
         });
     }
 
