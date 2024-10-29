@@ -594,9 +594,10 @@ class Sky {
         this.sceneRadius = 550;
         this.full_circle = 2 * Math.PI;
 
-        // this.hemisphereLight = new THREE.AmbientLight(0xfefeff, .02); // Sky and ground color
-        // this.hemisphereLight.position.set(0, 0, 0);
-        // scene.add(this.hemisphereLight);
+        this.starLight = new THREE.DirectionalLight(0xfefeff,  0); // Sky and ground color
+        this.starLight.position.set(0, sceneRadius, 0);
+        this.starLight.lookAt(0, 0, 0)
+        scene.add(this.starLight);
 
         
         this.sun = new THREE.DirectionalLight(0xffffff, 3);
@@ -721,109 +722,6 @@ class Sky {
         scene.add(pointCloud);  // Add the point cloud to the scene
     }
 
-
-    // update() {
-    //     if (this.time > Math.PI * 2) {
-    //         this.time = 0;
-    //     }
-
-    //     var skyColor = new THREE.Color(0xbde9ff);
-    //     // Sun intensity peaks at noon and decreases to zero at sundown (Math.PI) and midnight (2 * Math.PI)
-    //     this.sun.intensity = Math.max(0, Math.sin(this.time));
-
-    //     this.time += 0.001;  // Adjust for cycle speed
-
-    //     // Calculate sun's position based on the time
-    //     var sunX = (this.sceneRadius * 0.95) * Math.cos(this.time);  // Moves along the x-axis
-    //     var sunY = (this.sceneRadius * 0.95) * Math.sin(this.time);  // Rises and falls along the y-axis
-    //     var sunZ = 0;
-
-    //     this.sun.position.set(sunX, sunY, sunZ);
-    //     this.sphere.position.set(sunX, sunY, sunZ);  // Optional visualization of the sun
-
-    //     // Iterate through the sky planes and update colors based on sun position and intensity
-    //     for (var i = 0; i < this.sky.length; i++) {
-            
-
-    //         var skyTheta = this.sky[i].theta;
-    //         var skyPhi = this.sky[i].phi;
-
-    //         // Calculate angular difference for intensity
-    //         var thetaDifference = Math.abs(this.time - skyTheta);
-    //         var phiDifference = Math.abs(2 * Math.PI - skyPhi);
-    //         thetaDifference = Math.min(thetaDifference, Math.PI * 2 - thetaDifference);
-
-    //         var intensity = Math.max(0, Math.cos(thetaDifference));
-
-    //         // Define colors for different times of day
-    //         var colorNight = new THREE.Color(0x001f3f);   // Dark night blue
-    //         var colorDawn = new THREE.Color(0xff4500);    // Dawn orange
-    //         var colorSunrise = new THREE.Color(0xff6347); // Sunrise red-orange
-    //         var colorDay = new THREE.Color(0x87ceeb);     // Daylight sky blue
-    //         var colorDusk = new THREE.Color(0xff4500);    // Dusk orange
-
-    //         // Calculate altitude factor for sunrise and sunset colors
-    //         let sunAltitudeFactor = Math.max(0, Math.sin(this.time));  // 1 at horizon, 0 at zenith
-    //         let color;
-    //         const skyDay = new THREE.Color(0xbde9ff);
-    //         const horizonDay = new THREE.Color(0xffffff);
-
-    //         const skyDawnDusk = new THREE.Color(0x74c1e8);
-    //         const horizonDawnDusk = new THREE.Color(0xffc0cb); // Light pink
-
-    //         const skyNight = new THREE.Color(0x001f3f);
-
-    //         // Set transitionFactor (0 = day, 1 = dawn/dusk, 2 = night)
-    //         let transitionFactor = (
-    //             this.time > Math.PI * 2 - Math.PI / 16 || this.time < Math.PI / 16
-    //         ) ? 1 : (
-    //             this.time < Math.PI ? 0 : 2
-    //         )
-
-    //         for (let i = 0; i < this.sky.length; i++) {
-    //             let x = this.sky[0].geometry.attributes.position.getX(i);
-    //             let y = this.sky[0].geometry.attributes.position.getY(i);
-    //             let z = this.sky[0].geometry.attributes.position.getZ(i);
-    //             let skyColor, horizonColor;
-    //             let distanceToSun = new THREE.Vector3(x, y, z).distanceTo(this.sun.position);
-
-    //             if (transitionFactor < 1) {
-    //                 // Day to dawn/dusk transition
-    //                 skyColor = new THREE.Color().lerpColors(skyDay, skyDawnDusk, transitionFactor);
-    //                 horizonColor = new THREE.Color().lerpColors(horizonDay, horizonDawnDusk, transitionFactor);
-    //             } else if (transitionFactor < 2) {
-    //                 // Dawn/dusk to night transition
-    //                 skyColor = new THREE.Color().lerpColors(skyDawnDusk, skyNight, transitionFactor - 1);
-    //                 horizonColor = new THREE.Color().lerpColors(horizonDawnDusk, skyNight, transitionFactor - 1);
-    //             } else {
-    //                 // Night
-    //                 skyColor = skyNight;
-    //                 horizonColor = skyNight; // No horizon effect at night
-    //             }
-
-    //             // Retain horizon effect based on the horizon factor of each vertex
-    //             let vertexHorizonFactor = Math.pow(Math.abs(this.sky[i].position.y / this.sceneRadius), 0.3);
-    //             let vertexColor
-
-    //             if (this.sky[i].position.distanceTo(this.sun.position) < 100) {
-    //                 vertexColor = new THREE.Color().lerpColors(horizonColor, new THREE.Color(0xffffff), vertexHorizonFactor);
-    //             } else {
-    //                 vertexColor = new THREE.Color().lerpColors(horizonColor, skyColor, vertexHorizonFactor);
-    //             }
-
-    //             // Update sky vertex color
-    //             this.sky[i].material.color.copy(vertexColor);
-    //             this.sky[i].material.needsUpdate = true;
-    //         }
-
-
-
-
-    //         // this.sky[i].material.color.copy(color);
-    //         // this.sky[i].material.needsUpdate = true;
-    //     }
-    // }
-
     update() {
         if (this.time > Math.PI * 2) {
             this.time = 0;
@@ -933,7 +831,9 @@ class Sky {
 
         if (this.time > Math.PI + Math.PI / 16 && this.time < Math.PI * 2 - Math.PI / 16) {
             this.sun.intensity = 0
+            this.starLight.intensity = 0
         } else {
+            this.starLight.intensity = 0.111
             this.sun.intensity = 3
         }
 
@@ -3871,11 +3771,13 @@ class View {
         // window.user.camera.position.set(33.953909365281795, 2.610000001490116, 23.053098469337314);
         window.user.camera.position.set(24, landscape.field.center.y + 10, 0)
 
+
         var time = new Date().getTime()
 
         var lookingInterval = setInterval(function() {
             window.user.camera.lookAt(
-                new THREE.Vector3(1000000, 0, 0)
+                sky.sphere.position
+                //new THREE.Vector3(1000000, 0, 0)
             )
             console.log('diff', new Date().getTime() - time)
             if (new Date().getTime() - time > 1000) {
