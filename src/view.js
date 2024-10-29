@@ -69,30 +69,23 @@ const boardwalk = {
         z: 0
     }
 }
-// Define the side yard boundaries extending from the house foundation
-var sideYardStartZ = house.center.z - house.foundation.depth / 2 - 50;  // Extend outwards on the -Z side
-var sideYardEndZ = house.center.z - house.foundation.depth / 2 - 5;    // Extend outwards on the +Z side
-var sideYardStartX = house.center.x - house.foundation.width / 2 - 30;  // Extend outwards on the -X side
-var sideYardEndX = house.center.x + house.foundation.width / 2 + 30;    // Extend outwards on the +X side
-var sideYardStartY = house.center.y - house.foundation.height / 2;      // Match house Y bounds
-var sideYardEndY = house.center.y + house.foundation.height / 2;        // Match house Y bounds
 
-// Function to check if point `v` is within the side yard boundaries
+
 function isIn(v, which) {
     switch (which) {
     case 'yard':
         return v.x > landscape.center.x - landscape.width / 2
             && v.x < landscape.center.x + landscape.width / 2
-            && v.z > landscape.center.z - landscape.width / 2
-            && v.z < landscape.center.z + landscape.width / 2
+            && v.z > landscape.center.z - landscape.depty / 2
+            && v.z < landscape.center.z + landscape.depty / 2
     case 'sideyard':
         return (
-            v.x >= sideYardStartX && 
-            v.x <= sideYardEndX &&
-            v.y >= sideYardStartY && 
-            v.y <= sideYardEndY &&
-            v.z >= sideYardStartZ && 
-            v.z <= sideYardEndZ
+            v.x >= (house.center.z - house.foundation.depth / 2 - 5) && 
+            v.x <= (house.center.x - house.foundation.width / 2 - 30) &&
+            v.y >= (house.center.y - house.foundation.height / 2) && 
+            v.y <= (house.center.y + house.foundation.height / 2) &&
+            v.z >= (house.center.z - house.foundation.depth / 2 - 50) && 
+            v.z <= (house.center.z - house.foundation.depth / 2 - 5)
         );
     case 'backyard':
         return (
@@ -105,7 +98,6 @@ function isIn(v, which) {
             && v.z > boardwalk.center.z - boardwalk.depth / 2
             && v.z < boardwalk.center.z + boardwalk.depth / 2
         )
-
     default:
         return false;
     }
@@ -595,13 +587,12 @@ function colorshade(rgb) {
 }
 
 class Sky {
-    time = 0.05
+    time = Math.PI * 2 - 0.1
     constructor(user) {
         this.counter = 0;
         this.user = user;
         this.sceneRadius = 550;
         this.full_circle = 2 * Math.PI;
-        this.time = 0;
 
         this.hemisphereLight = new THREE.AmbientLight(0xfefeff, .02); // Sky and ground color
         this.hemisphereLight.position.set(0, 0, 0);
@@ -698,7 +689,7 @@ class Sky {
                 if (y > highestY) highestY = y;
 
                 // Lerp colors from sky blue to white based on the height (closer to horizon = more white)
-                var horizonFactor = Math.abs(y / radius);  // 0 at horizon, 1 at top
+                var horizonFactor = Math.pow(Math.abs(y / radius), .35);  // 0 at horizon, 1 at top
                 var skyColor = new THREE.Color(0x00f0ff);  // Sky blue color
                 var white = new THREE.Color(0xffffff);  // White at horizon
                 var color = new THREE.Color().lerpColors(white, skyColor, horizonFactor);  // Interpolate color
@@ -731,215 +722,80 @@ class Sky {
     }
 
     update() {
-        if (this.time > Math.PI * 2) {
-            this.time = 0
-        }
-
-        if (this.time > Math.PI) {
-            this.sun.intensity = 0
-        } else {
-            this.sun.intensity = 2
-        }
-
-        this.time += 0.001
-
-        var sunTheta = this.time
-        var sunPhi = 2 * Math.PI
-        var sunX = (this.sceneRadius * .95) * Math.cos(this.time);  // Sun moves along the x-axis
-        var sunY = (this.sceneRadius * .95) * Math.sin(this.time);  // Sun rises and falls along the y-axis
-        var sunZ = 0;  // Sun remains at z = 0
-
-        // Update sun and sphere positions based on this movement
-        this.sun.position.set(sunX, sunY, sunZ);
-        this.sphere.position.set(sunX, sunY, sunZ);  // Optional sphere for visualizing the sun
-
-        for (var i = 0; i < this.sky.length; i++) {
-            var skyTheta = this.sky[i].theta;  // Azimuthal angle of the plane
-            var skyPhi = this.sky[i].phi;      // Polar angle of the plane
-
-            // Calculate the angular difference between the sun and the plane
-            var thetaDifference = Math.abs(sunTheta - skyTheta);
-            var phiDifference = Math.abs(sunPhi - skyPhi);
-
-            // Normalize the differences (wrap around at full circle)
-            thetaDifference = Math.min(thetaDifference, this.full_circle - thetaDifference);
-            phiDifference = Math.min(phiDifference, Math.PI - phiDifference);
-
-            // Calculate intensity based on angular difference
-            var angularDistance = thetaDifference + phiDifference;
-            var maxAngularDistance = Math.PI;  // Max possible distance on the dome
-            var intensity = 1 - (angularDistance / maxAngularDistance);
-
-            // Clamp intensity between 0 and 1
-            intensity = Math.max(0, Math.min(1, intensity));
-
-            // Define colors for sunrise transition (from dark to bright as the sun rises)
-            var colorNight = new THREE.Color(0x001f3f);  // Night sky (dark blue)
-            var colorDawn = new THREE.Color(0xff4500);   // Dawn (orange/red)
-            var colorMorning = new THREE.Color(0xffd700);  // Morning light (yellow)
-            var colorDay = new THREE.Color(0x87cefa);    // Daylight (light blue)
-
-            var sunAltitudeFactor = this.sun.position.y / this.sceneRadius;
-
-            // Blend colors based on the sun's altitude and intensity (sunrise effect)
-            let color = new THREE.Color();
-            if (this.time > Math.PI) {
-                // Night transition to dawn
-                color = new THREE.Color().lerpColors(colorNight, colorDawn, Math.max(0, intensity));
-            } else if (this.time > 0 && this.time < 0.1) {
-                // Dawn to morning transition
-                let dawnBlend = this.sun.position.y / (this.sceneRadius * 0.3);
-                color = new THREE.Color().lerpColors(
-                    new THREE.Color('pink'), 
-                    new THREE.Color('orange'), 
-                    dawnBlend);
-            } else {
-                // Morning to daylight transition
-                let dayBlend = (this.sun.position.y - this.sceneRadius * 0.3) / (this.sceneRadius * 0.7);
-                color = new THREE.Color().lerpColors(
-                    new THREE.Color('aliceblue'), 
-                    new THREE.Color('#9cebff'), 
-                    dayBlend);
-            }
-            this.sky[i].material.color.copy(color)
-
-            // Adjust the sky color based on the intensity and proximity to the horizon
-            var horizonThreshold = this.sceneRadius * 0.15;  // Adjust based on where the horizon should be
-
-            // if (Math.abs(this.sky[i].position.y) <= horizonThreshold) {
-            //     // Blend the color towards white near the horizon
-            //     var horizonBlendFactor = Math.abs(this.sky[i].position.y) / horizonThreshold;
-            //     var blendedColor = new THREE.Color().lerpColors(color, new THREE.Color(0xffffff), 1 - horizonBlendFactor);
-            //     this.sky[i].material.color.copy(blendedColor);  // Blend towards white near the horizon
-            // } else {
-            //     this.sky[i].material.color.copy(color);  // Use the interpolated color
-            // }
-
-            if (this.sun.position.y < 0) {
-                this.sky[i].material.transparent = true;
-                this.sky[i].material.opacity = 0.1;
-            } else {
-                this.sky[i].material.transparent = false;
-                this.sky[i].material.opacity = 1.0;
-            }
-
-            this.sky[i].material.needsUpdate = true;  // Ensure material is updated
-        }
+    if (this.time > Math.PI * 2) {
+        this.time = 0;
     }
 
-    updatev1() {
-        if (this.time > Math.PI * 2) {
-            this.time = 0
-        }
+    // Sun intensity peaks at noon and decreases to zero at sundown (Math.PI) and midnight (2 * Math.PI)
+    this.sun.intensity = Math.max(0, Math.sin(this.time));
 
-        if (this.time > Math.PI) {
-            this.sun.intensity = 0
+    this.time += 0.01;  // Adjust for cycle speed
+
+    // Calculate sun's position based on the time
+    var sunX = (this.sceneRadius * 0.95) * Math.cos(this.time);  // Moves along the x-axis
+    var sunY = (this.sceneRadius * 0.95) * Math.sin(this.time);  // Rises and falls along the y-axis
+    var sunZ = 0;
+
+    this.sun.position.set(sunX, sunY, sunZ);
+    this.sphere.position.set(sunX, sunY, sunZ);  // Optional visualization of the sun
+
+    // Iterate through the sky planes and update colors based on sun position and intensity
+    for (var i = 0; i < this.sky.length; i++) {
+        var skyTheta = this.sky[i].theta;
+        var skyPhi = this.sky[i].phi;
+
+        // Calculate angular difference for intensity
+        var thetaDifference = Math.abs(this.time - skyTheta);
+        var phiDifference = Math.abs(2 * Math.PI - skyPhi);
+        thetaDifference = Math.min(thetaDifference, Math.PI * 2 - thetaDifference);
+
+        var intensity = Math.max(0, Math.cos(thetaDifference));
+
+        // Define colors for different times of day
+        var colorNight = new THREE.Color(0x001f3f);   // Dark night blue
+        var colorDawn = new THREE.Color(0xff4500);    // Dawn orange
+        var colorSunrise = new THREE.Color(0xff6347); // Sunrise red-orange
+        var colorDay = new THREE.Color(0x87ceeb);     // Daylight sky blue
+        var colorDusk = new THREE.Color(0xff4500);    // Dusk orange
+
+        // Calculate altitude factor for sunrise and sunset colors
+        let sunAltitudeFactor = Math.max(0, Math.sin(this.time));  // 1 at horizon, 0 at zenith
+        let color;
+
+        if (this.time < Math.PI / 16) {
+            // Early dawn transition (night to red-orange sunrise, intensified near horizon)
+            color = new THREE.Color().lerpColors(colorNight, colorSunrise, (this.time / (Math.PI / 16)) * sunAltitudeFactor);
+        } else if (this.time < Math.PI / 9) {
+            // Sunrise transition (red-orange to daylight blue, intensified near horizon)
+            color = new THREE.Color().lerpColors(colorSunrise, colorDay, ((this.time - Math.PI / 16) / ((Math.PI / 9) - (Math.PI / 16))) * sunAltitudeFactor);
+        } else if (this.time < Math.PI / 2) {
+            // Mid-morning to noon (daylight blue)
+            color = new THREE.Color().lerpColors(colorDay, new THREE.Color("pink"), (this.time - Math.PI / 9) / ((Math.PI / 2) - (Math.PI / 9)));
+        } else if (this.time < Math.PI - Math.PI / 16) {
+            // Afternoon (daylight blue to pinkish dusk)
+            color = new THREE.Color().lerpColors(new THREE.Color("pink"), colorDay, (this.time - Math.PI / 2) / ((Math.PI - Math.PI / 16) - (Math.PI / 2)));
+        } else if (this.time < Math.PI && this.time > Math.PI - Math.PI / 16) {
+            // Sunset transition (daylight to dusk orange, intensified near horizon)
+            color = new THREE.Color().lerpColors(colorDay, colorDusk, ((this.time - (Math.PI - Math.PI / 16)) / (Math.PI / 16)) * sunAltitudeFactor);
+        } else if (this.time < Math.PI + Math.PI / 16) {
+            // Dusk transition (dusk orange to dark night, intensified near horizon)
+            color = new THREE.Color().lerpColors(colorDusk, colorNight, ((this.time - Math.PI) / (Math.PI / 16)) * sunAltitudeFactor);
+        } else if (this.time < Math.PI + Math.PI / 9) {
+            // Late dusk to full night (final transition to dark blue night)
+            color = new THREE.Color().lerpColors(colorDusk, colorNight, (this.time - (Math.PI + Math.PI / 16)) / ((Math.PI / 9) - (Math.PI / 16)));
         } else {
-            this.sun.intensity = 2
+            // Full night
+            color = colorNight;
         }
 
-        this.time += 0.0001
-        // Sun's position: moving along the x and y axes while keeping z fixed at 0
-        var sunX = (this.sceneRadius * .95) * Math.cos(this.time);  // Sun moves along the x-axis
-        var sunY = (this.sceneRadius * .95) * Math.sin(this.time);  // Sun rises and falls along the y-axis
-        var sunZ = 0;  // Sun remains at z = 0
 
-        // Update sun and sphere positions based on this movement
-        this.sun.position.set(sunX, sunY, sunZ);
-        this.sphere.position.set(sunX, sunY, sunZ);  // Optional sphere for visualizing the sun
 
-        // Define the maximum distance from the sun where sunrise/sunset colors will be applied
-        var influenceRadius = this.sceneRadius;  // Adjust this value to change how localized the effect is
-
-        // Define sunrise/sunset gradient colors
-        var sunriseColors = [
-            new THREE.Color(0xff4500),  // Red
-            new THREE.Color(0xffa500),  // Orange
-            new THREE.Color(0xffc0cb),  // Pink
-            new THREE.Color(0xffdab9),  // Peach/Sunset
-            new THREE.Color(0xdda0dd),  // Pale Violet
-            new THREE.Color(0xf0e68c)   // Light Yellow/Salmon
-        ];
-
-        // Loop through the sky (point cloud)
-        for (var i = 0; i < this.sky.length; i++) {
-            var pointCloud = this.sky[i];
-            var colors = pointCloud.geometry.attributes.color.array;
-            var thetaPhiArray = pointCloud.geometry.userData.thetaPhiArray;
-
-            // Loop through all points in the point cloud
-            for (var j = 0; j < thetaPhiArray.length; j++) {
-                var theta = thetaPhiArray[j].theta;
-                var phi = thetaPhiArray[j].phi;
-
-                // Convert theta/phi to Cartesian coordinates
-                var pointX = this.sceneRadius * Math.sin(phi) * Math.cos(theta);
-                var pointY = this.sceneRadius * Math.sin(phi) * Math.sin(theta);
-                var pointZ = this.sceneRadius * Math.cos(phi);
-
-                // Calculate the angular difference between the sun and the point
-                var thetaDifference = Math.abs(theta);
-                var phiDifference = Math.abs(phi - Math.atan2(sunY, sunX));  // Adjusted for x-axis/y-axis movement
-
-                // Normalize the differences (wrap around at full circle)
-                thetaDifference = Math.min(thetaDifference, this.full_circle - thetaDifference);
-                phiDifference = Math.min(phiDifference, Math.PI - phiDifference);
-
-                // Calculate angular distance and intensity based on proximity to the sun
-                var angularDistance = thetaDifference + phiDifference;
-                var maxAngularDistance = Math.PI;
-                // var intensity = 1 - (angularDistance / maxAngularDistance);  // Closer to the sun = higher intensity
-
-                // Define base sky colors
-                var nightColor = new THREE.Color('royalblue');  // Dark blue for night sky
-                var dayColor = new THREE.Color(0x87ceeb);  // Light blue for day sky
-                var middayColor = new THREE.Color(0xc7feff);  // Bright white for noon
-
-                var blendedColor;
-                var horizonMargin = 50
-
-                // **Sun is above the horizon**
-                if (this.time < Math.PI) {
-                    // Apply sunrise/sunset effect if the point is within the sun's influence radius
-
-                    // AND the sun is near the horizon (y-position close to 0)
-                    // if (distanceToSun < influenceRadius && Math.abs(this.sun.position.y) < horizonMargin) {
-                    //     // The sun is close to the horizon and we're near the sun, apply sunrise/sunset colors
-                        const distanceToSun = new THREE.Vector3(pointX, pointY, pointZ).distanceTo(this.sphere.position)
-                        var horizonBlendFactor = distanceToSun / influenceRadius;  // Strongest effect near the sun
-                        
-                        blendedColor = new THREE.Color().lerpColors(colorStart, colorEnd);
-                        blendedColor = new THREE.Color().lerpColors(middayColor, dayColor);
-                } else {
-                    //     // The sun is near the horizon but we're outside the influence radius
-                    //     var sunBlendFactor = Math.abs(sunY / horizonMargin);  // Strongest effect at horizon (y = 0)
-                    //     blendedColor = new THREE.Color().lerpColors(sunriseColors[4], dayColor, sunBlendFactor * 1);
-                    var nightBlendFactor = Math.max(0, 1 - (Math.abs(sunY / 20))); 
-                    blendedColor = new THREE.Color().lerpColors(nightColor, sunriseColors[0], nightBlendFactor * 1);
-                } 
-                    //     // Daytime sky: Bright white during noon, transitioning to blue
-                
-                    // }
-
-                // } else {
-                    // **Sun is below the horizon (night or early morning)**
-                 // Strongest effect near horizon
-
-                // Apply night sky colors, blending to sunrise/sunset colors if near the horizon
-                
-                // }
-
-                    // Update colors in the buffer
-                    colors[j * 3] = blendedColor.r;
-                    colors[j * 3 + 1] = blendedColor.g;
-                    colors[j * 3 + 2] = blendedColor.b;
-            }
-            
-
-            // Ensure the color buffer is updated
-            pointCloud.geometry.attributes.color.needsUpdate = true;
-        }
+        this.sky[i].material.color.copy(color);
+        this.sky[i].material.needsUpdate = true;
     }
+}
+
+
 
 
     MakeCloud() {
@@ -2463,68 +2319,15 @@ class Terrain {
                     const YARD = isIn(trianglePosition, 'yard')
                     let cypressTreePosition
 
-                    if (false && Math.random() < 0.2) {
-                        // var r = randomInRange(.5, 11)
-                        // var epcot = new THREE.Mesh(
-                        //     new THREE.BoxGeometry(r, r, r * .1),
-                        //     new THREE.MeshStandardMaterial({
-                        //         color: 0xffffff,//new THREE.Color(Math.random(), Math.random(), Math.random()),
-                        //         map: new THREE.TextureLoader().load(RANDOMIMAGES[Math.floor(Math.random() * RANDOMIMAGES.length)])
-                        //         // metalness: 1
-                        //     })
-                        // )
-                        // var ballPosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                        // epcot.position.set(ballPosition.x, ballPosition.y + r / 2, ballPosition.z)
-                        // if (Math.random() < 0.5) {
-                        //     epcot.rotation.y = Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2
-                        // } else {
-                        //     epcot.rotation.y = Math.PI / randomInRange(1, 2)
-                        // }
-                        // scene.add(epcot)
-                        // this.paintings.push(epcot)
-                        for (var tree_partner = 0; tree_partner < 2; tree_partner++) {
-                            cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                            var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
-                           // Assuming llod is an array or typed array containing the position data
-                            // cypressTree.foliage.geometry.setAttribute('position', new THREE.Float32BufferAttribute(cypressTree.foliage.geometry.llod, 3));
-
-                            this.trees.push(cypressTree)
-                        }
-                    }
-
-
-
                     const SIDEYARD = isIn(trianglePosition, 'sideyard')
                     const BACKYARD = isIn(trianglePosition, 'backyard')
-                    if (
+                    if ( !YARD && 
                             ((SIDEYARD && Math.random() < 0.1) || (BACKYARD && Math.random() < 0.05))
-                            // && (trianglePosition.z < house.center.z - house.depth / 2 && trianglePosition.x < 30)
                         ) {
-                        // for (var tree_partner = 0; tree_partner < 2; tree_partner++) {
                             cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
                             var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
-                           // Assuming llod is an array or typed array containing the position data
-                            // cypressTree.foliage.geometry.setAttribute('position', new THREE.Float32BufferAttribute(cypressTree.foliage.geometry.llod, 3));
-
                             this.trees.push(cypressTree)
-                        // }
                     }
-
-                    // if (!CLIFF && !SIDEYARD && Math.random() < 0.03) {
-                    //     var pos = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                    //     var building = Lathe(
-                    //         trianglePosition.x, 
-                    //         trianglePosition.y,
-                    //          trianglePosition.z,
-                    //          randomInRange(13, 40),
-                    //          LATHECOLORS[Math.floor(Math.random() * LATHECOLORS.length)],
-                    //          new THREE.TextureLoader().load("/images/poppy-field.jpg")
-                    //     )
-                    //     building.position.copy(pos)
-                    //     this.grasses.push(building)
-
-
-                    // }
 
 
                     if (CLIFF) {
