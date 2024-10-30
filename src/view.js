@@ -288,7 +288,26 @@ class GrassPatch {
 
 
 
+// class CustomWater extends Water {
+//     constructor(geometry, options, T) {
+//         super(geometry, options);
+//         this.T = T;
+//         this.material.onBeforeCompile = (shader) => {
+//             shader.uniforms.T = { value: T };
 
+//             shader.vertexShader = `
+//                 uniform float T;
+//                 ${shader.vertexShader}
+//             `.replace(
+//                 `#include <begin_vertex>`,
+//                 `#include <begin_vertex>
+//                 if (abs(position.x) < T && abs(position.z) < T) {
+//                     transformed.y = 0.0;
+//                 }`
+//             );
+//         };
+//     }
+// } 
 
 function TriangleMesh(vertices, a, b, c, terrainWidth, terrainHeight, map) {
 
@@ -779,11 +798,12 @@ class Sky {
             this.time < Math.PI ? 0 : 2
         )
 
-        if (transitionFactor == 2 && this.stars.material.opacity == 0.1) {
+        if (transitionFactor == 2) {
             this.stars.material.opacity = 1
             this.stars.needsUpdate = true
+            this.sun.intensity = 0
             scene.add(this.stars)
-        } else if (transitionFactor !== 2 && this.stars.material.opacity == 1) {
+        } else {
             scene.remove(this.stars)
         }
 
@@ -874,7 +894,7 @@ class Sky {
         }
 
         // Increment time for next update
-        this.time += 0.005;
+        this.time += 0.05;
     }
 
 
@@ -2232,20 +2252,18 @@ class Terrain {
         theCovesGeometry.setIndex(theCoveIndices);
         theCovesGeometry.computeVertexNormals();  // Ensure proper lighting/shading
 
-        // // Create material (water-like material)
-        var waterMaterial = new THREE.MeshBasicMaterial({
-            color: 'royalblue',
-            // map: new THREE.TextureLoader().load("/images/art-water.gif"),
-            side: THREE.DoubleSide,
-            opacity: 0.9,
-            wireframe: false,
-            transparent: true
-        });
-
         // Create the mesh
-        var TheCove = new THREE.Mesh(theCovesGeometry, waterMaterial);
-        // const TheCove = new Water(theCovesGeometry, {})
-
+        var TheCove = new THREE.Mesh(theCovesGeometry, new THREE.MeshStandardMaterial({
+            // color: 'royalblue',
+            map: new THREE.TextureLoader().load("/images/waternormals.jpg", texture => {
+               texture.wrapS = THREE.RepeatWrapping
+                texture.wrapT = THREE.RepeatWrapping
+                texture.rotation = Math.random() * Math.PI * 2
+                texture.repeat.set(100, 100)
+            }),
+            opacity: 0.95
+        }));
+        TheCove.receiveShadow = true
         // Add to scene
         scene.add(TheCove);
 
@@ -2361,79 +2379,10 @@ class Terrain {
             }
         }
         
-         
-
-            
-        // this.createInstancedMeshGrounds()
 
         this.clusterCliffs()
 
-        
-        // Now, let's apply the grass density in groundColorMap to color the vertices
-        // const colors = [];
-        // const gridSize = grassPatches.length;  // Assuming groundColorMap is a 2D array of the grid size
 
-
-        // for (let i = 0; i < gridSize; i++) {
-        //     for (let j = 0; j < gridSize; j++) {
-        //         const density = grassPatches[i][j];
-                
-
-        //         // Ensure that color application and grass application use the same coordinates
-        //         const vertexIndex = i * (this.segments + 1) + j;  // Adjust based on segment count and grid
-
-        //         colors.push(randomInRange(0.1, 0.3), randomInRange(0.11, 0.15), randomInRange(0, 0.08));  // RGB color for dark brown soil
-        //     }
-        // }
-
-        // console.log("created random colors for the terrain canvas")
-
-        // Create red spheres at boundary positions
-        // const sphereGeometry = new THREE.SphereGeometry(0.2, 8, 8);
-        // const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-
-        // ... rest of the existing code ...
-
-        // Add this method to the Terrain class
-        
-
-        // this.colors = colors;
-        // this.gridSize = gridSize;
-
-        // // Apply vertex colors to the geometry
-        // const planeGeometry = new THREE.BufferGeometry();
-        // planeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        // planeGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));  // Add vertex colors
-        // planeGeometry.setIndex(indices);
-        // planeGeometry.computeVertexNormals();
-        // planeGeometry.computeBoundingBox();
-
-        // Apply the custom texture to the terrain
-        // const material = new THREE.MeshStandardMaterial({
-        //     side: THREE.DoubleSide,
-        //     wireframe: true,
-        //     transparent: false,
-        //     opacity: 1
-        // });
-
-        // const mesh = new THREE.Mesh(planeGeometry, material);
-        // mesh.castShadow = true;
-        // mesh.receiveShadow = true;
-
-        // this.mesh = mesh;
-        // this.mesh.name = "terrain"
-        // this.mesh.noise = perlinNoise;
-        // this.mesh.centerKey = centerKey;
-
-        // scene.add(mesh);
-
-       
-        // this.meshes.push(this.mesh);
-
-
-
-
-        // return this;
     }
 
     createInstancedMeshGrounds() {
