@@ -587,16 +587,15 @@ function colorshade(rgb) {
 }
 
 class Sky {
-    time = Math.PI - 0.1
+    time = Math.PI * 1.8
     constructor(user) {
         this.counter = 0;
         this.user = user;
         this.sceneRadius = 550;
         this.full_circle = 2 * Math.PI;
 
-        this.starLight = new THREE.DirectionalLight(0xfefeff,  0); // Sky and ground color
-        this.starLight.position.set(0, sceneRadius, 0);
-        this.starLight.lookAt(0, 0, 0)
+        this.starLight = new THREE.AmbientLight(0xfefeff,  .1); // Sky and ground color
+        this.starLight.position.set(0, 0, 0);
         scene.add(this.starLight);
 
         
@@ -646,7 +645,6 @@ class Sky {
 
 
         this.createDome();
-
         // for (var i = 0; i < 29; i++) {
         //     var cloud = this.MakeCloud()
         //     cloud.position.y += randomInRange(50, 250)
@@ -656,6 +654,26 @@ class Sky {
         //     scene.add(cloud)
         // }
 
+    }
+
+    createStars(points) {
+        var starMaterial = new THREE.PointsMaterial({
+            size: 2,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.1
+        })
+        var colors = []
+        for (var i = 0; i < points.length; i += 3) {
+            colors.push(1, 1, 1)
+        }
+        var starGeometry = new THREE.BufferGeometry()
+        starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3))
+        starGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+
+        var mesh = new THREE.Points(starGeometry, starMaterial)
+        this.stars = mesh
+        scene.add(mesh)
     }
 
     createDome() {
@@ -671,11 +689,11 @@ class Sky {
         var pointMaterial = new THREE.PointsMaterial({
             size: 50,  // Size of each point
             vertexColors: true,  // Allow different colors per vertex (point)
-            transparent: false,
-            opacity: 0.8  // Set initial opacity for points
+            transparent: false
         });
 
         // Loop through to calculate points in spherical coordinates
+        var starPoints = []
         for (var i = 0; i < gridSize; i++) {
             for (var j = 0; j < gridSize; j++) {
                 // Calculate spherical coordinates
@@ -704,9 +722,15 @@ class Sky {
                 // Store theta and phi for use in lighting updates later
                 thetaPhiArray.push({ theta: theta, phi: phi });
 
+                if (Math.random() < 0.09) {
+                    starPoints.push(randomInRange(x - 25, x  + 25), y - 50, randomInRange(z - 25, z + 25))
+                }
+
                 if (z > maxdist) maxdist = z;
             }
         }
+
+        this.createStars(starPoints)
 
         // Create buffer geometries to hold the positions and colors for the points
         var geometry = new THREE.BufferGeometry();
@@ -755,6 +779,14 @@ class Sky {
             this.time < Math.PI ? 0 : 2
         )
 
+        if (transitionFactor == 2 && this.stars.material.opacity == 0.1) {
+            this.stars.material.opacity = 1
+            this.stars.needsUpdate = true
+            scene.add(this.stars)
+        } else if (transitionFactor !== 2 && this.stars.material.opacity == 1) {
+            scene.remove(this.stars)
+        }
+
 
         // Access geometry's color attribute to update individual vertex colors
         const colorAttribute = this.sky[0].geometry.attributes.color;
@@ -765,6 +797,12 @@ class Sky {
             let x = this.sky[0].geometry.attributes.position.getX(i);
             let y = this.sky[0].geometry.attributes.position.getY(i);
             let z = this.sky[0].geometry.attributes.position.getZ(i);
+
+            if (transitionFactor == 2) {
+                this.sky[0].material.opacity = 0.8
+            } else {
+                this.sky[0].material.opacity = 1
+            }
 
             // Calculate angular position in the x direction
             let theta = Math.atan2(y, x); // Angle of the point in the horizontal plane
@@ -831,9 +869,7 @@ class Sky {
 
         if (this.time > Math.PI + Math.PI / 16 && this.time < Math.PI * 2 - Math.PI / 16) {
             this.sun.intensity = 0
-            this.starLight.intensity = 0
         } else {
-            this.starLight.intensity = 0.111
             this.sun.intensity = 3
         }
 
@@ -2149,6 +2185,16 @@ class Terrain {
         var xStep = (maxX - minX) / this.segments;
         var zStep = (maxZ - minZ) / this.segments;
 
+        var covecolors = [
+            new THREE.Color(0x72a9c8),
+            new THREE.Color(0x5c788e),
+            new THREE.Color(0x2879a7),
+            new THREE.Color(0x1b6890),
+            new THREE.Color(0x0e537b),
+            new THREE.Color(0x05253b),
+            new THREE.Color(0x2c344c)
+        ]
+        var coveColors = []
 
         for (let i = 0; i <= this.segments; i++) {
             for (let j = 0; j <= this.segments; j++) {
@@ -2170,6 +2216,7 @@ class Terrain {
                     theCoveIndices.push(topLeft, bottomLeft, bottomRight);  // First triangle
                     theCoveIndices.push(topLeft, bottomRight, topRight);    // Second triangle
                 }
+
             }
         }
 
@@ -2187,11 +2234,11 @@ class Terrain {
 
         // Create material (water-like material)
         var waterMaterial = new THREE.MeshStandardMaterial({
-            color: 'royalblue',
+            color: covecolors[Math.floor(Math.random() * covecolors.length)],
             // map: new THREE.TextureLoader().load("/images/art-water.gif"),
             side: THREE.DoubleSide,
             opacity: 0.9,
-            wireframe: true,
+            wireframe: false,
             transparent: true
         });
 
@@ -3120,9 +3167,9 @@ class UserController {
 
     init() {
         let position = VM.user.position;
-        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1600);
+        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 10000);
         this.camera.near = 0.1;  // Increase this value
-        this.camera.far = 1000;  // Reduce far plane if it's too large
+        this.camera.far = 10000;  // Reduce far plane if it's too large
         this.camera.updateProjectionMatrix();
         this.camera.touches = new Set()
         this.camera.foot = null;
