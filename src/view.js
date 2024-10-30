@@ -72,12 +72,14 @@ const boardwalk = {
 
 
 function isIn(v, which) {
+   
+        
     switch (which) {
     case 'yard':
         return v.x > landscape.center.x - landscape.width / 2
             && v.x < landscape.center.x + landscape.width / 2
-            && v.z > landscape.center.z - landscape.depty / 2
-            && v.z < landscape.center.z + landscape.depty / 2
+            && v.z > landscape.center.z - landscape.depth / 2
+            && v.z < landscape.center.z + landscape.depth / 2
     case 'sideyard':
         return (
             v.x >= (house.center.z - house.foundation.depth / 2 - 5) && 
@@ -99,13 +101,13 @@ function isIn(v, which) {
             && v.z < boardwalk.center.z + boardwalk.depth / 2
         )
     case 'cove':
-        const dockEndX = boardwalk.center.x + boardwalk.width / 2 + 20;
+         const dockEndX = boardwalk.center.x + boardwalk.width / 2 + 20;
 
-        const windingZ = Math.sin((v.x - dockEndX) / t * Math.PI * 2) * 10;  // Winding factor
-        const inXRange = v.x > dockEndX && v.x < t + 20;
-        const inZRange = Math.abs(v.z - boardwalk.center.z - windingZ) < randomInRange(3, 10); // Width of the winding path
-        
+    const windingZ = Math.sin((v.x - dockEndX) / t * Math.PI * 2) * 10;  // Winding factor
+    const inXRange = v.x > dockEndX && v.x < t + 20;
+    const inZRange = Math.abs(v.z - boardwalk.center.z - windingZ) < randomInRange(3, 10); // Width of the winding path
         return (inXRange && inZRange)
+    
     default:
         return false;
     }
@@ -614,7 +616,7 @@ function colorshade(rgb) {
 }
 
 class Sky {
-    time = Math.PI * 1.8
+    time = 0
     constructor(user) {
         this.counter = 0;
         this.user = user;
@@ -1790,10 +1792,12 @@ function getCachedLeafMaterial(color, map, transparent) {
     if (!leafMaterials[color]) {
         var leafMaterialArgs = { 
             color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
-            map: Math.random() < 0.5 ? new THREE.TextureLoader().load("/images/branch.webp") : new THREE.TextureLoader().load("/images/sunflower2.jpg"),
             side: THREE.DoubleSide,
             transparent: true,
             // opacity: .8
+        }
+        if (map) {
+            leafMaterialArgs.map = map
         }
         leafMaterials[color] = new THREE.MeshStandardMaterial(leafMaterialArgs);
     }
@@ -1971,38 +1975,36 @@ class Terrain {
     }
 
     createFlora(x, Y, z, treeKind) {
-        const tree = {
+        var tree = {
             cypress: {
                 height: randomInRange(11.1, 60),
                 width: randomInRange(1, 2),
                 colors: CYPRESSGREENS, // Cypress leaf colors
                 trimmed: Math.random() < 0.5 ? true : false,
-                branch: {
-                    // map: random1()
-                },
+                map: Math.random() < 0.5 ? new THREE.TextureLoader().load("/images/branch.webp") : new THREE.TextureLoader().load("/images/sunflower2.jpg"),
                 trunk: {
                     map: TRUNKTEXTURE
-                }
-            },
-            'alternative-cypress': {
-                height: randomInRange(11, 16),
-                width: randomInRange(1, 2.9),
-                colors: CYPRESSGREENS, // Cypress leaf colors
-                trimmed: false,
-                branch: {
-                    // map: random1()
                 },
+                trunkHeight: randomInRange(6, 9)
+            },
+            oak: {
+                height: randomInRange(11.1, 60),
+                width: randomInRange(1, 2),
+                colors: CYPRESSGREENS, // Cypress leaf colors
+                trimmed: Math.random() < 0.5 ? true : false,
+                map: Math.random() < 0.5 ? new THREE.TextureLoader().load("/images/branch.webp") : new THREE.TextureLoader().load("/images/sunflower2.jpg"),
                 trunk: {
                     map: TRUNKTEXTURE
                 }
             }
         };
 
+
         const twoPi = Math.PI * 2;
         const instanceCount = Math.floor(tree[treeKind].height * 7); // Adjust count as needed
         const instancedMesh = new THREE.InstancedMesh(
             getCachedSphereGeometry(tree[treeKind].width / 2),
-            getCachedLeafMaterial(tree[treeKind].colors[0]), // Initial color
+            getCachedLeafMaterial(tree[treeKind].colors[0], tree[treeKind].map), // Initial color
             instanceCount
         );
         instancedMesh.frustrumCulled = true
@@ -2021,7 +2023,7 @@ class Terrain {
             const progress = (y - Y) / tree[treeKind].height;
             let radiusAtY = (1 - progress) * (tree[treeKind].width / 2) * randomInRange(0.83, 2.25);
             if (radiusAtY < 1) radiusAtY = 1;
-            if (none && ydiff++ < 8) {
+            if (none && ydiff++ < tree[treeKind].trunkHeight) {
                 radiusAtY = 0
             } else if (none) {
                 radiusAtY *= randomInRange(1, 4)
@@ -2282,9 +2284,7 @@ class Terrain {
         v.y = (1 - x) * (1 - y) * this.v0.y + x * (1 - y) * this.v1.y + x * y * this.v2.y + (1 - x) * y * this.v3.y;
         v.z = (1 - x) * (1 - y) * this.v0.z + x * (1 - y) * this.v1.z + x * y * this.v2.z + (1 - x) * y * this.v3.z;
 
-        var inCastle = (v.x > -house.width / 2 && v.x < house.width / 2 && v.z > -house.depth / 2 && v.z < house.depth / 2)
-        var inCove = v.x >= landscape.field.width / 2 && v.z >= -landscape.field.depth && v.z <= landscape.field.depth / 3;
-
+    
         var Txture = cementTexture
         const t1 = TriangleMesh(vertices, a, b, d, this.width, this.height, Txture);
         const t2 = TriangleMesh(vertices, b, c, d, this.width, this.height, Txture);
@@ -2298,23 +2298,24 @@ class Terrain {
 
             /* TERRAIN FEATURES */
             const CLIFF = Math.abs(triangleMesh.normal.y) < 0.4 && (Math.abs(triangleMesh.normal.x) > 0.4 || Math.abs(triangleMesh.normal.z) > 0.4)
-            // || trianglePosition.x > 100 || trianglePosition.z > 100
-            const YARD = isIn(trianglePosition, 'yard')
-            let cypressTreePosition
 
-            const SIDEYARD = isIn(trianglePosition, 'sideyard')
-            const BACKYARD = isIn(trianglePosition, 'backyard')
-            if ( !YARD && 
-                ((SIDEYARD && Math.random() < 0.1) || (BACKYARD && Math.random() < 0.05))
-            ) {
-                cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
-                this.trees.push(cypressTree)
-            }
-
-
+           
             if (CLIFF) {
                 this.cliffs.push(triangle)
+            } else {
+                let cypressTreePosition
+                if (
+                        !isIn(trianglePosition, 'cove')
+                        && !isIn(trianglePosition, 'dock')
+                        && !isIn(trianglePosition, 'yard')
+                        && Math.random() < 0.03
+                    ) {
+                    cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
+                    var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
+                    this.trees.push(cypressTree)
+                }
+
+
             }
 
 
@@ -2842,9 +2843,9 @@ class Terrain {
                 ((ground.triangle.a.y + ground.triangle.a.y + ground.triangle.c.y)/ 3),
                 ((ground.triangle.a.z + ground.triangle.a.z + ground.triangle.c.z)/ 3)
             )
-            if (ground.parent && center.distanceTo(user.camera.position) > 100) {
+            if (ground.parent && center.distanceTo(user.camera.position) > 200) {
                 scene.remove(ground);
-            } else if (!ground.parent && center.distanceTo(user.camera.position) < 100/*&& isInSOP(center, sopCenter, this.sop.grounds)*/) {
+            } else if (!ground.parent && center.distanceTo(user.camera.position) < 200/*&& isInSOP(center, sopCenter, this.sop.grounds)*/) {
                 scene.add(ground);
             }
         })
