@@ -32,7 +32,7 @@ window.cementTexture = new THREE.TextureLoader().load("/images/ground-0.jpg", te
 })
 var clock = new THREE.Clock()
 const evaluator = new Evaluator();
-
+const t = 100
 const groundTexture = new THREE.TextureLoader().load("/images/ground-0.jpg")
 
 var landscape = {
@@ -98,6 +98,14 @@ function isIn(v, which) {
             && v.z > boardwalk.center.z - boardwalk.depth / 2
             && v.z < boardwalk.center.z + boardwalk.depth / 2
         )
+    case 'cove':
+        const dockEndX = boardwalk.center.x + boardwalk.width / 2 + 20;
+
+        const windingZ = Math.sin((v.x - dockEndX) / t * Math.PI * 2) * 10;  // Winding factor
+        const inXRange = v.x > dockEndX && v.x < t + 20;
+        const inZRange = Math.abs(v.z - boardwalk.center.z - windingZ) < randomInRange(3, 10); // Width of the winding path
+        
+        return (inXRange && inZRange) || Math.random() < 0.02      
     default:
         return false;
     }
@@ -894,7 +902,7 @@ class Sky {
         }
 
         // Increment time for next update
-        this.time += 0.05;
+        this.time += 0.005;
     }
 
 
@@ -1819,8 +1827,8 @@ class Terrain {
             '#536c46', //
             '#5d6847', //
         ]
-        for (var key in options) {
-            this[key] = options[key]
+        for (var key in options.map) {
+            this[key] = options.map[key]
         }
         this.sop = VM.map.sop
         // this.textures =  _textures;
@@ -1837,11 +1845,11 @@ class Terrain {
 
 
 
-        this.go();
+        this.generateTerrain();
     }
 
     init() {
-        this.go();
+        this.generateTerrain();
     }
 
 
@@ -2072,318 +2080,253 @@ class Terrain {
 
 
 
-    go(centerX = 0, centerY = 0, centerZ = 0) {
-
+    generateTerrain(centerX = 0, centerY = 0, centerZ = 0) {
         const centerKey = `${centerX}_${centerZ}`;
-        this.terrainType = 'half'//['sparse', 'dense', 'half'][Math.floor(Math.random() * 3)];        
+        this.initializeTerrain();
+        const perlinNoise = this.generatePerlinNoise({ center: { x: centerX, y: centerY, z: centerZ }, centerKey });
+
+        // Generate terrain vertices
+        const vertices = this.generateVertices(perlinNoise, centerX, centerY, centerZ);
+
+        // Generate cove vertices and indices
+        const { theCove, indices } = this.generateCoveVertices(-this.width / 2, this.width / 2, -this.height / 2, this.height / 2);
+
+        // Create and add water mesh
+        this.water = this.createWaterMesh(theCove, indices);
+
+        // Adjust terrain based on existing meshes
+        this.adjustVerticesBasedOnMeshes(vertices);
+
+        // Populate terrain features
+        this.populateTerrainFeatures(vertices, indices);
+    }
+
+   createWaterMesh(vertices, indices) {
+        // var vertices = [];
+        // var indices = [];
+        var widthSegments = 20; // Number of segments along the width
+        var heightSegments = 20; // Number of segments along the height
+        var segmentSize = 3;
+
+        // // Generate vertices for a grid
+        // for (var i = 0; i <= widthSegments; i++) {
+        //     for (var j = 0; j <= heightSegments; j++) {
+        //         vertices.push(i * segmentSize - 20, -10, j * segmentSize - 20);
+        //     }
+        // }
+
+        // Generate indices for each segment to form triangles
+        for (var i = 0; i < widthSegments; i++) {
+            for (var j = 0; j < heightSegments; j++) {
+                var a = i * (heightSegments + 1) + j;
+                var b = i * (heightSegments + 1) + (j + 1);
+                var c = (i + 1) * (heightSegments + 1) + j;
+                var d = (i + 1) * (heightSegments + 1) + (j + 1);
+
+                // Two triangles per square
+                indices.push(a, b, d); // Triangle 1
+                indices.push(a, d, c); // Triangle 2
+            }
+        }
+
+        var geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        geo.setIndex(indices);
+        geo.computeVertexNormals();
+
+        var mat = new THREE.MeshStandardMaterial({
+            map: new THREE.TextureLoader().load("/images/waternormals.jpg"),
+            side: THREE.DoubleSide
+        });
+
+        var mesh = new THREE.Mesh(geo, mat);
+        mesh.receiveShadow = true;
+        scene.add(mesh);
+        return mesh;
+    }
+
+    // Helper functions
+    initializeTerrain() {
+        this.terrainType = 'half';  // ['sparse', 'dense', 'half'][Math.floor(Math.random() * 3)];
         this.cliffs = [];
         this.grounds = [];
         this.grassTriangles = [];
         this.cliffMeshes = [];
+        this.v0 = new THREE.Vector3(this.center.x - this.t, 0, this.center.z - this.t)
+        this.v1 = new THREE.Vector3(this.center.x + this.t, 0, this.center.z - this.t)
+        this.v2 = new THREE.Vector3(this.center.x + this.t, 0, this.center.z + this.t)
+        this.v3 = new THREE.Vector3(this.center.x + this.t, 0, this.center.z + this.t)
+    }
 
-        let t = VM.map.quadrant;
-        let center = { x: centerX, y: centerY, z: centerZ }
-
-        let v0 = { x: center.x - t, y: center.y, z: center.z + t };
-        let v1 = { x: center.x + t, y: center.y, z: center.z + t }; 
-        let v2 = { x: center.x + t, y: center.y, z: center.z - t }; 
-        let v3 = { x: center.x - t, y: center.y, z: center.z - t };
-
-        let vertices = [];
-        let indices = [];
-
-        for (var key in VM.map) {
-            this[key] = VM.map[key];
-        }
-
-        const segmentSize = 1 / this.segments
-        // const neighbors = this.meshes.filter(mesh => this.isNeighbor(mesh.centerKey, centerKey));
-
-        // if (neighbors.length > 0) {
-        //     var generationRootSlices = this.getRootSlices(centerKey, neighbors);
-        //     for (var obj of generationRootSlices) {
-        //         this.renderNoiseSlice(obj, this.width, this.height, center); 
-        //     }
-            
-        // }
-
-        let perlinNoise = this.generatePerlinNoise({ center, centerKey });
-
-        var theCove = [];
-        var maxX = -Infinity
-        var maxZ = -Infinity
-        var minX = Infinity
-        var minZ = Infinity
-        var averageY = []
+    generateVertices(perlinNoise, centerX, centerY, centerZ) {
+        const vertices = [];
+        const segmentSize = 1 / this.segments;
+        const v0 = { x: centerX - t, y: centerY, z: centerZ + t };
+        const v1 = { x: centerX + t, y: centerY, z: centerZ + t }; 
+        const v2 = { x: centerX + t, y: centerY, z: centerZ - t }; 
+        const v3 = { x: centerX - t, y: centerY, z: centerZ - t };
 
         for (let i = 0; i <= this.segments; i++) {
             for (let j = 0; j <= this.segments; j++) {
-                let x = i * segmentSize;
-                let y = j * segmentSize;
-
-                let v = new THREE.Vector3();
-                v.x = (1 - x) * (1 - y) * v0.x + x * (1 - y) * v1.x + x * y * v2.x + (1 - x) * y * v3.x;
-                v.y = (1 - x) * (1 - y) * v0.y + x * (1 - y) * v1.y + x * y * v2.y + (1 - x) * y * v3.y;
-                v.z = (1 - x) * (1 - y) * v0.z + x * (1 - y) * v1.z + x * y * v2.z + (1 - x) * y * v3.z;
-
-                averageY.push(v.y)
-
-                let noiseX = Math.floor(x * (this.noiseWidth - 1));
-                let noiseY = Math.floor(y * (this.noiseHeight - 1));
-                let variance = perlinNoise[noiseY * this.noiseWidth + noiseX] * this.altitudeVariance;
-
-                v.y += variance;
-
-                var inField = v.x > -landscape.field.width / 2 && v.x < landscape.field.width / 2 && v.z > -landscape.field.depth / 2 && v.z < landscape.field.depth / 2;
-                if (inField) {
-                    v.y = landscape.field.center.y;  // Flatten the terrain inside the castle
-                }
-
-                var inTheCove = (v.distanceTo(new THREE.Vector3(0,0,0) > 36) || (Math.random() < 0.3))
-                    && !inField
-                    && (v.x > 30 || (v.z < 30 && v.x > 0))
-                    && !isIn(v, 'dock')
-                //v.x >= landscape.field.width / 2 && v.z >= -landscape.field.depth && v.z <= landscape.field.depth / 3
-                if (isIn(v, 'sideyard')) {
-                    // console.log('changing', v.y, house.center.y)
-                    v.y = house.center.y
-                    inTheCove = false
-                }
-
-                if (isIn(v, 'dock')) {
-                    v.y = -20
-                }
-
-                if (inTheCove) {
-                    v.y = -20
-
-                    if (v.x > maxX) {
-                        maxX = v.x
-                    }
-
-                    if (v.z > maxZ) {
-                        maxZ = v.z
-                    }
-
-                    if (v.x < minX) {
-                        minX = v.x
-                    }
-
-                    if (v.z < minZ) {
-                        minZ = v.z
-                    }
-
-
-                    let curveFactor = .1 * Math.cos(Math.random() * Math.PI); // Smooth cosine factor
-                    let targetHeight = -20;
-
-
-                    if (Math.random() < 0.95) {
-                        v.y = curveFactor * (v.y - targetHeight) + targetHeight;
-                    }
-
-
-
-                } 
-
-
-
-                
-                // terrain vertices
+                let v = this.interpolateVertex(i, j, v0, v1, v2, v3, segmentSize, perlinNoise);
                 vertices.push(v.x, v.y, v.z);
             }
         }
+        return vertices;
+    }
 
-        var theCove = [];
-        var theCoveIndices = [];  // For storing triangle theCoveIndices
+    interpolateVertex(i, j, v0, v1, v2, v3, segmentSize, perlinNoise) {
+        const x = i * segmentSize;
+        const y = j * segmentSize;
+        let v = new THREE.Vector3(
+            (1 - x) * (1 - y) * v0.x + x * (1 - y) * v1.x + x * y * v2.x + (1 - x) * y * v3.x,
+            (1 - x) * (1 - y) * v0.y + x * (1 - y) * v1.y + x * y * v2.y + (1 - x) * y * v3.y,
+            (1 - x) * (1 - y) * v0.z + x * (1 - y) * v1.z + x * y * v2.z + (1 - x) * y * v3.z
+        );
 
-        minZ -= 1000
-        maxZ += 1000
-        minX -= 1000
-        maxX += 1000
+        // Apply perlin noise and additional adjustments
+        const noiseX = Math.floor(x * (this.noiseWidth - 1));
+        const noiseY = Math.floor(y * (this.noiseHeight - 1));
+        const variance = perlinNoise[noiseY * this.noiseWidth + noiseX] * this.altitudeVariance;
+        v.y += variance;
 
-        var xStep = (maxX - minX) / this.segments;
-        var zStep = (maxZ - minZ) / this.segments;
+        // Flatten terrain in specified regions
+        this.flattenTerrain(v);
 
-        var covecolors = [
-            new THREE.Color(0x72a9c8),
-            new THREE.Color(0x5c788e),
-            new THREE.Color(0x2879a7),
-            new THREE.Color(0x1b6890),
-            new THREE.Color(0x0e537b),
-            new THREE.Color(0x05253b),
-            new THREE.Color(0x2c344c)
-        ]
-        var coveColors = []
+        return v;
+    }
+
+    flattenTerrain(v) {
+        const inField = v.x > -landscape.field.width / 2 && v.x < landscape.field.width / 2 && v.z > -landscape.field.depth / 2 && v.z < landscape.field.depth / 2;
+        if (inField) v.y = landscape.field.center.y;
+
+        if (isIn(v, 'dock')) v.y = -20;
+
+        if (isIn(v, 'cove')) v.y = randomInRange(-20, -5)
+
+        if (!isIn(v, 'dock') && !isIn(v, 'cove') && v.x > 30) {
+            // v.x += randomInRange(-5, 5)
+            v.y += randomInRange(-5, 15)
+        }
+
+        if (isIn(v, 'sideyard')) v.y = house.center.y;
+    }
+
+    generateCoveVertices(minX, maxX, minZ, maxZ) {
+        const theCove = [];
+        const indices = [];
+        const xStep = (maxX - minX) / this.segments;
+        const zStep = (maxZ - minZ) / this.segments;
 
         for (let i = 0; i <= this.segments; i++) {
             for (let j = 0; j <= this.segments; j++) {
                 let x = minX + i * xStep;
                 let z = minZ + j * zStep;
-                let y = -5;  // Random Y for variation
+                theCove.push(x, -5, z);
 
-                // Store each vertex position
-                theCove.push(x, y, z);
-
-                // Create two triangles for each square of the grid (except the last row/column)
+                // Generate indices for two triangles in each grid cell
                 if (i < this.segments && j < this.segments) {
                     let topLeft = i * (this.segments + 1) + j;
                     let topRight = (i + 1) * (this.segments + 1) + j;
                     let bottomLeft = i * (this.segments + 1) + (j + 1);
                     let bottomRight = (i + 1) * (this.segments + 1) + (j + 1);
-
-                    // Push two triangles for this square (top left, bottom left, bottom right)
-                    theCoveIndices.push(topLeft, bottomLeft, bottomRight);  // First triangle
-                    theCoveIndices.push(topLeft, bottomRight, topRight);    // Second triangle
-                }
-
-            }
-        }
-
-
-        // Create geometry and assign the vertices and theCoveIndices
-        var theCovesGeometry = new THREE.BufferGeometry()
-        theCovesGeometry.setAttribute(
-            'position', 
-            new THREE.Float32BufferAttribute(new Float32Array(theCove), 3)
-        );
-
-        // Set theCoveIndices to connect vertices and form triangles
-        theCovesGeometry.setIndex(theCoveIndices);
-        theCovesGeometry.computeVertexNormals();  // Ensure proper lighting/shading
-
-        // Create the mesh
-        var TheCove = new THREE.Mesh(theCovesGeometry, new THREE.MeshStandardMaterial({
-            // color: 'royalblue',
-            map: new THREE.TextureLoader().load("/images/waternormals.jpg", texture => {
-               texture.wrapS = THREE.RepeatWrapping
-                texture.wrapT = THREE.RepeatWrapping
-                texture.rotation = Math.random() * Math.PI * 2
-                texture.repeat.set(100, 100)
-            }),
-            opacity: 0.95
-        }));
-        TheCove.receiveShadow = true
-        // Add to scene
-        scene.add(TheCove);
-
-
-        // Store reference to the water mesh
-        console.log("adding water")
-        this.water = TheCove;
-
-
-
-        for (var m of this.meshes) {
-            for (var x1 = 0; x1 < m.geometry.attributes.position.array.length; x1 += 3) { 
-                for (var x2 = 0; x2 < vertices.length; x2 += 3) {
-                    var sameX = m.geometry.attributes.position.array[x1] == vertices[x2];
-                    var sameZ = m.geometry.attributes.position.array[x1 + 2] == vertices[x2 + 2];
-                    var differentY = m.geometry.attributes.position.array[x1 + 1] == vertices[x2 + 1]
-
-                    if (sameX && sameZ && differentY) {
-                        vertices[x2 + 1] = m.geometry.attributes.position.array[x1 + 1];
-                    } else if (sameX && Math.abs(m.geometry.attributes.position.array[x1 + 2] - vertices[x2 + 2]) < 2) {
-                        vertices[x2 + 1] = m.geometry.attributes.position.array[x1 + 1];
-                    } else if (sameZ && Math.abs(m.geometry.attributes.position.array[x1] - vertices[x2]) < 2) {
-                        vertices[x2 + 1] = m.geometry.attributes.position.array[x1 + 1];
-                    }
+                    indices.push(topLeft, bottomLeft, bottomRight, topLeft, bottomRight, topRight);
                 }
             }
         }
+        return { theCove, indices };
+    }
 
 
-        var grassPatches = new Array(this.segments + 1).fill().map(() => new Array(this.segments + 1).fill(false));
-        
-        
-        switch (this.terrainType) {
-            case 'dense':
-                for (let i = 0; i < this.segments; i++) {
-                    for (let j = 0; j < this.segments; j++) {
-                        grassPatches[i][j] = Math.random() < 0.9
-                    }
-                }
-                break;
-            case 'sparse':
-                for (let i = 0; i < this.segments; i++) {
-                    for (let j = 0; j < this.segments; j++) {
-                        grassPatches[i][j] = Math.random() < 0.09
-                    }
-                }
-                break;
-            case 'half':
-                for (let i = 0; i < this.segments; i++) {
-                    for (let j = 0; j < this.segments; j++) {
-                        grassPatches[i][j] = Math.random() < 0.5
-                    }
-                }
-                break;                      
+    adjustVerticesBasedOnMeshes(vertices) {
+        for (let m of this.meshes) {
+            this.alignMeshHeights(vertices, m.geometry.attributes.position.array);
         }
+    }
 
+    alignMeshHeights(vertices, meshPositions) {
+        for (let x1 = 0; x1 < meshPositions.length; x1 += 3) {
+            for (let x2 = 0; x2 < vertices.length; x2 += 3) {
+                if (this.verticesMatch(meshPositions, vertices, x1, x2)) {
+                    vertices[x2 + 1] = meshPositions[x1 + 1];
+                }
+            }
+        }
+    }
 
+    verticesMatch(meshPositions, vertices, x1, x2) {
+        return (meshPositions[x1] === vertices[x2] && meshPositions[x1 + 2] === vertices[x2 + 2]) || 
+               (Math.abs(meshPositions[x1 + 2] - vertices[x2 + 2]) < 2 && meshPositions[x1] === vertices[x2]) || 
+               (Math.abs(meshPositions[x1] - vertices[x2]) < 2 && meshPositions[x1 + 2] === vertices[x2 + 2]);
+    }
+
+    populateTerrainFeatures(vertices, indices) {
+        const segmentSize = 1 / this.segments;
         for (let i = 0; i < this.segments; i++) {
             for (let j = 0; j < this.segments; j++) {
-                let a = i + j * (this.segments + 1);
-                let b = (i + 1) + j * (this.segments + 1);
-                let c = (i + 1) + (j + 1) * (this.segments + 1);
-                let d = i + (j + 1) * (this.segments + 1);
-             
-                indices.push(a, b, d); // First triangle in the quad
-                indices.push(b, c, d); // Second triangle in the quad
-
-                let x = i * segmentSize;
-                let y = j * segmentSize;
-                let v = new THREE.Vector3();
-
-                v.x = (1 - x) * (1 - y) * v0.x + x * (1 - y) * v1.x + x * y * v2.x + (1 - x) * y * v3.x;
-                v.y = (1 - x) * (1 - y) * v0.y + x * (1 - y) * v1.y + x * y * v2.y + (1 - x) * y * v3.y;
-                v.z = (1 - x) * (1 - y) * v0.z + x * (1 - y) * v1.z + x * y * v2.z + (1 - x) * y * v3.z;
-
-                var inCastle = (v.x > -house.width / 2 && v.x < house.width / 2 && v.z > -house.depth / 2 && v.z < house.depth / 2)
-                var inCove = v.x >= landscape.field.width / 2 && v.z >= -landscape.field.depth && v.z <= landscape.field.depth / 3;
-  
-                var Txture = cementTexture
-                const t1 = TriangleMesh(vertices, a, b, d, this.width, this.height, Txture);
-                const t2 = TriangleMesh(vertices, b, c, d, this.width, this.height, Txture);
-
-                [t1, t2].forEach((triangleMesh) => {
-                    
-                    var trianglePosition = this.getTriangleCenter(triangleMesh.triangle)
-                    var triangle = triangleMesh.triangle
-
-                    this.grounds.push(triangleMesh)
-
-                    /* TERRAIN FEATURES */
-                    const CLIFF = Math.abs(triangleMesh.normal.y) < 0.4 && (Math.abs(triangleMesh.normal.x) > 0.4 || Math.abs(triangleMesh.normal.z) > 0.4)
-                        // || trianglePosition.x > 100 || trianglePosition.z > 100
-                    const YARD = isIn(trianglePosition, 'yard')
-                    let cypressTreePosition
-
-                    const SIDEYARD = isIn(trianglePosition, 'sideyard')
-                    const BACKYARD = isIn(trianglePosition, 'backyard')
-                    if ( !YARD && 
-                            ((SIDEYARD && Math.random() < 0.1) || (BACKYARD && Math.random() < 0.05))
-                        ) {
-                            cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                            var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
-                            this.trees.push(cypressTree)
-                    }
-
-
-                    if (CLIFF) {
-                        this.cliffs.push(triangle)
-                    }
-                    
-                })
-
+                this.addTerrainFeature(i, j, segmentSize, vertices, indices);
             }
         }
-        
-
         this.clusterCliffs()
-
-
     }
+
+    addTerrainFeature(i, j, segmentSize, vertices, indices) {
+        let a = i + j * (this.segments + 1);
+        let b = (i + 1) + j * (this.segments + 1);
+        let c = (i + 1) + (j + 1) * (this.segments + 1);
+        let d = i + (j + 1) * (this.segments + 1);
+
+        indices.push(a, b, d); // First triangle in the quad
+        indices.push(b, c, d); // Second triangle in the quad
+
+        let x = i * segmentSize;
+        let y = j * segmentSize;
+        let v = new THREE.Vector3();
+
+        v.x = (1 - x) * (1 - y) * this.v0.x + x * (1 - y) * this.v1.x + x * y * this.v2.x + (1 - x) * y * this.v3.x;
+        v.y = (1 - x) * (1 - y) * this.v0.y + x * (1 - y) * this.v1.y + x * y * this.v2.y + (1 - x) * y * this.v3.y;
+        v.z = (1 - x) * (1 - y) * this.v0.z + x * (1 - y) * this.v1.z + x * y * this.v2.z + (1 - x) * y * this.v3.z;
+
+        var inCastle = (v.x > -house.width / 2 && v.x < house.width / 2 && v.z > -house.depth / 2 && v.z < house.depth / 2)
+        var inCove = v.x >= landscape.field.width / 2 && v.z >= -landscape.field.depth && v.z <= landscape.field.depth / 3;
+
+        var Txture = cementTexture
+        const t1 = TriangleMesh(vertices, a, b, d, this.width, this.height, Txture);
+        const t2 = TriangleMesh(vertices, b, c, d, this.width, this.height, Txture);
+
+        [t1, t2].forEach((triangleMesh) => {
+
+            var trianglePosition = this.getTriangleCenter(triangleMesh.triangle)
+            var triangle = triangleMesh.triangle
+
+            this.grounds.push(triangleMesh)
+
+            /* TERRAIN FEATURES */
+            const CLIFF = Math.abs(triangleMesh.normal.y) < 0.4 && (Math.abs(triangleMesh.normal.x) > 0.4 || Math.abs(triangleMesh.normal.z) > 0.4)
+            // || trianglePosition.x > 100 || trianglePosition.z > 100
+            const YARD = isIn(trianglePosition, 'yard')
+            let cypressTreePosition
+
+            const SIDEYARD = isIn(trianglePosition, 'sideyard')
+            const BACKYARD = isIn(trianglePosition, 'backyard')
+            if ( !YARD && 
+                ((SIDEYARD && Math.random() < 0.1) || (BACKYARD && Math.random() < 0.05))
+            ) {
+                cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
+                var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
+                this.trees.push(cypressTree)
+            }
+
+
+            if (CLIFF) {
+                this.cliffs.push(triangle)
+            }
+
+
+
+        })
+    }
+
 
     createInstancedMeshGrounds() {
         // create instanced meshes for simple items
