@@ -105,7 +105,7 @@ function isIn(v, which) {
         const inXRange = v.x > dockEndX && v.x < t + 20;
         const inZRange = Math.abs(v.z - boardwalk.center.z - windingZ) < randomInRange(3, 10); // Width of the winding path
         
-        return (inXRange && inZRange) || Math.random() < 0.02      
+        return (inXRange && inZRange)
     default:
         return false;
     }
@@ -2203,11 +2203,6 @@ class Terrain {
         if (isIn(v, 'dock')) v.y = -20;
 
         if (isIn(v, 'cove')) v.y = randomInRange(-20, -5)
-
-        if (!isIn(v, 'dock') && !isIn(v, 'cove') && v.x > 30) {
-            // v.x += randomInRange(-5, 5)
-            v.y += randomInRange(-5, 15)
-        }
 
         if (isIn(v, 'sideyard')) v.y = house.center.y;
     }
