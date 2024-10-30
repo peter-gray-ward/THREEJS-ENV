@@ -1,7 +1,7 @@
 import * as THREE from '/lib/Three.module.min.js';
 
 
-
+import { Water } from '/lib/Water.js'
 import { UnrealBloomPass } from '/lib/UnrealBloomPass.js';
 import { EffectComposer } from '/lib/EffectComposer.js';
 import { RenderPass } from '/lib/RenderPass.js';
@@ -2222,7 +2222,7 @@ class Terrain {
 
 
         // Create geometry and assign the vertices and theCoveIndices
-        var theCovesGeometry = new THREE.BufferGeometry();
+        var theCovesGeometry = new THREE.BufferGeometry()
         theCovesGeometry.setAttribute(
             'position', 
             new THREE.Float32BufferAttribute(new Float32Array(theCove), 3)
@@ -2232,9 +2232,9 @@ class Terrain {
         theCovesGeometry.setIndex(theCoveIndices);
         theCovesGeometry.computeVertexNormals();  // Ensure proper lighting/shading
 
-        // Create material (water-like material)
-        var waterMaterial = new THREE.MeshStandardMaterial({
-            color: covecolors[Math.floor(Math.random() * covecolors.length)],
+        // // Create material (water-like material)
+        var waterMaterial = new THREE.MeshBasicMaterial({
+            color: 'royalblue',
             // map: new THREE.TextureLoader().load("/images/art-water.gif"),
             side: THREE.DoubleSide,
             opacity: 0.9,
@@ -2244,6 +2244,7 @@ class Terrain {
 
         // Create the mesh
         var TheCove = new THREE.Mesh(theCovesGeometry, waterMaterial);
+        // const TheCove = new Water(theCovesGeometry, {})
 
         // Add to scene
         scene.add(TheCove);
