@@ -71,6 +71,128 @@ const boardwalk = {
 }
 
 
+
+
+
+class RailingCurve extends THREE.Curve {
+    constructor(frequency = Math.PI, amplitude) {
+        super()
+        this.frequency = frequency
+        this.amplitude = amplitude
+    }
+    getPoint(t) {
+        const z = t * 2
+        const y = Math.sin(this.frequency * z) * this.amplitude
+        return new THREE.Vector3(0, y, z)
+    }
+}
+
+function RailingPost(start, end, scale = 0.01, ballScale = 5) {
+
+    var post = new THREE.Mesh(
+        new THREE.BoxGeometry(0.075, 0.75, 0.075),
+        new THREE.MeshStandardMaterial({ 
+            map: CONCRETE,
+        })
+    );
+    post.position.y = 0.75 / 2;
+
+    var postCapShape = new THREE.Shape();
+    postCapShape.moveTo(0, 0);
+    postCapShape.lineTo(scale, 0);
+    postCapShape.lineTo(scale, scale);
+    postCapShape.lineTo(0, scale);
+    postCapShape.lineTo(0, 0);
+
+    var postCap = new THREE.Mesh(
+        new THREE.ExtrudeGeometry(postCapShape, {
+            steps: 6,
+            depth: .03,
+            bevelThickness: scale,
+            bevelSize: scale * 7,
+            bevelOffset: 0,
+            bevelSegments: 11
+        }),
+        new THREE.MeshStandardMaterial({ 
+            color: 'red',
+            roughness: 0,
+            metalness: 1
+        })
+    );
+    postCap.rotation.x = Math.PI / 2
+    postCap.position.y = 0.75; // Place on top of the post
+
+    var postCap2 = new THREE.Mesh(
+        new THREE.ExtrudeGeometry(postCapShape, {
+            steps: 6,
+            depth: .03,
+            bevelThickness: scale * .9,
+            bevelSize: scale * 5,
+            bevelOffset: 0,
+            bevelSegments: 11
+        }),
+        new THREE.MeshStandardMaterial({ 
+            color: 'red',
+            roughness: 0,
+            metalness: 1
+         })
+    );
+    postCap2.rotation.x = Math.PI / 2
+    postCap2.position.y = 0.8; // Place on top of the post
+
+    // Create the post ball
+    var postBall = new THREE.Mesh(
+        new THREE.SphereGeometry(scale * ballScale, 8, 8),
+        new THREE.MeshStandardMaterial({ 
+            color: 'red',
+            roughness: 0,
+            metalness: 1
+         })
+    );
+    postBall.position.y = 0.85; // Place on top of the cap
+
+
+    var amplitude = 0.1
+
+    var railingCurve = new RailingCurve(11, amplitude)
+
+    var postRailing = new THREE.Mesh(
+        new THREE.TubeGeometry(railingCurve, Math.floor(randomInRange(8, 50)), .01),
+        new THREE.MeshStandardMaterial({ 
+            color: 'red',
+            roughness: 0,
+            metalness: 1
+         })
+    )
+    postRailing.position.y = 0.75; // Place on top of the post
+
+    // Group the parts together
+    var group = new THREE.Group();
+    
+    if (ballScale >= 5) {
+        group.add(post);
+        group.add(postCap);
+        group.add(postCap2)
+    }
+    group.add(postRailing)
+    group.add(postBall);
+
+    // Set the overall position of the group
+    group.position.set(start.x - .2, start.y, start.z);
+
+    for (var child of group.children) {
+        child.castShadow = true
+        child.receiveShadow = true
+    }
+    
+    return group;
+}
+
+
+
+
+
+
 function isIn(v, which) {
    
         
@@ -296,28 +418,6 @@ class GrassPatch {
     }
 }
 
-
-
-// class CustomWater extends Water {
-//     constructor(geometry, options, T) {
-//         super(geometry, options);
-//         this.T = T;
-//         this.material.onBeforeCompile = (shader) => {
-//             shader.uniforms.T = { value: T };
-
-//             shader.vertexShader = `
-//                 uniform float T;
-//                 ${shader.vertexShader}
-//             `.replace(
-//                 `#include <begin_vertex>`,
-//                 `#include <begin_vertex>
-//                 if (abs(position.x) < T && abs(position.z) < T) {
-//                     transformed.y = 0.0;
-//                 }`
-//             );
-//         };
-//     }
-// } 
 
 function TriangleMesh(vertices, a, b, c, terrainWidth, terrainHeight, map) {
 
@@ -561,26 +661,6 @@ function Lathe(x, y, z, radius, color, map) {
 
     return group
 }
-
-
-
-
-// function User(camera) {
-//     var leftArm = {
-//         shoulder: [],
-//         elbow: [],
-//         wrist: [],
-//         knuckleA: [],
-//         knuckleB: [],
-//         knuckleC: [],
-//         knuckleD: [],
-//         knuckleE: [],
-//         skin_tone: 'pink'
-//     }
-
-    
-// }
-
 
 
 function getInstancePosition(instancedMesh, index) {
@@ -1086,6 +1166,7 @@ class Castle {
         }
         this.parts = [];
         this.elevator = []
+        this.objects = []
 
         var buildingHeight = 300
         var elevatorHeight = 3
@@ -1113,12 +1194,21 @@ class Castle {
             boardwalk.center.y, 
             boardwalk.center.z - boardwalk.depth / 2 + 1
         )
+
         const boardwalkTexture = new THREE.TextureLoader().load("/images/floor2.jpg", texture => {
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
             texture.repeat.set(11, 11);
         })
         
+
+        const steptexture = new THREE.TextureLoader().load("/images/floor2.jpg", texture => {
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(2, 2);
+        })
+        
+
         var opts = {}
         opts.map = boardwalkTexture;
         var tilePlane = new THREE.Mesh(
@@ -1131,6 +1221,45 @@ class Castle {
         this.parts.push(tilePlane)
         tilePlane.frustrumCulled = true
         scene.add(tilePlane)
+
+
+        var x = boardwalk.center.x + boardwalk.width / 2;
+        var y = boardwalk.center.y + 0.75 / 2;
+        var z = boardwalk.center.z - (boardwalk.depth / 2.5) + 1
+        while (z < boardwalk.center.z + boardwalk.depth / 2) {
+
+            // var rp = RailingPost(x, y, z)
+            // scene.add(rp)
+            // this.objects.push(rp)
+
+            var rp = RailingPost(
+                new THREE.Vector3(x, y - 0.2, z), 
+                new THREE.Vector3(x, y - 0.2, z + 2),
+                0.01, 5
+            )
+            scene.add(rp)
+            this.objects.push(rp)
+
+            rp = RailingPost(
+                new THREE.Vector3(x, y - 0.4, z), 
+                new THREE.Vector3(x, y - 0.2, z + 2),
+                0.01, 3
+            )
+            scene.add(rp)
+
+            this.objects.push(rp)
+
+             rp = RailingPost(
+                new THREE.Vector3(x, y - 0.6, z), 
+                new THREE.Vector3(x, y - 0.2, z + 2),
+                0.01, 3
+            )
+            scene.add(rp)
+
+            this.objects.push(rp)
+
+            z += 2
+        }
 
         var dock = {
             width: boardwalk.width * 1.5 + 4, 
@@ -1169,7 +1298,7 @@ class Castle {
                 stepGeo.rotateY(Math.PI / 2)
             }
             var step = new THREE.Mesh(stepGeo, new THREE.MeshStandardMaterial({
-                map: boardwalkTexture,
+                map: steptexture,
                 side: THREE.DoubleSide
             }))
             step.position.set(stepX, stepY, stepZ)
@@ -1180,7 +1309,7 @@ class Castle {
                     var stepTurnPlane = new THREE.Mesh(
                         new THREE.BoxGeometry(2, 0.15, 2),
                         new THREE.MeshStandardMaterial({
-                            map: boardwalkTexture,
+                            map: steptexture,
                             side: THREE.DoubleSide
                         })
                     )
@@ -1730,9 +1859,26 @@ class Castle {
             }
         }
     }
+
+    update() {
+        for (var object of this.objects) {
+            if (object instanceof THREE.Group) {
+                if (!object.boundingBox) {
+                    object.boundingBox = new THREE.Box3().setFromObject(object)
+                }
+                if (cameraBoundingBox().intersectsBox(object.boundingBox)) {
+                    const boundingBoxCenter = new THREE.Vector3();
+                    object.boundingBox.getCenter(boundingBoxCenter);
+                    var directionFromUser = new THREE.Vector3()
+                    directionFromUser.subVectors(boundingBoxCenter, user.camera.position).normalize()
+                    user.camera.position.x -= directionFromUser.x
+                    // user.camera.position.y -= directionFromUser.y
+                    user.camera.position.z -= directionFromUser.z
+                }
+            }
+        }
+    }
 }
-
-
 
 const sphereGeometries = {};
 const leafMaterials = {};
@@ -1759,8 +1905,8 @@ function getCachedSphereGeometry(radius, map, transparent) {
     if (!sphereGeometries[radius]) {
         const geometry = new THREE.SphereGeometry(
             randomInRange(radius - 1, radius + 1), 
-            Math.floor(randomInRange(3, 10)), 
-            Math.floor(randomInRange(3, 10))
+            Math.floor(randomInRange(3, 11)), 
+            Math.floor(randomInRange(3, 11))
         );
         
         if (transparent) {
@@ -3772,6 +3918,7 @@ window.Animate = function() {
         window.terrain.updateTerrain()
         window.user.handleMovement()
         UndulateWater()
+        window.castle.update()
        
 
         window.renderer.render(window.scene, window.user.camera);
