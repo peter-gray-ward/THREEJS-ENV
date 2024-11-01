@@ -189,7 +189,7 @@ function RailingPost(start, end, scale = 0.01, ballScale = 5) {
 
 
 
-
+const COVEZ = randomInRange(3, 10)
 
 function isIn(v, which) {
    
@@ -230,7 +230,7 @@ function isIn(v, which) {
 
     const windingZ = Math.sin((v.x - dockEndX) / t * Math.PI * 2) * 10;  // Winding factor
     const inXRange = v.x > dockEndX && v.x < t + 20;
-    const inZRange = Math.abs(v.z - boardwalk.center.z - windingZ) < randomInRange(3, 10); // Width of the winding path
+    const inZRange = Math.abs(v.z - boardwalk.center.z - windingZ) < COVEZ; // Width of the winding path
         return (inXRange && inZRange)
     
     default:
@@ -1731,7 +1731,7 @@ class Castle {
 
     building(floorY) {
         floorY += boardwalk.height
-        for (var level = 0; level < 4; level++) {
+        for (var level = 0; level < 1; level++) {
             const foundation = new THREE.Mesh(
                 new THREE.BoxGeometry(house.width, house.foundation.height, house.depth),
                     new THREE.MeshStandardMaterial({
@@ -1749,7 +1749,7 @@ class Castle {
 
 
 
-            if (level == 3) continue
+            if (level == 0) continue
 
             for (var i = 0; i < 4; i++) {
                 const group = new THREE.Group()
@@ -1927,7 +1927,7 @@ function getCachedLeafMaterial(color, map, transparent) {
         var leafMaterialArgs = { 
             color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
             side: THREE.DoubleSide,
-            transparent: false,
+            transparent: true,
             // opacity: .8
         }
         if (map) {
@@ -2447,7 +2447,7 @@ class Terrain {
                         !isIn(trianglePosition, 'cove')
                         && !isIn(trianglePosition, 'dock')
                         && !isIn(trianglePosition, 'yard')
-                        && Math.random() < 0.03
+                        && Math.random() < 0.05
                     ) {
                     cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
                     var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
