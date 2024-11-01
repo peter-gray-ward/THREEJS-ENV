@@ -184,6 +184,7 @@ function RailingPost(start, end, scale = 0.01, ballScale = 5) {
         child.castShadow = true
         child.receiveShadow = true
     }
+
     
     return group;
 }
@@ -1224,7 +1225,7 @@ class Castle {
 
 
         var x = boardwalk.center.x + boardwalk.width / 2;
-        var y = boardwalk.center.y + 0.75 / 2;
+        var y = boardwalk.center.y + 0.75 / 2 - boardwalk.height / 2
         var z = boardwalk.center.z - (boardwalk.depth / 2.5) + 1
         while (z < boardwalk.center.z + boardwalk.depth / 2) {
 
@@ -1871,9 +1872,23 @@ class Castle {
                     object.boundingBox.getCenter(boundingBoxCenter);
                     var directionFromUser = new THREE.Vector3()
                     directionFromUser.subVectors(boundingBoxCenter, user.camera.position).normalize()
+
                     user.camera.position.x -= directionFromUser.x
                     // user.camera.position.y -= directionFromUser.y
                     user.camera.position.z -= directionFromUser.z
+
+                    if (user.w) {
+                        user.wS = 0.0
+                    }
+                    if (user.a) {
+                        user.aS = 0.0
+                    }
+                    if (user.s) {
+                        user.sS = 0.0
+                    }
+                    if (user.d) {
+                        user.dS = 0.0
+                    }
                 }
             }
         }
@@ -3259,13 +3274,17 @@ class UserController {
             }
             if (key == 'W') {
                 user.w = false;
+                this.wS = .1
                 this.time_held.w = 0;
             } else if (key == 'A') {
                 this.a = false;
+                this.aS = .1
             } else if (key == 'S') {
                 this.s = false;
+                 this.sS = .1
             } else if (key == 'D') {
                 this.d = false;
+                this.dS = .1
             } else if (key == ' ') {
                 this.space = false;
             } else if (key == 'ARROWUP') {
@@ -3747,6 +3766,7 @@ class UserController {
             var mesh = m.mesh ? m.mesh : m
             const intersects = raycaster.intersectObject(mesh, true);
             if (intersects.length > 0 && intersects[0].distance < minDistance) {
+                console.log(mesh)
                 closestIntersection = intersects[0];
                 minDistance = intersects[0].distance;
             }
@@ -3922,12 +3942,6 @@ window.Animate = function() {
        
 
         window.renderer.render(window.scene, window.user.camera);
-
-
-
-
-        
-
 }
 
 
