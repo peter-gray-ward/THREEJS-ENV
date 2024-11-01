@@ -1,13 +1,9 @@
 import * as THREE from '/lib/Three.module.min.js';
 
-
-import { Water } from '/lib/Water.js'
-import { UnrealBloomPass } from '/lib/UnrealBloomPass.js';
-import { EffectComposer } from '/lib/EffectComposer.js';
-import { RenderPass } from '/lib/RenderPass.js';
 import { CSG } from '/lib/CSG.js'
 import { SUBTRACTION, Brush, Evaluator } from '/lib/three-bvh-csg.js';
 import ViewModel from "/src/view-model.js";
+import { Reflector } from '/lib/Reflector.js'
 
 window.CONCRETE = new THREE.TextureLoader().load("/images/seraphic-metallic-texture-polished-concrete.avif", texture => {
     texture.wrapS = THREE.RepeatWrapping;
@@ -52,6 +48,7 @@ var house = {
     center: landscape.field.center,
     width: 30,
     depth: 20,
+    height: 3,
     foundation: {
         width: 20,
         height: 1,
@@ -203,6 +200,11 @@ function isIn(v, which) {
             && v.x < landscape.center.x + landscape.width / 2
             && v.z > landscape.center.z - landscape.depth / 2
             && v.z < landscape.center.z + landscape.depth / 2
+    case 'house':
+        return v.x > house.center.x - house.width / 2
+            && v.x < house.center.x + house.width / 2
+            && v.z > house.center.z - house.depth / 2
+            && v.z < house.center.z + house.depth / 2
     case 'sideyard':
         return (
             v.x >= (house.center.z - house.foundation.depth / 2 - 5) && 
@@ -738,20 +740,6 @@ class Sky {
         this.sphere.position.copy(this.sun.position)
         scene.add(this.sphere)
 
-        // Set up the composer for postprocessing
-        composer = new EffectComposer(renderer);
-        const renderPass = new RenderPass(scene, user.camera);
-        composer.addPass(renderPass);
-
-        // Set up the UnrealBloomPass
-        const bloomPass = new UnrealBloomPass(
-            new THREE.Vector2(window.innerWidth, window.innerHeight),
-            1.5,    // Strength of bloom
-            0.4,    // Bloom radius
-            0.85    // Threshold
-        );
-        composer.addPass(bloomPass);
-
 
 
         this.createDome();
@@ -1175,20 +1163,8 @@ class Castle {
         const foundationY = house.center.y - (house.foundation.height / 2)
         var floorY = foundationY
 
-        const foundation = new THREE.Mesh(
-            new THREE.BoxGeometry(house.width, house.foundation.height, house.depth),
-                new THREE.MeshStandardMaterial({
-                    map: CONCRETE,
-                    side: THREE.DoubleSide
-                }),
-                
-        )
-        foundation.position.set(0, floorY + .1, 0)
-        floorY += floorHeight
-        foundation.frustrumCulled = true
-        this.parts.push(foundation)
-        scene.add(foundation)
 
+        this.building(foundationY)
         
         this.createHarryPotterLampPost(
             boardwalk.center.x - boardwalk.width / 2 + 1, 
@@ -1250,7 +1226,7 @@ class Castle {
 
             this.objects.push(rp)
 
-             rp = RailingPost(
+            rp = RailingPost(
                 new THREE.Vector3(x, y - 0.6, z), 
                 new THREE.Vector3(x, y - 0.2, z + 2),
                 0.01, 3
@@ -1753,112 +1729,109 @@ class Castle {
     }
 
 
-    buildWalls(wall_instructions = ['decorative wall with cutout windows at 1 - 2 levels of varying sizes','a wall of glass','a castle wall','a mossy wall with circular window cutouts']) {
-        var createDecorativeWall = (foundation, width, times = 1, wall_instructions) => {
-            // console.log("Building decorative wall...");
-
-            // Define the wall dimensions
-            const wallHeight = this.area.wall.height * 3 * times; // Example: 3 floors tall
-            const wallWidth = width; // Example wall width
-            const wallThickness = 0.3; // Example thickness
-
-            // Create the base wall geometry
-            const wallGeometry = new THREE.BoxGeometry(wallWidth, wallHeight, wallThickness);
-            const wallBrush = new Brush(wallGeometry);
-            wallBrush.position.set(
-                this.foundation.position.x,
-                this.position.foundation.y + wallHeight / 2,
-                this.foundation.position.z
-            );
-            wallBrush.updateMatrixWorld();
-
-            // Create cutouts for windows at varying heights and sizes
-            const evaluator = new Evaluator();
+    building(floorY) {
+        floorY += boardwalk.height
+        for (var level = 0; level < 4; level++) {
+            const foundation = new THREE.Mesh(
+                new THREE.BoxGeometry(house.width, house.foundation.height, house.depth),
+                    new THREE.MeshStandardMaterial({
+                        map: CONCRETE,
+                        side: THREE.DoubleSide
+                    }),
+                    
+            )
+            foundation.position.set(0, floorY, 0)
             
-            // Create small windows at level 1
-            const window1Geometry = new THREE.BoxGeometry(0.5, 0.5, wallThickness + 0.1); // Small square window
-            const window1Brush = new Brush(window1Geometry);
-            window1Brush.position.set(this.foundation.position.x, this.position.foundation.y + wallHeight / 6, foundation.position.z);
-            window1Brush.updateMatrixWorld();
-            
-            // Create larger windows at level 2
-            const window2Geometry = new THREE.BoxGeometry(1, 1, wallThickness + 0.1); // Larger window
-            const window2Brush = new Brush(window2Geometry);
-            window2Brush.position.set(this.foundation.position.x, this.position.foundation.y + wallHeight / 2, foundation.position.z);
-            window2Brush.updateMatrixWorld();
+            foundation.frustrumCulled = true
+            this.objects.push(foundation)
+            this.parts.push(foundation)
+            scene.add(foundation)
 
-            // Create small circular window at level 3
-            const window3Geometry = new THREE.CylinderGeometry(0.3, 0.3, wallThickness + 0.1, 32); // Circular window
-            const window3Brush = new Brush(window3Geometry);
-            window3Brush.rotation.x = Math.PI / 2; // Rotate cylinder to face forward
-            window3Brush.position.set(this.foundation.position.x, this.position.foundation.y + wallHeight * 5 / 6, foundation.position.z);
-            window3Brush.updateMatrixWorld();
 
-            // Perform the CSG subtraction to create the windows in the wall
-            let finalWallGeometry = evaluator.evaluate(wallBrush, window1Brush, SUBTRACTION);
-            finalWallGeometry = evaluator.evaluate(finalWallGeometry, window2Brush, SUBTRACTION);
-            finalWallGeometry = evaluator.evaluate(finalWallGeometry, window3Brush, SUBTRACTION);
 
-            let texture = new THREE.TextureLoader().load("/images/wallpaper3.jpg")
-            texture.wrapS = THREE.RepeatWrapping; // Repeat horizontally
-            texture.wrapT = THREE.RepeatWrapping;
-            // Convert the result back into a Mesh
-            const decorativeWall = new THREE.Mesh(
-                finalWallGeometry.geometry, 
-                new THREE.MeshStandardMaterial({ 
-                    map: texture,
+            if (level == 3) continue
+
+            for (var i = 0; i < 4; i++) {
+                const group = new THREE.Group()
+                var geometry = new THREE.PlaneGeometry(i % 2 == 0 ? house.depth : house.width, house.height);
+                const wall = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
+                    color: 0x777777,
+                    opacity: 0.5,
                     side: THREE.DoubleSide,
-                    transparent: true,
-                    opacity: 0.63
+                    transparent: true
                 }));
-            decorativeWall.name = wall_instructions
-            // decorativeWall.computeBoundingSphere()
-            const positions = finalWallGeometry.geometry.attributes.position.array;
-            for (let i = 0; i < positions.length; i++) {
-                if (isNaN(positions[i])) {
-                    // console.log(`NaN found at index ${i}`);
+
+                wall.position.set(
+                    house.center.x, 
+                    floorY + house.height / 2 + house.foundation.height / 2,
+                    house.center.z
+                )
+                switch (i) {
+                case 0:
+                    wall.rotation.y = Math.PI / 2
+                    wall.position.x = house.width / 2
+                    break
+                case 1:
+                    wall.position.z = house.depth / 2
+                    break
+                case 2:
+                    wall.rotation.y = Math.PI / 2
+                    wall.position.x = -house.width / 2
+                    break
+                case 3:
+                    wall.position.z = -house.depth / 2
+                    break
+                }
+                group.add(wall)
+                scene.add(group)
+                this.parts.push(group)
+                this.objects.push(group);
+            }
+
+            floorY += house.height + house.foundation.height
+        }
+
+        const roofVertices = [];
+        const roofIndices = [];
+        const segmentSize = 2;
+        const rows = Math.floor(house.width / segmentSize);
+        const cols = Math.floor(house.depth / segmentSize);
+
+        for (let i = 0; i <= rows; i++) {
+            for (let j = 0; j <= cols; j++) {
+                const x = house.center.x - house.width / 2 + i * segmentSize;
+                const z = house.center.z - house.depth / 2 + j * segmentSize;
+                const y = randomInRange(floorY, floorY + 10);  // Apply random height for variation
+                roofVertices.push(x, y, z);
+
+                // Skip last row/column to avoid indexing out of bounds
+                if (i < rows && j < cols) {
+                    const topLeft = i * (cols + 1) + j;
+                    const topRight = topLeft + 1;
+                    const bottomLeft = (i + 1) * (cols + 1) + j;
+                    const bottomRight = bottomLeft + 1;
+
+                    // Create two triangles for the quad
+                    roofIndices.push(topLeft, bottomLeft, bottomRight); // First triangle
+                    roofIndices.push(topLeft, bottomRight, topRight);   // Second triangle
                 }
             }
-
-            scene.add(decorativeWall); // Add the wall with cutouts to the scene
-
-            return decorativeWall
         }
-
-        var walls = []
-
-        for (var wi of wall_instructions) {
-            
-            switch (wi) {
-                case 'decorative wall with cutout windows at 1 - 2 levels of varying sizes':
-                    var aDecorativeWall = createDecorativeWall(this.foundation, this.area.foundation.width, 1, wall_instructions);
-                    aDecorativeWall.position.z += this.area.foundation.depth / 2
-                    scene.add(aDecorativeWall)
-                    this.parts[aDecorativeWall.name] = aDecorativeWall
-                    break;
-                case 'a wall of glass':
-                    var aDecorativeWall = createDecorativeWall(this.foundation, this.area.foundation.depth, 1, wall_instructions);
-                    aDecorativeWall.position.x += this.area.foundation.width / 2
-                    aDecorativeWall.rotation.y += Math.PI / 2
-                    scene.add(aDecorativeWall)
-                    this.parts[aDecorativeWall.name] = aDecorativeWall
-                    break;
-                case 'a castle wall':
-                    var aDecorativeWall = createDecorativeWall(this.foundation, this.area.foundation.width, 1, wall_instructions);
-                    aDecorativeWall.position.z -= this.area.foundation.depth / 2
-                    aDecorativeWall.rotation.y += -Math.PI 
-                    scene.add(aDecorativeWall)
-                    this.parts[aDecorativeWall.name] = aDecorativeWall
-                    break;
-                case 'a mossy wall with circular window cutouts':
-                    var aDecorativeWall = createDecorativeWall(this.foundation, this.area.foundation.depth, 1, wall_instructions);
-                    aDecorativeWall.position.x -= this.area.foundation.width / 2
-                    aDecorativeWall.rotation.y = -Math.PI / 2
-                    scene.add(aDecorativeWall)
-                    this.parts[aDecorativeWall.name] = aDecorativeWall
-                    break;
-            }
-        }
+        // const roofGeo = new THREE.BufferGeometry()
+        // roofGeo.setAttribute('position', new THREE.Float32BufferAttribute(roofVertices, 3))
+        // roofGeo.setIndex(roofIndices)
+        // roofGeo.computeVertexNormals()
+        // var roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({
+        //     color: 'silver',
+        //     metalness: 1,
+        //     roughness: 0,
+        //     side: THREE.DoubleSide
+        // }))
+        // roof.castShadow = true
+        // roof.receiveShadow = true
+        // roof.position.set(house.center.x, floorY, house.center.z)
+        // this.objects.push(roof)
+        // scene.add(roof)
     }
 
     update() {
@@ -1954,7 +1927,7 @@ function getCachedLeafMaterial(color, map, transparent) {
         var leafMaterialArgs = { 
             color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
             side: THREE.DoubleSide,
-            transparent: true,
+            transparent: false,
             // opacity: .8
         }
         if (map) {
@@ -2246,7 +2219,7 @@ class Terrain {
     generateTerrain(centerX = 0, centerY = 0, centerZ = 0) {
         const centerKey = `${centerX}_${centerZ}`;
         this.initializeTerrain();
-        const perlinNoise = this.generatePerlinNoise({ center: { x: centerX, y: centerY, z: centerZ }, centerKey });
+        const perlinNoise = Terrain.generatePerlinNoise({ center: { x: centerX, y: centerY, z: centerZ }, centerKey });
 
         // Generate terrain vertices
         const vertices = this.generateVertices(perlinNoise, centerX, centerY, centerZ);
@@ -2459,6 +2432,10 @@ class Terrain {
 
             /* TERRAIN FEATURES */
             const CLIFF = Math.abs(triangleMesh.normal.y) < 0.4 && (Math.abs(triangleMesh.normal.x) > 0.4 || Math.abs(triangleMesh.normal.z) > 0.4)
+            const YARD = isIn(trianglePosition, 'yard')
+            const HOUSE = isIn(trianglePosition, 'house')
+            const SIDEYARD = isIn(trianglePosition, 'sideyard')
+            const BACKYARD = isIn(trianglePosition, 'backyard')
 
            
             if (CLIFF) {
@@ -2466,6 +2443,7 @@ class Terrain {
             } else {
                 let cypressTreePosition
                 if (
+                        !CLIFF &&
                         !isIn(trianglePosition, 'cove')
                         && !isIn(trianglePosition, 'dock')
                         && !isIn(trianglePosition, 'yard')
@@ -2476,8 +2454,40 @@ class Terrain {
                     this.trees.push(cypressTree)
                 }
 
+                if (false && (YARD || SIDEYARD) && !HOUSE) {
+                    var instanceCount = YARD ? 9000 : 1000
+                    var instancedMesh = new THREE.InstancedMesh(
+                        new THREE.PlaneGeometry(randomInRange(.01, 0.08), randomInRange(.1, 0.2)),
+                        new THREE.MeshStandardMaterial({ color: 'green', side: THREE.DoubleSide }),
+                        instanceCount
+                    )
+                    instancedMesh.castShadow = true
+                    instancedMesh.receiveShadow = true
+                    // instancedMesh.position.set(trianglePosition.x, trianglePosition.y, trianglePosition.z)
+                    instancedMesh.triangle = triangle
+                   for (let k = 0; k < instanceCount; k++) {
+                        // Generate a random position on the triangle
+                        const pos = randomPointOnTriangle(triangle.a, triangle.b, triangle.c);
+                        const grass = new THREE.Object3D();
+                        grass.position.copy(pos);
+                        grass.rotation.y = Math.random() * Math.PI * 2;
+                        grass.rotation.x = randomInRange(0, 0.2);
+                        const heightScale = randomInRange(0.5, 1.5);
+                        grass.scale.set(1, heightScale, 1);
+                        grass.updateMatrix();
+                        instancedMesh.setMatrixAt(k, grass.matrix);
+                        instancedMesh.setColorAt(k, new THREE.Color(randomInRange(0, 0.2), randomInRange(0.8, 1),randomInRange(0, 0.2)));
+                    }
 
+                    // Ensure the instance color attribute is updated
+                    instancedMesh.instanceColor.needsUpdate = true;
+                    instancedMesh.instanceMatrix.needsUpdate = true;
+
+                    scene.add(instancedMesh)
+                    this.grasses.push(instancedMesh)
+                }
             }
+
 
 
 
@@ -2644,7 +2654,7 @@ class Terrain {
         return perlinNoise;
     }
 
-    generatePerlinNoise(options) {
+    static generatePerlinNoise(options) {
         // Get the map for the user's level from the VM (some kind of virtual machine or game state)
         const map = VM.map;
 
@@ -2663,7 +2673,7 @@ class Terrain {
 
         // Generate a "white noise" array. White noise is random, and it will be the base for all the smooth noise we generate later.
         // Think of it as the starting randomness, like rolling a dice for each pixel in the map.
-        let whiteNoise = this.generateWhiteNoise();
+        let whiteNoise = Terrain.generateWhiteNoise();
 
         // Create an empty array to store the "smooth noise" layers.
         // We'll generate `octaveCount` smooth noise layers, which get finer and finer as the octaves go up.
@@ -2673,7 +2683,7 @@ class Terrain {
         for (let i = 0; i < octaveCount; ++i) {
             // Generate a smooth version of the white noise for this octave and store it.
             // Smooth noise is like white noise, but with gentler, less sharp changes between points.
-            smoothNoiseList[i] = this.generateSmoothNoise(i, whiteNoise);
+            smoothNoiseList[i] = Terrain.generateSmoothNoise(i, whiteNoise);
         }
 
         // Get the width and height of the map.
@@ -2721,7 +2731,7 @@ class Terrain {
 
     }
 
-    generateWhiteNoise() {
+    static generateWhiteNoise() {
         const noise = new Array(VM.map.width * VM.map.height);
         for (let i = 0; i < noise.length; ++i) {
             noise[i] = Math.random();
@@ -2729,7 +2739,7 @@ class Terrain {
         return noise;
     }
 
-    generateSmoothNoise(octave, whiteNoise) {
+    static generateSmoothNoise(octave, whiteNoise) {
         const map = VM.map;
         var noise = new Array(map.width * map.height);
         var samplePeriod = Math.pow(2, octave);
@@ -2745,11 +2755,11 @@ class Terrain {
             var horizBlend = (x - sampleX0) * sampleFrequency;
 
             // blend top two corners
-            var top = this.interpolate(whiteNoise[sampleY0 * map.width + sampleX0], whiteNoise[sampleY1 * map.width + sampleX0], vertBlend);
+            var top = Terrain.interpolate(whiteNoise[sampleY0 * map.width + sampleX0], whiteNoise[sampleY1 * map.width + sampleX0], vertBlend);
             // blend bottom two corners
-            var bottom = this.interpolate(whiteNoise[sampleY0 * map.width + sampleX1], whiteNoise[sampleY1 * map.width + sampleX1], vertBlend);
+            var bottom = Terrain.interpolate(whiteNoise[sampleY0 * map.width + sampleX1], whiteNoise[sampleY1 * map.width + sampleX1], vertBlend);
             // final blend
-            noise[noiseIndex] = this.interpolate(top, bottom, horizBlend);
+            noise[noiseIndex] = Terrain.interpolate(top, bottom, horizBlend);
             noiseIndex += 1;
           }
         }
@@ -2807,7 +2817,7 @@ class Terrain {
     }
     
   
-    interpolate(x0, x1, alpha) {
+    static interpolate(x0, x1, alpha) {
         return x0 * (1 - alpha) + alpha * x1;
     }
     
@@ -3012,18 +3022,15 @@ class Terrain {
         })
 
         // Remove triangles outside the SOP from the scene
-        this.grasses.forEach(lathe => {
-            const pos = lathe.position.distanceTo(user.camera.position)
-            if (lathe.parent && pos > this.sop.grasses) {
-                scene.remove(lathe)
-            } else if (!lathe.parent && pos < this.sop.grasses) {
-                scene.add(lathe)
-            } else if (lathe.parent) {
-                lathe.rotation.y += .001;
-                if (lathe.rotation.y > Math.PI * 2) {
-                    lathe.rotation.y = 0
-                }
-                lathe.needsUpdate = true
+        this.grasses.forEach(grass => {
+            var t = this.getTriangleCenter(grass.triangle)
+            const pos = new THREE.Vector3(
+                t.x, t.y, t.z
+            ).distanceTo(user.camera.position)
+            if (grass.parent && pos > this.sop.grasses) {
+                scene.remove(grass)
+            } else if (!grass.parent && pos < this.sop.grasses) {
+                scene.add(grass)
             }
         });
 
@@ -3766,7 +3773,6 @@ class UserController {
             var mesh = m.mesh ? m.mesh : m
             const intersects = raycaster.intersectObject(mesh, true);
             if (intersects.length > 0 && intersects[0].distance < minDistance) {
-                console.log(mesh)
                 closestIntersection = intersects[0];
                 minDistance = intersects[0].distance;
             }

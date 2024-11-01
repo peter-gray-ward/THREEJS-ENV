@@ -33,14 +33,14 @@ class Model:
         self.map = {
             user['level']: {
                 'center': center,
-                'quadrant': t,
+                'quadrant': t * 5,
                 'noiseWidth': t * 2,
                 'noiseHeight': t,
                 'segments': 50,
                 'sop': {
-                    'trees': t * 2,
-                    'grasses': t / 3,
-                    'grounds': 9999,
+                    'trees': t,
+                    'grasses': t / 2,
+                    'grounds': 15,
                     'cliffs': 50
                 },
                 'grasses': [],
