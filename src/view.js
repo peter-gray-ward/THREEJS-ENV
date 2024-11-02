@@ -1169,6 +1169,21 @@ class ObjectEdit {
                 this.renderModal()
             }
         })
+        window.addEventListener('touchdown', event => {
+            if (document.querySelector('.object-edit')) {
+                document.querySelector('.object-edit').remove()
+            }
+            this.clickX = event.clientX
+            this.clickY = event.clientY
+            this.mouse.x = (this.clickX / window.innerWidth) * 2 - 1;
+            this.mouse.y = -(this.clickY / window.innerHeight) * 2 + 1;
+            this.raycaster.setFromCamera(this.mouse, window.user.camera);
+            var intersects = this.raycaster.intersectObjects(scene.children);
+            if (intersects || intersects.length) {
+                this.intersection = intersects.shift()
+                this.renderModal()
+            }
+        })
         window.addEventListener('keydown', event => {
             var inputContainer = event.srcElement
             while (inputContainer && inputContainer.classList.contains('input-container') == false) inputContainer = inputContainer.parentElement
@@ -1200,7 +1215,6 @@ class ObjectEdit {
                 <div class="object-edit__search-result-view">
                 </div>
             </div>
-            <div class="object-edit__search-results"></div>
         `
 
         document.body.appendChild(div)
