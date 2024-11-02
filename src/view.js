@@ -1148,6 +1148,12 @@ function UndulateWater(sunPositionX, sunPositionY, sunPositionZ) {
 
 class ObjectEdit {
     element = document.createElement('div')
+    element_width() {
+        return window.innerWidth * .64
+    }
+    element_height() {
+        return window.innerHeight * .36
+    }
     clickX = -1
     clickY = -1
     intersection = undefined
@@ -1188,12 +1194,36 @@ class ObjectEdit {
         var intersects = this.raycaster.intersectObjects(scene.children);
         if (intersects || intersects.length) {
             this.intersection = intersects.shift()
+            this.intersection.object.boxHelper = new THREE.Mesh(
+                new THREE.BoxGeometry(
+                    this.intersection.object.boundingBox.max.x - this.intersection.object.boundingBox.min.x,
+                    this.intersection.object.boundingBox.max.y - this.intersection.object.boundingBox.min.y,
+                    this.intersection.object.boundingBox.max.z - this.intersection.object.boundingBox.min.z
+                ),
+                new THREE.MeshBasicMaterial({ color: 'lawngreen', wireframe: true })
+            )
+            this.intersection.object.boxHelper.position.copy(this.intersection.object.position)
+            scene.add(this.intersection.object.boxHelper)
+            this.boxHelper = this.intersection.object.boxHelper
             var twentyWindow = window.innerWidth * 0.2
             var tenWindow = window.innerHeight * 0.1
             this.element.classList.add('object-edit')
             this.element.id = this.intersection.object.uuid
-            this.element.style.left = (this.clickX - twentyWindow / 2) + 'px'
-            this.element.style.top = (this.clickY - tenWindow) + 'px'
+            var offsetLeft = twentyWindow / 2
+            var left = this.clickX - offsetLeft
+            var top = this.clickY - tenWindow
+            if (left < 0) {
+                left = 0
+            } else if (left > window.innerWidth - this.element_width()) {
+                left = window.innerWidth - this.element_width()
+            }
+            if (top < 0) {
+                top = 0
+            } else if (top > window.innerHeight - this.element_height()) {
+                top = window.innerHeight - this.element_height()
+            }
+            this.element.style.left = left + 'px'
+            this.element.style.top = top + 'px'
             this.element.innerHTML = `
                 <div class="object-edit-container">
                     <div class="object-edit__headline-view">
