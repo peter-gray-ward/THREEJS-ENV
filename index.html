@@ -68,8 +68,8 @@
 		.object-edit {
 			position: absolute;
 			z-index: 9999999;
-			width: 36vh;
-			height: 36vh;
+			width: 66vh;
+			height: 46vh;
 			border-top-left-radius: 15%;
 			border-bottom-right-radius: 15%;
 			box-shadow: 25px -25px 1px 10px var(--electric-blue);
@@ -81,22 +81,35 @@
 		  flex-direction: column;
 		  border-top-left-radius: 15%;
 		  border-bottom-right-radius: 15%;
-		  box-shadow: 13px -13px 1px 15px teal;
+		  box-shadow: 13px -13px 2px 15px teal;
 		}
 
 		.object-edit__headline-view {
-			height: 64%;
+			height: 40%;
 			width: 100%;
-			background: rgba(1,1,1,0.25);
+			background: transparent;
 			display: flex;
 			border-top-left-radius: 100px%;
 		}
 
 		.object-edit__search-result-view {
-			height: 36%;
+			height: 60%;
 			width: 100%;
 			background: transparent;
 			border-bottom-right-radius: 100px%;
+			border-right: 2px solid teal;
+			overflow: auto;
+			display: flex;
+			flex-direction: row;
+			flex-wrap: wrap;
+		}
+
+		.object-edit__search-result {
+			width: calc(100% / 3);
+			height: 100px;
+			background-size: contain;
+			background-repeat: no-repeat;
+			background-position: 50% 50%;
 		}
 		</style>
 </head>

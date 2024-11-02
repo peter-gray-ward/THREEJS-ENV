@@ -1147,97 +1147,87 @@ function UndulateWater(sunPositionX, sunPositionY, sunPositionZ) {
 }
 
 class ObjectEdit {
+    element = document.createElement('div')
     clickX = -1
     clickY = -1
     intersection = undefined
     mouse = new THREE.Vector2()
     raycaster = new THREE.Raycaster()
 
+    constructor() {
+        this.element.classList.add('object-edit')
+    }
+
+    static isClass(classname, element) {
+        while (element && !element.classList.contains(classname)) {
+            element = element.parentElement
+        }
+        return element
+    }
+
     addEventListeners() {
-        window.addEventListener('click', event => {
-            if (document.querySelector('.object-edit')) {
-                document.querySelector('.object-edit').remove()
-            }
-            this.clickX = event.clientX
-            this.clickY = event.clientY
-            this.mouse.x = (this.clickX / window.innerWidth) * 2 - 1;
-            this.mouse.y = -(this.clickY / window.innerHeight) * 2 + 1;
-            this.raycaster.setFromCamera(this.mouse, window.user.camera);
-            var intersects = this.raycaster.intersectObjects(scene.children);
-            if (intersects || intersects.length) {
-                this.intersection = intersects.shift()
-                this.renderModal()
-            }
-        })
-        window.addEventListener('touchdown', event => {
-            if (document.querySelector('.object-edit')) {
-                document.querySelector('.object-edit').remove()
-            }
-            this.clickX = event.clientX
-            this.clickY = event.clientY
-            this.mouse.x = (this.clickX / window.innerWidth) * 2 - 1;
-            this.mouse.y = -(this.clickY / window.innerHeight) * 2 + 1;
-            this.raycaster.setFromCamera(this.mouse, window.user.camera);
-            var intersects = this.raycaster.intersectObjects(scene.children);
-            if (intersects || intersects.length) {
-                this.intersection = intersects.shift()
-                this.renderModal()
-            }
-        })
-        window.addEventListener('keydown', event => {
-            var inputContainer = event.srcElement
-            while (inputContainer && inputContainer.classList.contains('input-container') == false) inputContainer = inputContainer.parentElement
-            var isInputContainer = false
-            for (var i = 0; i < inputContainer.classList.length; i++) {
-                if (/^object-edit__/.test(inputContainer.classList[i])) {
-                    isInputContainer = true
-                    break
-                }
-            }
-            if (isInputContainer) {
-                debounced_event  = setTimeout(this.searchImage.bind(null, id), 700);
-            } else if (false) {}
+        let that = this
+        document.querySelector('#object-edit__search').addEventListener('keydown', event => {
+            debounced_event  = setTimeout(this.searchInput.bind(that, event.srcElement.value), 1700);
         })
     }
 
-    renderModal() {
-        var div = document.createElement('div')
-        var twentyWindow = window.innerWidth * 0.2
-        var tenWindow = window.innerHeight * 0.1
-        div.classList.add('object-edit')
-        div.id = this.intersection.object.uuid
-        div.style.left = (this.clickX - twentyWindow / 2) + 'px'
-        div.style.top = (this.clickY - tenWindow) + 'px'
-        div.innerHTML = `
-            <div class="object-edit-container">
-                <div class="object-edit__headline-view"></div>
-                <input type="text" class="object-edit__search" value="• search image •" />
-                <div class="object-edit__search-result-view">
+    click(event) {}
+
+    renderModal(event) {
+        if (document.querySelectorAll('.object-edit').length) {
+            document.querySelectorAll('.object-edit').forEach(e => e.remove())
+        }
+        this.clickX = event.clientX
+        this.clickY = event.clientY
+        this.mouse.x = (this.clickX / window.innerWidth) * 2 - 1;
+        this.mouse.y = -(this.clickY / window.innerHeight) * 2 + 1;
+        this.raycaster.setFromCamera(this.mouse, window.user.camera);
+        var intersects = this.raycaster.intersectObjects(scene.children);
+        if (intersects || intersects.length) {
+            this.intersection = intersects.shift()
+            var twentyWindow = window.innerWidth * 0.2
+            var tenWindow = window.innerHeight * 0.1
+            this.element.classList.add('object-edit')
+            this.element.id = this.intersection.object.uuid
+            this.element.style.left = (this.clickX - twentyWindow / 2) + 'px'
+            this.element.style.top = (this.clickY - tenWindow) + 'px'
+            this.element.innerHTML = `
+                <div class="object-edit-container">
+                    <div class="object-edit__headline-view"></div>
+                    <input type="text" id="object-edit__search" value="• search image •" />
+                    <div class="object-edit__search-result-view">
+                    </div>
                 </div>
-            </div>
-        `
+            `
 
-        document.body.appendChild(div)
+            document.body.appendChild(this.element)
 
+            this.element.querySelector('input').addEventListener('focus', e => e.srcElement.classList.add('focused'))
+            this.element.querySelector('input').addEventListener('blur', e => e.srcElement.classList.remove('focused'))
 
-    }
-
-    searchInput() {
-        var search_term = document.getElementById(this.object.uuid)
-        if (search_term) {
-            search_term = search_term.querySelector('.object-edit__search').value
-            var search = new XMLHttpRequest()
-            search.open('GET', `/search-image/${search_term}`)
-            search.addEventListener('load', this.loadSearchResults)
-            search.send()
+            this.addEventListeners()
         }
     }
 
-    loadSearchResults() {
-        var search_results = JSON.parse(this.result)
-        for (var hit of search_results.hits) {
+    searchInput(search_term) {
+        var search = new XMLHttpRequest()
+        search.open('GET', `/search-image/${search_term}`)
+        search.addEventListener('load', this.loadSearchResults)
+        search.send()
+    }
+
+    loadSearchResults(that) {
+        var search_results = JSON.parse(this.response)
+        var searchResultContainer = editor.element.querySelector('.object-edit__search-result-view')
+        for (var child of searchResultContainer.children) {
+            child.remove()
+        }
+        for (var hit of search_results.data.hits) {
             var div = document.createElement('div')
-            div.classList.add('.object-edit__search-result')
+            div.classList.add('object-edit__search-result')
+            div.style.background = `url(${hit.largeImageURL})`
+            searchResultContainer.appendChild(div)
         }
     }
 }
@@ -3235,6 +3225,7 @@ class UserController {
 
     addEventListener() {
         window.addEventListener('keydown', (e) => {
+            if (/object-edit/.test(e.srcElement.className)) return
             const key = e.key.toUpperCase();
             if (key == 'META') {
                 this.cmd = true
@@ -3307,68 +3298,82 @@ class UserController {
         var raycaster = new THREE.Raycaster();
         var mouse = new THREE.Vector2();
 
-        // window.addEventListener('click', (e) => {
-        //     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-        //     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        window.addEventListener('dblclick', e => {
+            let objectedit = ObjectEdit.isClass('object-edit', e.srcElement)
+            if (objectedit) {
+                return
+            }
+            return window.editor.renderModal(e)
+        })
+        window.addEventListener('click', (e) => {
+            let objectedit = ObjectEdit.isClass('object-edit', e.srcElement)
+            if (objectedit) {
+                return window.editor.click(e)
+            }
 
-        //     raycaster.setFromCamera(mouse, window.user.camera);
+            document.querySelectorAll('.object-edit').forEach(e => e.remove())
 
-        //     var intersects = raycaster.intersectObjects(scene.children);
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-        //     if (intersects.length > 0) {
-        //         for (var i = 0; i < intersects.length; i++) {
-        //             switch (intersects[i].object.name) {
-        //             case 'elevator-call-button':
-        //             case 'elevator-button':
-        //                 intersects[i].object.material.color.set('white')
-        //                 intersects[i].object.selected = true;
-        //                 var interval = undefined
-        //                 var eFloor = castle.elevator.find(m => m.name == 'elevator-floor');
-        //                 var up = eFloor.interval * intersects[i].object.floor > eFloor.position.y - castle.offsetY;
-        //                 var down = eFloor.interval * intersects[i].object.floor < eFloor.position.y - castle.offsetY;
-        //                 var arrived = false
-        //                 var targetFloor = intersects[i].object.floor
-        //                 var targetHeight = eFloor.interval * targetFloor + castle.offsetY;
-        //                 // console.log(targetFloor, targetHeight);
-        //                 function riseElevator() {
-        //                     if (arrived) return
-        //                     castle.elevator.forEach(m => {
-        //                         if (up) {
-        //                             m.position.y += castle.elevatorSpeed
-        //                         } else if (down) {
-        //                             m.position.y -= castle.elevatorSpeed
-        //                         } else {
-        //                             return
-        //                         }
-        //                         var current_floor = Math.floor(eFloor.position.y / eFloor.interval)
+            raycaster.setFromCamera(mouse, window.user.camera);
 
-        //                         if (m.name == 'elevator-button') {
-        //                             if (m.floor == current_floor) {
-        //                                 m.material.color.set('white')
-        //                                 m.selected = false
-        //                                 castle.elevator.filter(m => m.name == 'active-button-light').forEach(l => l.position.y = m.position.y)
-        //                             } else if (!m.selected) {
-        //                                 m.material.color.set('gray')
-        //                             }
-        //                         } else if (m.name == 'elevator-floor' && (up ? m.position.y >= targetHeight : m.position.y <= targetHeight)) {
-        //                             m.position.y = targetHeight;
-        //                             // console.log('reaching targetHeight', m.position.y)
-        //                             arrived = true
-        //                         }
-        //                     });
-        //                     if (arrived) {
-        //                         clearInterval(interval);
-        //                     }
-        //                 }
-        //                 interval = riseElevator;
-        //                 setInterval(interval, 1)
-        //                 break;
-        //             default:
-        //                 break;
-        //             }
-        //         }
-        //     }
-        // }, false);
+            var intersects = raycaster.intersectObjects(scene.children);
+
+            if (intersects.length > 0) {
+                for (var i = 0; i < intersects.length; i++) {
+                    switch (intersects[i].object.name) {
+                    case 'elevator-call-button':
+                    case 'elevator-button':
+                        intersects[i].object.material.color.set('white')
+                        intersects[i].object.selected = true;
+                        var interval = undefined
+                        var eFloor = castle.elevator.find(m => m.name == 'elevator-floor');
+                        var up = eFloor.interval * intersects[i].object.floor > eFloor.position.y - castle.offsetY;
+                        var down = eFloor.interval * intersects[i].object.floor < eFloor.position.y - castle.offsetY;
+                        var arrived = false
+                        var targetFloor = intersects[i].object.floor
+                        var targetHeight = eFloor.interval * targetFloor + castle.offsetY;
+                        // console.log(targetFloor, targetHeight);
+                        function riseElevator() {
+                            if (arrived) return
+                            castle.elevator.forEach(m => {
+                                if (up) {
+                                    m.position.y += castle.elevatorSpeed
+                                } else if (down) {
+                                    m.position.y -= castle.elevatorSpeed
+                                } else {
+                                    return
+                                }
+                                var current_floor = Math.floor(eFloor.position.y / eFloor.interval)
+
+                                if (m.name == 'elevator-button') {
+                                    if (m.floor == current_floor) {
+                                        m.material.color.set('white')
+                                        m.selected = false
+                                        castle.elevator.filter(m => m.name == 'active-button-light').forEach(l => l.position.y = m.position.y)
+                                    } else if (!m.selected) {
+                                        m.material.color.set('gray')
+                                    }
+                                } else if (m.name == 'elevator-floor' && (up ? m.position.y >= targetHeight : m.position.y <= targetHeight)) {
+                                    m.position.y = targetHeight;
+                                    // console.log('reaching targetHeight', m.position.y)
+                                    arrived = true
+                                }
+                            });
+                            if (arrived) {
+                                clearInterval(interval);
+                            }
+                        }
+                        interval = riseElevator;
+                        setInterval(interval, 1)
+                        break;
+                    default:
+                        break;
+                    }
+                }
+            }
+        }, false);
 
 
         this.yaw = 0;   // Rotation around the Y-axis (left/right)
@@ -3440,9 +3445,6 @@ class UserController {
         document.querySelector('canvas').addEventListener('touchend', () => {
             lastTouchX = null;
         });
-
-        window.addEventListener('touchdown', e => { this.touchdown = true; this.touchposition = { x: e.clientX, y: e.clientY }})
-  
 
     }
 
@@ -3837,9 +3839,6 @@ class View {
 
 
         window.editor = new ObjectEdit()
-
-        window.editor.addEventListeners()
-
 
         Animate();
 
