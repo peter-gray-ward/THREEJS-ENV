@@ -2115,7 +2115,7 @@ class Terrain {
                 width: randomInRange(1, 2),
                 colors: CYPRESSGREENS, // Cypress leaf colors
                 trimmed: Math.random() < 0.5 ? true : false,
-                map: Math.random() < 0.5 ? new THREE.TextureLoader().load("/images/branch.webp") : new THREE.TextureLoader().load("/images/sunflower2.jpg"),
+                map: new THREE.TextureLoader().load("/images/branch.webp"),
                 trunk: {
                     map: TRUNKTEXTURE
                 },
@@ -2126,7 +2126,7 @@ class Terrain {
                 width: randomInRange(1, 2),
                 colors: CYPRESSGREENS, // Cypress leaf colors
                 trimmed: Math.random() < 0.5 ? true : false,
-                map: Math.random() < 0.5 ? new THREE.TextureLoader().load("/images/branch.webp") : new THREE.TextureLoader().load("/images/sunflower2.jpg"),
+                map: new THREE.TextureLoader().load("/images/branch.webp"),
                 trunk: {
                     map: TRUNKTEXTURE
                 }
