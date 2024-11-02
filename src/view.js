@@ -1153,6 +1153,7 @@ class ObjectEdit {
     intersection = undefined
     mouse = new THREE.Vector2()
     raycaster = new THREE.Raycaster()
+    debounced_event = undefined
 
     constructor() {
         this.element.classList.add('object-edit')
@@ -1168,7 +1169,8 @@ class ObjectEdit {
     addEventListeners() {
         let that = this
         document.querySelector('#object-edit__search').addEventListener('keydown', event => {
-            debounced_event  = setTimeout(this.searchInput.bind(that, event.srcElement.value), 1700);
+            if (this.debounced_event) clearInterval(this.debounced_event)
+            this.debounced_event  = setTimeout(this.searchInput.bind(that, event.srcElement.value), 1700);
         })
     }
 
@@ -1194,7 +1196,18 @@ class ObjectEdit {
             this.element.style.top = (this.clickY - tenWindow) + 'px'
             this.element.innerHTML = `
                 <div class="object-edit-container">
-                    <div class="object-edit__headline-view"></div>
+                    <div class="object-edit__headline-view">
+                        <pre>
+
+                        </pre>
+                        <pre>
+${
+    JSON.stringify({
+        name: this.intersection.object
+    }, null, 1)
+}
+                        <pre>
+                    </div>
                     <input type="text" id="object-edit__search" value="• search image •" />
                     <div class="object-edit__search-result-view">
                     </div>
@@ -3877,7 +3890,11 @@ class View {
         // }
 
         // window.user.camera.position.set(33.953909365281795, 2.610000001490116, 23.053098469337314);
-        window.user.camera.position.set(24, landscape.field.center.y + 10, 0)
+        window.user.camera.position.set(
+            boardwalk.center.x,
+            boardwalk.center.y + 1.2,
+            boardwalk.center.z
+        )
 
 
         var time = new Date().getTime()
