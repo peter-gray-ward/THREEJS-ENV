@@ -170,15 +170,15 @@ def random_image():
         arts = json.load(file)
         return random.choice(arts)
 
-@app.route('/seed-random-image', methods=('GET',))
-def random_image_endpoint():
+@app.route('/search-image/<search_term>', methods=('GET',))
+def random_image_endpoint(search_term):
     base_url = "https://pixabay.com/api/"
     api_key = "25483695-93658ed46b8876fc2d6419379"
 
     # Set up query parameters
     params = {
         "key": api_key,
-        "q": random.choice(cliffs),
+        "q": search_term,
         "image_type": "photo",
         "pretty": "true"
     }
@@ -190,18 +190,7 @@ def random_image_endpoint():
     try:
         with urllib.request.urlopen(url) as response:
             data = json.loads(response.read().decode())
-
-            image = random.choice(data['hits'])
-            image = image['largeImageURL']
-
-            with open('./art-images.json', 'r') as file:
-                art_images = json.load(file)
-                art_images.append(image)
-            
-                with open('./art-images.json', 'w') as file:
-                    json.dump(art_images, file, indent=2)
-
-            return image
+            return jsonify({ 'status': 'success', 'data': data })
     except urllib.error.URLError as e:
         print(f"Error: {e.reason}")
         return None

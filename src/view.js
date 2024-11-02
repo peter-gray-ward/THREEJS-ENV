@@ -5,6 +5,8 @@ import { SUBTRACTION, Brush, Evaluator } from '/lib/three-bvh-csg.js';
 import ViewModel from "/src/view-model.js";
 import { Reflector } from '/lib/Reflector.js'
 
+var debounced_event = undefined
+
 window.CONCRETE = new THREE.TextureLoader().load("/images/seraphic-metallic-texture-polished-concrete.avif", texture => {
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
@@ -1144,6 +1146,87 @@ function UndulateWater(sunPositionX, sunPositionY, sunPositionZ) {
     terrain.water.geometry.attributes.position.needsUpdate = true;  // Ensure the geometry updates
 }
 
+class ObjectEdit {
+    clickX = -1
+    clickY = -1
+    intersection = undefined
+    mouse = new THREE.Vector2()
+    raycaster = new THREE.Raycaster()
+
+    addEventListeners() {
+        window.addEventListener('click', event => {
+            if (document.querySelector('.object-edit')) {
+                document.querySelector('.object-edit').remove()
+            }
+            this.clickX = event.clientX
+            this.clickY = event.clientY
+            this.mouse.x = (this.clickX / window.innerWidth) * 2 - 1;
+            this.mouse.y = -(this.clickY / window.innerHeight) * 2 + 1;
+            this.raycaster.setFromCamera(this.mouse, window.user.camera);
+            var intersects = this.raycaster.intersectObjects(scene.children);
+            if (intersects || intersects.length) {
+                this.intersection = intersects.shift()
+                this.renderModal()
+            }
+        })
+        window.addEventListener('keydown', event => {
+            var inputContainer = event.srcElement
+            while (inputContainer && inputContainer.classList.contains('input-container') == false) inputContainer = inputContainer.parentElement
+            var isInputContainer = false
+            for (var i = 0; i < inputContainer.classList.length; i++) {
+                if (/^object-edit__/.test(inputContainer.classList[i])) {
+                    isInputContainer = true
+                    break
+                }
+            }
+            if (isInputContainer) {
+                debounced_event  = setTimeout(this.searchImage.bind(null, id), 700);
+            } else if (false) {}
+        })
+    }
+
+    renderModal() {
+        var div = document.createElement('div')
+        var twentyWindow = window.innerWidth * 0.2
+        var tenWindow = window.innerHeight * 0.1
+        div.classList.add('object-edit')
+        div.id = this.intersection.object.uuid
+        div.style.left = (this.clickX - twentyWindow / 2) + 'px'
+        div.style.top = (this.clickY - tenWindow) + 'px'
+        div.innerHTML = `
+            <div class="object-edit-container">
+                <div class="object-edit__headline-view"></div>
+                <input type="text" class="object-edit__search" value="• search image •" />
+                <div class="object-edit__search-result-view">
+                </div>
+            </div>
+            <div class="object-edit__search-results"></div>
+        `
+
+        document.body.appendChild(div)
+
+
+    }
+
+    searchInput() {
+        var search_term = document.getElementById(this.object.uuid)
+        if (search_term) {
+            search_term = search_term.querySelector('.object-edit__search').value
+            var search = new XMLHttpRequest()
+            search.open('GET', `/search-image/${search_term}`)
+            search.addEventListener('load', this.loadSearchResults)
+            search.send()
+        }
+    }
+
+    loadSearchResults() {
+        var search_results = JSON.parse(this.result)
+        for (var hit of search_results.hits) {
+            var div = document.createElement('div')
+            div.classList.add('.object-edit__search-result')
+        }
+    }
+}
 
 class Castle {
     offsetY = 1.5
@@ -1990,122 +2073,20 @@ class Terrain {
         this.generateTerrain();
     }
 
+    getPoint(t, optionalTarget = new THREE.Vector3()) {
+        // Interpolate between the points based on t
+        const pointIndex = (this.points.length - 1) * t;
+        const index1 = Math.floor(pointIndex);
+        const index2 = Math.min(index1 + 1, this.points.length - 1);
 
-    static OrangeTreeSinCurve = class extends THREE.Curve { 
-        constructor( scale = 1 ) { 
-            super(); 
-            this.scale = scale; 
-        } 
-        getPoint( t, optionalTarget = new THREE.Vector3() ) { 
-            const tx = t * 3 - 1.5; 
-            const ty = Math.sin( 2 * Math.PI * t ); 
-            const tz = 0; 
-            return optionalTarget.set( tx, ty, tz ).multiplyScalar( this.scale ); 
-        } 
-    } 
+        // Get the two points to interpolate between
+        const point1 = this.points[index1];
+        const point2 = this.points[index2];
 
-    static RandomizedTrunkCurve = class extends THREE.Curve {
-        constructor(x, y, z, segments) {
-            super();
-            this.points = [];
-
-            // Generate randomized trunk points
-            for (let i = 0; i < segments; i++) {
-                this.points.push(new THREE.Vector3(
-                    x + randomInRange(-0.1, 0.1),
-                    y + i * 0.2, // Assuming y should increase with each segment
-                    z + randomInRange(-0.1, 0.1)
-                ));
-            }
-        }
-
-        getPoint(t, optionalTarget = new THREE.Vector3()) {
-            // Interpolate between the points based on t
-            const pointIndex = (this.points.length - 1) * t;
-            const index1 = Math.floor(pointIndex);
-            const index2 = Math.min(index1 + 1, this.points.length - 1);
-
-            // Get the two points to interpolate between
-            const point1 = this.points[index1];
-            const point2 = this.points[index2];
-
-            // Linear interpolation
-            optionalTarget.lerpVectors(point1, point2, pointIndex - index1);
-            
-            return optionalTarget;
-        }
-    }
-
-
-    createOrangeTree(x, y, z) {
-        const segments = randomInRange(10, 15)
-        var tree = {
-            colors: {
-                leaf: ['#beb816','#d7dd87','#8c7414','#7cac0c','#84ac10','#5c8404'],
-                orange: ['#fac811','#cc4c04','#f6a712','#fbe816','#872b07']
-            },
-            trunk: {
-                curve: new Terrain.RandomizedTrunkCurve(x, y, z, segments),
-                segments, // More segments for smoother trunk
-                radius: 0.2
-            }
-        };
-
-        var trunkGeometry = new THREE.TubeGeometry(
-            tree.trunk.curve, 
-            tree.trunk.segments, 
-            tree.trunk.radius, 
-            8, 
-            false
-        );
+        // Linear interpolation
+        optionalTarget.lerpVectors(point1, point2, pointIndex - index1);
         
-        // trunkGeometry.setAttribute('color', new THREE.Float32BufferAttribute(trunkColors.flat(), 3));
-
-
-        var trunkMaterial = new THREE.MeshStandardMaterial({
-            // vertexColors: true,
-            color: 'green',
-            roughness: 0.8,
-            metalness: 0.1
-        });
-        
-        var trunkMesh = new THREE.Mesh(trunkGeometry, trunkMaterial);
-
-        return trunkMesh
-        // scene.add(trunkMesh)
-        
-        // Create foliage using randomly positioned spheres
-        // var foliageGroup = new THREE.Group();
-        // for (var i = 0; i < 50; i++) { // Create 50 leaves
-        //     var leafGeometry = new THREE.SphereGeometry(randomInRange(0.1, 0.2), 8, 8);
-        //     var leafMaterial = new THREE.MeshStandardMaterial({
-        //         color: orange.colors.leaf[Math.floor(Math.random() * orange.colors.leaf.length)]
-        //     });
-        //     var leafMesh = new THREE.Mesh(leafGeometry, leafMaterial);
-        //     leafMesh.position.set(
-        //         x + randomInRange(-1, 1),
-        //         y + orange.height - randomInRange(0, 1),
-        //         z + randomInRange(-1, 1)
-        //     );
-        //     foliageGroup.add(leafMesh);
-        // }
-
-        // // Add oranges
-        // for (var i = 0; i < 5; i++) { // Create 5 oranges
-        //     var orangeGeometry = new THREE.SphereGeometry(0.2, 12, 12);
-        //     var orangeMaterial = new THREE.MeshStandardMaterial({
-        //         color: orange.colors.orange[Math.floor(Math.random() * orange.colors.orange.length)]
-        //     });
-        //     var orangeMesh = new THREE.Mesh(orangeGeometry, orangeMaterial);
-        //     orangeMesh.position.set(
-        //         x + randomInRange(-0.5, 0.5),
-        //         y + orange.height - randomInRange(0.5, 1),
-        //         z + randomInRange(-0.5, 0.5)
-        //     );
-        //     foliageGroup.add(orangeMesh);
-        // }
-
-      
+        return optionalTarget;
     }
 
     createFlora(x, Y, z, treeKind) {
@@ -3312,68 +3293,68 @@ class UserController {
         var raycaster = new THREE.Raycaster();
         var mouse = new THREE.Vector2();
 
-        window.addEventListener('click', (e) => {
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        // window.addEventListener('click', (e) => {
+        //     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        //     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-            raycaster.setFromCamera(mouse, window.user.camera);
+        //     raycaster.setFromCamera(mouse, window.user.camera);
 
-            var intersects = raycaster.intersectObjects(scene.children);
+        //     var intersects = raycaster.intersectObjects(scene.children);
 
-            if (intersects.length > 0) {
-                for (var i = 0; i < intersects.length; i++) {
-                    switch (intersects[i].object.name) {
-                    case 'elevator-call-button':
-                    case 'elevator-button':
-                        intersects[i].object.material.color.set('white')
-                        intersects[i].object.selected = true;
-                        var interval = undefined
-                        var eFloor = castle.elevator.find(m => m.name == 'elevator-floor');
-                        var up = eFloor.interval * intersects[i].object.floor > eFloor.position.y - castle.offsetY;
-                        var down = eFloor.interval * intersects[i].object.floor < eFloor.position.y - castle.offsetY;
-                        var arrived = false
-                        var targetFloor = intersects[i].object.floor
-                        var targetHeight = eFloor.interval * targetFloor + castle.offsetY;
-                        // console.log(targetFloor, targetHeight);
-                        function riseElevator() {
-                            if (arrived) return
-                            castle.elevator.forEach(m => {
-                                if (up) {
-                                    m.position.y += castle.elevatorSpeed
-                                } else if (down) {
-                                    m.position.y -= castle.elevatorSpeed
-                                } else {
-                                    return
-                                }
-                                var current_floor = Math.floor(eFloor.position.y / eFloor.interval)
+        //     if (intersects.length > 0) {
+        //         for (var i = 0; i < intersects.length; i++) {
+        //             switch (intersects[i].object.name) {
+        //             case 'elevator-call-button':
+        //             case 'elevator-button':
+        //                 intersects[i].object.material.color.set('white')
+        //                 intersects[i].object.selected = true;
+        //                 var interval = undefined
+        //                 var eFloor = castle.elevator.find(m => m.name == 'elevator-floor');
+        //                 var up = eFloor.interval * intersects[i].object.floor > eFloor.position.y - castle.offsetY;
+        //                 var down = eFloor.interval * intersects[i].object.floor < eFloor.position.y - castle.offsetY;
+        //                 var arrived = false
+        //                 var targetFloor = intersects[i].object.floor
+        //                 var targetHeight = eFloor.interval * targetFloor + castle.offsetY;
+        //                 // console.log(targetFloor, targetHeight);
+        //                 function riseElevator() {
+        //                     if (arrived) return
+        //                     castle.elevator.forEach(m => {
+        //                         if (up) {
+        //                             m.position.y += castle.elevatorSpeed
+        //                         } else if (down) {
+        //                             m.position.y -= castle.elevatorSpeed
+        //                         } else {
+        //                             return
+        //                         }
+        //                         var current_floor = Math.floor(eFloor.position.y / eFloor.interval)
 
-                                if (m.name == 'elevator-button') {
-                                    if (m.floor == current_floor) {
-                                        m.material.color.set('white')
-                                        m.selected = false
-                                        castle.elevator.filter(m => m.name == 'active-button-light').forEach(l => l.position.y = m.position.y)
-                                    } else if (!m.selected) {
-                                        m.material.color.set('gray')
-                                    }
-                                } else if (m.name == 'elevator-floor' && (up ? m.position.y >= targetHeight : m.position.y <= targetHeight)) {
-                                    m.position.y = targetHeight;
-                                    // console.log('reaching targetHeight', m.position.y)
-                                    arrived = true
-                                }
-                            });
-                            if (arrived) {
-                                clearInterval(interval);
-                            }
-                        }
-                        interval = riseElevator;
-                        setInterval(interval, 1)
-                        break;
-                    default:
-                        break;
-                    }
-                }
-            }
-        }, false);
+        //                         if (m.name == 'elevator-button') {
+        //                             if (m.floor == current_floor) {
+        //                                 m.material.color.set('white')
+        //                                 m.selected = false
+        //                                 castle.elevator.filter(m => m.name == 'active-button-light').forEach(l => l.position.y = m.position.y)
+        //                             } else if (!m.selected) {
+        //                                 m.material.color.set('gray')
+        //                             }
+        //                         } else if (m.name == 'elevator-floor' && (up ? m.position.y >= targetHeight : m.position.y <= targetHeight)) {
+        //                             m.position.y = targetHeight;
+        //                             // console.log('reaching targetHeight', m.position.y)
+        //                             arrived = true
+        //                         }
+        //                     });
+        //                     if (arrived) {
+        //                         clearInterval(interval);
+        //                     }
+        //                 }
+        //                 interval = riseElevator;
+        //                 setInterval(interval, 1)
+        //                 break;
+        //             default:
+        //                 break;
+        //             }
+        //         }
+        //     }
+        // }, false);
 
 
         this.yaw = 0;   // Rotation around the Y-axis (left/right)
@@ -3839,6 +3820,12 @@ class View {
 
         
         this.addUser();
+
+
+        window.editor = new ObjectEdit()
+
+        window.editor.addEventListeners()
+
 
         Animate();
 

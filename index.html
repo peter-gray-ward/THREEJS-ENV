@@ -14,6 +14,7 @@
 		* {
 			box-sizing:	border-box;
 			margin: 0;
+			--electric-blue: #7DF9FF;
 		}
 
 		body {
@@ -64,7 +65,40 @@
 			justify-content: center;
 		}
 
+		.object-edit {
+			position: absolute;
+			z-index: 9999999;
+			width: 36vh;
+			height: 36vh;
+			border-radius: 5%;
+			box-shadow: 0 0 25px 0 var(--electric-blue);
+		}
 
+		.object-edit-container {
+			height: 100%;
+			display: flex;
+			flex-direction: column;
+		}
+
+		.object-edit__search-result {
+			background-size: contain;
+			width: calc(40% - 1rem);
+			margin: 0.25rem;
+			box-shadow: 0 0 0 5px var(--electric-blue);
+		}
+
+		.object-edit__headline-view {
+			height: 64%;
+			width: 100%;
+			background: rgba(1,1,1,0.25);
+			display: flex;
+		}
+
+		.object-edit__search-result-view {
+			height: 36%;
+			width: 100%;
+			background: whitesmoke;
+		}
 		</style>
 </head>
 <body>
