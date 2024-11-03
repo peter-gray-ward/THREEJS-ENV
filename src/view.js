@@ -994,7 +994,7 @@ class Sky {
 
         if (this.time > Math.PI + Math.PI / 16 && this.time < Math.PI * 2 - Math.PI / 16) {
             this.sun.intensity = 0
-            castle.lamplight.intensity = 5
+            castle.lamplight.intensity = 15
         } else {
             this.sun.intensity = 3
             castle.lamplight.intensity = 0
@@ -2134,6 +2134,7 @@ function getCachedSphereGeometry(radius, map, transparent) {
             // Set the color attribute to the geometry
             geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
+
             // Now you can manipulate position and color attributes
             for (let i = 0; i < geometry.attributes.position.array.length; i += 3) {
                 geometry.attributes.position.array[i] += randomInRange(-radius, radius);
@@ -2295,6 +2296,10 @@ class Terrain {
                 radiusAtY = 0
             } else if (none) {
                 radiusAtY *= randomInRange(1, 4)
+            }
+
+            if (Math.random() < 0.4) {
+                radiusAtY = 0
             }
 
             const interpolatedColor = startColor.clone().lerp(endColor, progress);
