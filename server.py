@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, send_file, request, make_response
 import os
+import re
 import urllib.parse
 import urllib.request
 import random
@@ -27,9 +28,17 @@ class User:
             'position': self.position
         }
 
+IMAGES = os.listdir('./images')
+
 class Model:
     def __init__(self, user):
         center = {'x': 0, 'y': 0, 'z': 0}
+        self.images = {
+            'leaf': [f"/images/{filename}" for filename in IMAGES if re.match(r'^leaf', filename)],
+            'ground': [f"/images/{filename}" for filename in IMAGES if re.match(r'^ground', filename)],
+            'floor': [f"/images/{filename}" for filename in IMAGES if re.match(r'^floor', filename)],
+            'bark': [f"/images/{filename}" for filename in IMAGES if re.match(r'^bark', filename)]
+        }
         self.map = {
             user['level']: {
                 'center': center,
@@ -219,6 +228,25 @@ def get_lib(filename):
 def get_src(filename):
     file_path = os.path.join('src', filename)
     return send_file(file_path, mimetype='text/javascript')
+
+@app.route('/download-image/<image_type>/<image_description>', methods=('POST',))
+def download_image(image_type, image_description):
+    body = request.get_json()
+    if 'url' in body and body['url']:
+        # Count files in the directory matching the image_type prefix
+        type_count = len([filename for filename in os.listdir('./images') if re.match(r'^' + re.escape(image_type), filename)])
+
+        # Construct the file path for saving the image
+        file_path = f"./images/{image_type}-{type_count}-{image_description}.jpg"  # Adjust the extension if needed
+
+        # Download the image
+        try:
+            urllib.request.urlretrieve(body['url'], file_path)
+            return jsonify({"message": "Image downloaded successfully", "file_path": file_path}), 200
+        except Exception as e:
+            return jsonify({"error": str(e)}), 400
+    else:
+        return jsonify({"error": "No URL provided"}), 400
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 8080))  # Fallback to 8080 if PORT is not set

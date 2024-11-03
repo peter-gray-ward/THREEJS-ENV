@@ -21,7 +21,7 @@ window.GROUND2 = new THREE.TextureLoader().load("/images/ground-2.JPG",texture =
 window.CYPRESSGREENS = ['#93b449', '#6b881c', '#a9cc4e']
 window.LATHECOLORS = ['#00ffff', '#ff00ff', '#ffff00']
 window.CYPRESSBRANCH = new THREE.TextureLoader().load("/images/branch.webp")
-window.TRUNKTEXTURE = new THREE.TextureLoader().load("/images/trees/bark/bark-5.jpg")
+window.TRUNKTEXTURE = new THREE.TextureLoader().load("/images/bark-5.jpg")
 window.cementTexture = new THREE.TextureLoader().load("/images/ground-0.jpg", texture => {
     texture.wrapS = THREE.RepeatWrapping
     texture.wrapT = THREE.RepeatWrapping
@@ -1156,7 +1156,7 @@ class ObjectEdit {
     }
     clickX = -1
     clickY = -1
-    intersection = undefined
+    scene_selection = undefined
     mouse = new THREE.Vector2()
     raycaster = new THREE.Raycaster()
     debounced_event = undefined
@@ -1192,23 +1192,12 @@ class ObjectEdit {
         this.mouse.y = -(this.clickY / window.innerHeight) * 2 + 1;
         this.raycaster.setFromCamera(this.mouse, window.user.camera);
         var intersects = this.raycaster.intersectObjects(scene.children);
-        if (intersects || intersects.length) {
-            this.intersection = intersects.shift()
-            this.intersection.object.boxHelper = new THREE.Mesh(
-                new THREE.BoxGeometry(
-                    this.intersection.object.boundingBox.max.x - this.intersection.object.boundingBox.min.x,
-                    this.intersection.object.boundingBox.max.y - this.intersection.object.boundingBox.min.y,
-                    this.intersection.object.boundingBox.max.z - this.intersection.object.boundingBox.min.z
-                ),
-                new THREE.MeshBasicMaterial({ color: 'lawngreen', wireframe: true })
-            )
-            this.intersection.object.boxHelper.position.copy(this.intersection.object.position)
-            scene.add(this.intersection.object.boxHelper)
-            this.boxHelper = this.intersection.object.boxHelper
+        if (intersects.length) {
+            this.scene_selection = intersects.shift()
             var twentyWindow = window.innerWidth * 0.2
             var tenWindow = window.innerHeight * 0.1
             this.element.classList.add('object-edit')
-            this.element.id = this.intersection.object.uuid
+            this.element.id = this.scene_selection.object.uuid
             var offsetLeft = twentyWindow / 2
             var left = this.clickX - offsetLeft
             var top = this.clickY - tenWindow
@@ -1222,26 +1211,23 @@ class ObjectEdit {
             } else if (top > window.innerHeight - this.element_height()) {
                 top = window.innerHeight - this.element_height()
             }
-            this.element.style.left = left + 'px'
-            this.element.style.top = top + 'px'
+            this.element.style.left = 0 + 'px'
+            this.element.style.top = 0 + 'px'
             this.element.innerHTML = `
                 <div class="object-edit-container">
-                    <div class="object-edit__headline-view">
-                        <pre>
-
-                        </pre>
-                        <pre>
-${
-    JSON.stringify({
-        name: this.intersection.object
-    }, null, 1)
-}
-                        <pre>
+                    <div id="object-edit__controller">
+                        <section class="object-edit__headline-view ">
+                            <code>${this.scene_selection.object.uuid}</code>
+                            <div id="picture-on-deck"></div>
+                        </section>
+                        <div class="object-edit__edit-selections">
+                            <input type="text" id="object-edit__search" value="• search image •" />
+                            <button>Assign to Object</button>
+                        </div>
                     </div>
-                    <input type="text" id="object-edit__search" value="• search image •" />
-                    <div class="object-edit__search-result-view">
-                    </div>
+                    <div class="object-edit__search-result-view"></div>
                 </div>
+
             `
 
             document.body.appendChild(this.element)
@@ -1260,6 +1246,35 @@ ${
         search.send()
     }
 
+    static tags_survey(options, prompt) {
+        return new Promise(resolve => {
+            document.querySelector('.object-edit__info').innerHTML = `
+                <h2>Image Tag & Description</h2>
+                <div class="option-boxes">
+                    ${Object.keys(view.images).map(image_tag => {
+                        return '<div class="option-box">' + image_tag + '</div>'
+                    }).join('')}
+                    <div class="option-box new" contenteditable>... a new</div>
+                </div>
+            `
+            document.querySelector('.object-edit__info')
+                            .querySelectorAll('.option-boxes .option-box').forEach(optionBox => {
+
+                if (optionBox.classList.contains('new')) {
+                    optionBox.addEventListener('input', function(event) {
+                        if (event.key.toUpperCase() == 'ENTER') {
+                            resolve(event.srcElement.innerHTML)
+                        }
+                    })
+                } else {
+                    optionBox.addEventListener('click', function(event) {
+                        resolve(event.srcElement.innerHTML)
+                    })
+                }
+            })
+        })
+    }
+
     loadSearchResults(that) {
         var search_results = JSON.parse(this.response)
         var searchResultContainer = editor.element.querySelector('.object-edit__search-result-view')
@@ -1270,6 +1285,14 @@ ${
             var div = document.createElement('div')
             div.classList.add('object-edit__search-result')
             div.style.background = `url(${hit.largeImageURL})`
+            div.addEventListener('dblclick', function(event) {
+                var url = event.srcElement.style.background
+                document.getElementById('picture-on-deck').style.background = url;
+                url = url.replace('url(', '')
+                url = url.replace(')','')
+                let tags = Object.keys(view.images)
+                
+            })
             searchResultContainer.appendChild(div)
         }
     }
@@ -2074,7 +2097,7 @@ const tree = {
         cypress: {
             height: randomInRange(15, 20),
             width: randomInRange(1, 1.9),
-            colors: ['#93b449', '#6b881c', '#a9cc4e'], // Cypress leaf colors
+            colors: ['#93b449', '#6b881c', '#a9cc4e'], 
             trimmed: Math.random() < 0.5 ? true : false
         }
  };
@@ -2141,9 +2164,9 @@ class Terrain {
             cypress: {
                 height: randomInRange(11.1, 60),
                 width: randomInRange(1, 2),
-                colors: CYPRESSGREENS, // Cypress leaf colors
+                colors: CYPRESSGREENS, 
                 trimmed: Math.random() < 0.5 ? true : false,
-                map: new THREE.TextureLoader().load("/images/branch.webp"),
+                map: new THREE.TextureLoader().load("/images/leaf-branch.webp"),
                 trunk: {
                     map: TRUNKTEXTURE
                 },
@@ -2152,9 +2175,9 @@ class Terrain {
             oak: {
                 height: randomInRange(11.1, 60),
                 width: randomInRange(1, 2),
-                colors: CYPRESSGREENS, // Cypress leaf colors
+                colors: CYPRESSGREENS, 
                 trimmed: Math.random() < 0.5 ? true : false,
-                map: new THREE.TextureLoader().load("/images/branch.webp"),
+                map: new THREE.TextureLoader().load("/images/leaf-branch.webp"),
                 trunk: {
                     map: TRUNKTEXTURE
                 }
@@ -3348,6 +3371,8 @@ class UserController {
             }
             return window.editor.renderModal(e)
         })
+
+
         window.addEventListener('click', (e) => {
             let objectedit = ObjectEdit.isClass('object-edit', e.srcElement)
             if (objectedit) {
@@ -3488,7 +3513,6 @@ class UserController {
         document.querySelector('canvas').addEventListener('touchend', () => {
             lastTouchX = null;
         });
-
     }
 
     handleMovement() {
@@ -3837,45 +3861,25 @@ class View {
         window.renderer.domElement.id = "view";
     }
 
-    init() {
-        console.log("start")
+    init(model) {
+        for (var key in model) {
+            this[key] = model[key]
+        }
+
         document.body.appendChild(window.renderer.domElement);
 
 
-        // console.log(VM);
-
         window.terrain = new Terrain(VM);
-        /* { 
-            cliffs: [],
-            trees: [],
-            grounds: [],
-            grasses: [],
-            water:  {},
-            updateTerrain: () => {}
-        } */
-        
 
-        console.log("added terrain")
 
         window.user = new UserController(terrain);
 
-        console.log("added user controller")
 
         window.sky = new Sky(window.user);
-
-        console.log('added sky')
-
-        // window.terrain.setCamera(window.user.camera);
-
 
         var castleBaseCenter = new THREE.Vector3(0, 0, 0)
 
         window.castle = new Castle(castleBaseCenter);
-
-        // window.castle.parts.push(...terrain.paintings)
-
-        console.log('added castle')
-
 
         
         this.addUser();
@@ -3903,21 +3907,6 @@ class View {
         // Add the wireframe to the scene
         window.scene.add(wireframeBox);
 
-        // var mesh = terrain.meshes[0];
-
-        // //var [x, y, z] = [mesh.geometry.attributes.position.array[333], mesh.geometry.attributes.position.array[334] + 1, mesh.geometry.attributes.position.array[335]];
-        // let x, y, z;
-        // for (var i = 0; i < mesh.geometry.attributes.position.array.length; i += 3) {
-        //     var _x = Math.abs(mesh.geometry.attributes.position.array[i] - 20);
-        //     var _z = Math.abs(mesh.geometry.attributes.position.array[i + 2] - 20);
-
-        //     if (_x < 2 && _z < 2) {
-        //         x = mesh.geometry.attributes.position.array[i]
-        //         y = mesh.geometry.attributes.position.array[i + 1] + 1
-        //         z = mesh.geometry.attributes.position.array[i + 2]
-        //         break;
-        //     }
-        // }
 
         // window.user.camera.position.set(33.953909365281795, 2.610000001490116, 23.053098469337314);
         window.user.camera.position.set(

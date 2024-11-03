@@ -68,18 +68,29 @@
 		.object-edit {
 			position: absolute;
 			z-index: 9999999;
-			width: 64vh;
-			height: 36vh;
+			width: 100vw;
+			height: 100vh;
 			border-top-left-radius: 3rem;
-			box-shadow: 25px -25px 1px 10px var(--electric-blue);
+			box-shadow: 0 0px 1px 3px var(--electric-blue);
+			border: 3px solid teal;
+			outline: 3px solid turquoise;
 		}
 
 		.object-edit-container {
 			height: 100%;
 		    display: flex;
+		    flex-direction: row;
+		    overflow: hidden;
+		}
+
+		.object-edit__controller {
+			width: 50%;
+			height: 100%;
+			overflow: hidden;
+			display: flex;
 		    flex-direction: column;
-		    border-top-left-radius: 3rem;
-		    box-shadow: 0 0 0 15px teal;
+		    align-items: flex-end;
+		    justify-content: flex-end;
 		}
 
 		.object-edit__headline-view {
@@ -88,45 +99,170 @@
 			background: transparent;
 			display: flex;
 			flex-direction: row;
-			border-top-left-radius: 3rem;
+			border-top-left-radius: 0;
+			box-sizing: border-box;
+			padding: .95rem;
+			border-top-left-radius: 0;
+			height: 6rem;
+			background: rgba(0,0,0,0.7);
+  			color: white;
+  			padding: 0.25rem;
+  			align-items: center;
+  			justify-content: center;
+		}
+
+		.object-edit__headline-view code {
+			width: calc(100% - 9rem);
+			height: 100%;
+			font-family: menlo;
+			color: var(--electric-blue);
+			padding: 0.25rem;
+		}
+
+		.object-edit__headline-view #picture-on-deck {
+			height: 6rem;
+			width: 9rem;
+			background-size: contain !important;
+			background: transparent;
+			background-repeat: no-repeat !important;
+			color: white;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 0.5rem;
 		}
 
 		.object-edit__headline-view pre {
-			width: 50%;
+			width: calc(100% / 3);
 			margin: 0;
 			box-sizing: border-box;
 			padding: 0.5rem;
-			color: white;
+			color: var(--electric-blue);
 		}
 
 		.object-edit__headline-view pre:first-of-type {
 			background: transparent;
 		}
 
+		.object-edit__headline-view pre:nth-of-type(2) {
+			background: aliceblue;
+			font-family: cursive;
+			font-weight: 800;
+			font-size: 0.5rem;
+			display: flex;
+			flex-direction: column;
+		}
+
 		.object-edit__headline-view pre:last-of-type {
-			background: blue;
+			background: black;
 			overflow: auto;
 			font-size: 0.65rem;
 		}
 
 		.object-edit__search-result-view {
-			height: 60%;
-			width: 100%;
-			background: whitesmoke;
+			flex-grow: 1;
+			height: 100%;
+			background: black;
 			border-bottom-right-radius: 100px%;
-			border-right: 2px solid teal;
 			overflow: auto;
+			display: flex;
+			flex-direction: row;
+			flex-wrap: wrap;
+			text-align: center;
+			padding: 1rem;
+			box-sizing: border-box;
+		}
+
+		.object-edit__search-result {
+			width: 50%;
+			height: 11.11vw;
+			display: inline-block;
+			background-size: contain !important;
+			background-repeat: no-repeat !important;
+			background-position: 50% 50% !important;
+		}
+
+		.object-edit__edit-selections {
 			display: flex;
 			flex-direction: row;
 			flex-wrap: wrap;
 		}
 
-		.object-edit__search-result {
-			width: calc(100% / 3);
-			height: 100px;
-			background-size: contain !important;
-			background-repeat: no-repeat !important;
-			background-position: 50% 50% !important;
+		.object-edit__edit-selections * {
+			box-sizing: border-box;
+		}
+
+		#object-edit__search {
+			width: 100%;
+			height: 2rem;
+			line-height: 1.36rem;
+			background: rgba(0,0,0,0.5);
+			border: none;
+			color: white;
+		}
+
+		#object-edit__search:focus {
+			outline: none
+		}
+
+		#object-edit__choose-by-type {
+			width: calc(100% / 4);
+		}
+		#object-edit__shape {
+			width: 50%;
+			background: rgba(0,0,0,0.5);
+			border: none;
+			color: white;
+		}
+		#object-edit__indices {
+			width: 50%;
+			background: rgba(0,0,0,0.5);
+			border: none;
+			color: white;
+		}
+		#object-edit__clustering {
+			width: 100%;
+			background: rgba(0,0,0,0.0);
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			font-family: cursive;
+		}
+
+		#object-edit__clustering input {
+			width: 100%;
+			background: rgba(0,0,0,0.5);
+			border: none;
+			color: white;
+
+
+		}
+
+		.option-boxes {
+			display: flex;
+			flex-wrap: wrap;
+			flex-direction: row;
+		}
+
+		.option-boxes .option-box {
+			width: 50%;
+			box-sizing: border-box;
+			border: 1px dotted var(--electric-blue);
+		}
+
+		.object-edit__info {
+			height: 5.5rem;
+		}
+
+		.object-edit__info h2 {
+			font-size: 100%;
+		}
+
+		#object-edit__controller {
+			display: flex;
+			flex-direction: column;
+			justify-content: flex-end;
 		}
 		</style>
 </head>
