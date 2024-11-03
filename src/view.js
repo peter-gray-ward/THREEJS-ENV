@@ -31,7 +31,11 @@ window.cementTexture = new THREE.TextureLoader().load("/images/ground-0.jpg", te
 var clock = new THREE.Clock()
 const evaluator = new Evaluator();
 const t = 100
-const groundTexture = new THREE.TextureLoader().load("/images/ground-0.jpg")
+const groundTexture = new THREE.TextureLoader().load("/images/ground-0.jpg", texture => {
+    texture.wrapS = THREE.RepeatWrapping
+    texture.wrapT = THREE.RepeatWrapping
+    texture.repeat.set(11, 11)
+})
 
 var landscape = {
     field: {
@@ -162,10 +166,10 @@ function RailingPost(start, end, scale = 0.01, ballScale = 5, justPost = false) 
     // Create the post ball
     var postBall = new THREE.Mesh(
         new THREE.SphereGeometry(scale * ballScale, 8, 8),
-        new THREE.MeshStandardMaterial({ 
+        new THREE.MeshBasicMaterial({ 
             color: 'red',
-            roughness: 0,
-            metalness: 1
+            transparent: true,
+            opacity: 0.2
          })
     );
     postBall.position.y = 0.85; // Place on top of the cap
@@ -178,9 +182,7 @@ function RailingPost(start, end, scale = 0.01, ballScale = 5, justPost = false) 
     var postRailing = new THREE.Mesh(
         new THREE.TubeGeometry(railingCurve, Math.floor(randomInRange(8, 50)), .01),
         new THREE.MeshStandardMaterial({ 
-            color: 'red',
-            roughness: 0,
-            metalness: 1
+            map: new THREE.TextureLoader().load("/images/bark-5.jpg")
          })
     )
     postRailing.position.y = 0.75; // Place on top of the post
@@ -197,6 +199,7 @@ function RailingPost(start, end, scale = 0.01, ballScale = 5, justPost = false) 
         group.add(postRailing)
     }
     group.add(postBall);
+
 
     // Set the overall position of the group
     group.position.set(start.x - .2, start.y, start.z);
@@ -747,11 +750,11 @@ class Sky {
 
         // Configure the shadow camera for the directional light (this affects shadow casting area)
         this.sun.shadow.camera.near = 0.005;
-        this.sun.shadow.camera.far = 1200;
-        this.sun.shadow.camera.left = -1200;
-        this.sun.shadow.camera.right = 1200;
-        this.sun.shadow.camera.top = 1200;
-        this.sun.shadow.camera.bottom = -1200;
+        this.sun.shadow.camera.far = 9900;
+        this.sun.shadow.camera.left = -100;
+        this.sun.shadow.camera.right = 100;
+        this.sun.shadow.camera.top = 100;
+        this.sun.shadow.camera.bottom = -100;
         this.sky = [];
         this.sphere = new THREE.Mesh(
             new THREE.SphereGeometry(11, 30, 30), 
@@ -991,8 +994,10 @@ class Sky {
 
         if (this.time > Math.PI + Math.PI / 16 && this.time < Math.PI * 2 - Math.PI / 16) {
             this.sun.intensity = 0
+            castle.lamplight.intensity = 5
         } else {
             this.sun.intensity = 3
+            castle.lamplight.intensity = 0
         }
 
         // Increment time for next update
@@ -1340,12 +1345,13 @@ class Castle {
 
         this.building(foundationY)
         
-        this.createHarryPotterLampPost(
+        this.lamplight = this.createHarryPotterLampPost(
             boardwalk.center.x - boardwalk.width / 2 + 1, 
             boardwalk.center.y, 
             boardwalk.center.z - boardwalk.depth / 2 + 1
         )
 
+    
         const boardwalkTexture = new THREE.TextureLoader().load("/images/cobblestone.jpg", texture => {
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
@@ -1511,6 +1517,15 @@ class Castle {
         pointLight.position.set(x, y + lampHeight + 0.5, z);
         pointLight.castShadow = true; // Enable shadows if needed
         scene.add(pointLight);
+
+        // var group = new THREE.Group()
+        // group.add(lampPost)
+        // group.add(lampPostCap)
+        // group.add(bulb)
+        // group.add(filament)
+        // group.add(pointLight)
+
+        return pointLight
     }
 
     createABoardwalk(bw, boardwalkTexture, imageRotation) {
@@ -2257,7 +2272,7 @@ class Terrain {
         const instanceCount = Math.floor(tree[treeKind].height * 7); // Adjust count as needed
         const instancedMesh = new THREE.InstancedMesh(
             getCachedSphereGeometry(tree[treeKind].width / 2),
-            getCachedLeafMaterial(tree[treeKind].colors[0], new THREE.TextureLoader().load('/images/leaf-branch.webp')), // Initial color
+            getCachedLeafMaterial(tree[treeKind].colors[0], null, new THREE.TextureLoader().load('/images/leaf-branch.webp')), // Initial color
             instanceCount
         );
         instancedMesh.frustrumCulled = true
@@ -2538,9 +2553,8 @@ class Terrain {
         v.z = (1 - x) * (1 - y) * this.v0.z + x * (1 - y) * this.v1.z + x * y * this.v2.z + (1 - x) * y * this.v3.z;
 
     
-        var Txture = cementTexture
-        const t1 = TriangleMesh(vertices, a, b, d, this.width, this.height, Txture);
-        const t2 = TriangleMesh(vertices, b, c, d, this.width, this.height, Txture);
+        const t1 = TriangleMesh(vertices, a, b, d, this.width, this.height, groundTexture);
+        const t2 = TriangleMesh(vertices, b, c, d, this.width, this.height, groundTexture);
 
         [t1, t2].forEach((triangleMesh) => {
 
