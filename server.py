@@ -49,7 +49,7 @@ class Model:
                 'sop': {
                     'trees': t,
                     'grasses': t / 2,
-                    'grounds': 15,
+                    'grounds': t,
                     'cliffs': 50
                 },
                 'grasses': [],

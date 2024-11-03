@@ -68,7 +68,27 @@ const boardwalk = {
         z: 0
     }
 }
+const boardwalk2 = {
+    width: house.width,
+    depth: landscape.field.depth - boardwalk.depth,
+    height: 0.2,
+    center: {
+        x: house.center.x,
+        y: boardwalk.center.y,
+        z: (house.center.z + house.depth / 2) + ((landscape.field.depth - boardwalk.depth) / 2)
+    }
+}
 
+const alley = {
+    width: house.width,
+    depth: landscape.field.depth - boardwalk.depth,
+    height: 0.2,
+    center: {
+        x: house.center.x,
+        y: boardwalk.center.y,
+        z: (house.center.z - house.depth / 2) - ((landscape.field.depth - boardwalk.depth) / 2)
+    }
+}
 
 
 
@@ -86,7 +106,7 @@ class RailingCurve extends THREE.Curve {
     }
 }
 
-function RailingPost(start, end, scale = 0.01, ballScale = 5) {
+function RailingPost(start, end, scale = 0.01, ballScale = 5, justPost = false) {
 
     var post = new THREE.Mesh(
         new THREE.BoxGeometry(0.075, 0.75, 0.075),
@@ -173,7 +193,9 @@ function RailingPost(start, end, scale = 0.01, ballScale = 5) {
         group.add(postCap);
         group.add(postCap2)
     }
-    group.add(postRailing)
+    if (!justPost) {
+        group.add(postRailing)
+    }
     group.add(postBall);
 
     // Set the overall position of the group
@@ -1324,10 +1346,24 @@ class Castle {
             boardwalk.center.z - boardwalk.depth / 2 + 1
         )
 
-        const boardwalkTexture = new THREE.TextureLoader().load("/images/floor2.jpg", texture => {
+        const boardwalkTexture = new THREE.TextureLoader().load("/images/cobblestone.jpg", texture => {
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
-            texture.repeat.set(11, 11);
+            texture.repeat.set(2, 2);
+        })
+
+        const boardwalk2Texture = new THREE.TextureLoader().load("/images/cobblestone.jpg", texture => {
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.rotation = Math.PI / 2
+            texture.repeat.set(1, 2);
+        })
+
+        const alleyTexture = new THREE.TextureLoader().load("/images/cobblestone.jpg", texture => {
+           texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.rotation = Math.PI / 2
+            texture.repeat.set(1, 2);
         })
         
 
@@ -1351,44 +1387,9 @@ class Castle {
         tilePlane.frustrumCulled = true
         scene.add(tilePlane)
 
-
-        var x = boardwalk.center.x + boardwalk.width / 2;
-        var y = boardwalk.center.y + 0.75 / 2 - boardwalk.height / 2
-        var z = boardwalk.center.z - (boardwalk.depth / 2.5) + 1
-        while (z < boardwalk.center.z + boardwalk.depth / 2) {
-
-            // var rp = RailingPost(x, y, z)
-            // scene.add(rp)
-            // this.objects.push(rp)
-
-            var rp = RailingPost(
-                new THREE.Vector3(x, y - 0.2, z), 
-                new THREE.Vector3(x, y - 0.2, z + 2),
-                0.01, 5
-            )
-            scene.add(rp)
-            this.objects.push(rp)
-
-            rp = RailingPost(
-                new THREE.Vector3(x, y - 0.4, z), 
-                new THREE.Vector3(x, y - 0.2, z + 2),
-                0.01, 3
-            )
-            scene.add(rp)
-
-            this.objects.push(rp)
-
-            rp = RailingPost(
-                new THREE.Vector3(x, y - 0.6, z), 
-                new THREE.Vector3(x, y - 0.2, z + 2),
-                0.01, 3
-            )
-            scene.add(rp)
-
-            this.objects.push(rp)
-
-            z += 2
-        }
+        this.createABoardwalk(boardwalk, boardwalkTexture)
+        this.createABoardwalk(boardwalk2, boardwalk2Texture)
+        this.createABoardwalk(alley, alleyTexture)
 
         var dock = {
             width: boardwalk.width * 1.5 + 4, 
@@ -1512,6 +1513,58 @@ class Castle {
         scene.add(pointLight);
     }
 
+    createABoardwalk(bw, boardwalkTexture, imageRotation) {
+        var opts = {}
+        opts.map = boardwalkTexture;
+        var tilePlane = new THREE.Mesh(
+            new THREE.BoxGeometry(bw.width, bw.height, bw.depth),
+            new THREE.MeshStandardMaterial(opts)
+        );
+        tilePlane.receiveShadow = true;
+        tilePlane.castShadow = true
+        tilePlane.position.set(bw.center.x, bw.center.y, bw.center.z);
+        this.parts.push(tilePlane)
+        tilePlane.frustrumCulled = true
+        scene.add(tilePlane)
+
+
+        var x = bw.center.x + bw.width / 2;
+        var y = bw.center.y + 0.75 / 2 - bw.height / 2
+        var z = bw.center.z - (bw.depth / 2.5) + 1
+        var endZ =  bw.center.z + bw.depth / 2
+        while (z < endZ) {
+            var justPost = false
+            if (Math.abs(endZ - z) <= 3) justPost = true
+
+            var rp = RailingPost(
+                new THREE.Vector3(x, y - 0.2, z), 
+                new THREE.Vector3(x, y - 0.2, z + 2),
+                0.01, 5, justPost
+            )
+            scene.add(rp)
+            this.objects.push(rp)
+
+            rp = RailingPost(
+                new THREE.Vector3(x, y - 0.4, z), 
+                new THREE.Vector3(x, y - 0.2, z + 2),
+                0.01, 3, justPost
+            )
+            scene.add(rp)
+
+            this.objects.push(rp)
+
+            rp = RailingPost(
+                new THREE.Vector3(x, y - 0.6, z), 
+                new THREE.Vector3(x, y - 0.2, z + 2),
+                0.01, 3, justPost
+            )
+            scene.add(rp)
+
+            this.objects.push(rp)
+
+            z += 2
+        }
+    }
 
     buildElevator() {
         // Elevator floor
@@ -3085,9 +3138,9 @@ class Terrain {
                 ((ground.triangle.a.y + ground.triangle.a.y + ground.triangle.c.y)/ 3),
                 ((ground.triangle.a.z + ground.triangle.a.z + ground.triangle.c.z)/ 3)
             )
-            if (ground.parent && center.distanceTo(user.camera.position) > 200) {
+            if (ground.parent && center.distanceTo(user.camera.position) > this.sop.grounds) {
                 scene.remove(ground);
-            } else if (!ground.parent && center.distanceTo(user.camera.position) < 200/*&& isInSOP(center, sopCenter, this.sop.grounds)*/) {
+            } else if (!ground.parent && center.distanceTo(user.camera.position) < this.sop.grounds/*&& isInSOP(center, sopCenter, this.sop.grounds)*/) {
                 scene.add(ground);
             }
         })
