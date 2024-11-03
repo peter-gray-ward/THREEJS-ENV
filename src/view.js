@@ -228,11 +228,10 @@ function isIn(v, which) {
             && v.z < boardwalk.center.z + boardwalk.depth / 2
         )
     case 'cove':
-         const dockEndX = boardwalk.center.x + boardwalk.width / 2 + 20;
-
-    const windingZ = Math.sin((v.x - dockEndX) / t * Math.PI * 2) * 10;  // Winding factor
-    const inXRange = v.x > dockEndX && v.x < t + 20;
-    const inZRange = Math.abs(v.z - boardwalk.center.z - windingZ) < COVEZ; // Width of the winding path
+        const dockEndX = boardwalk.center.x + boardwalk.width / 2 + 20;
+        const windingZ = Math.sin((v.x - dockEndX) / t * Math.PI * 2) * 10;  // Winding factor
+        const inXRange = v.x > dockEndX && v.x < t + 20;
+        const inZRange = Math.abs(v.z - boardwalk.center.z - windingZ) < COVEZ; // Width of the winding path
         return (inXRange && inZRange)
     
     default:
@@ -708,7 +707,7 @@ class Sky {
         this.sceneRadius = 550;
         this.full_circle = 2 * Math.PI;
 
-        this.starLight = new THREE.AmbientLight(0xfefeff,  .1); // Sky and ground color
+        this.starLight = new THREE.AmbientLight(0xfefeff,  .06); // Sky and ground color
         this.starLight.position.set(0, 0, 0);
         scene.add(this.starLight);
 
@@ -2046,28 +2045,44 @@ function getCachedSphereGeometry(radius, map, transparent) {
     if (!sphereGeometries[radius]) {
         const geometry = new THREE.SphereGeometry(
             randomInRange(radius - 1, radius + 1), 
-            Math.floor(randomInRange(3, 11)), 
-            Math.floor(randomInRange(3, 11))
+            11, 11
         );
         
         if (transparent) {
             
         } else {
-            geometry.llod = []
-            geometry.hlod = []
-            for (let i = 0; i < geometry.attributes.position.array.length; i += 3) {
-                if (Math.random() < 0.5) {
 
-                    // Apply offset to create more organic shapes and layers
-                    geometry.attributes.position.array[i] += randomInRange(-radius / 2, radius / 2);
-                    geometry.attributes.position.array[i + 1] += randomInRange(-radius / 3, radius / 3);;
-                    geometry.attributes.position.array[i + 2] += randomInRange(-radius / 2, radius / 2);;
-                }
-                // geometry.llod.push(geometry.attributes.position.array[i], geometry.attributes.position.array[i + 1], geometry.attributes.position.array[i + 2])
-                // geometry.hlod.push(geometry.attributes.position.array[i], geometry.attributes.position.array[i + 1], geometry.attributes.position.array[i + 2])
-           }
-            geometry.computeVertexNormals()
+            // Add a color attribute with an array of random colors for each vertex
+            const vertexCount = geometry.attributes.position.count;
+            const colors = new Float32Array(vertexCount * 3); // 3 values (RGB) per vertex
+
+            // Populate the color array with initial random colors
+            for (let i = 0; i < vertexCount; i++) {
+                colors[i * 3] = Math.random();     // Red
+                colors[i * 3 + 1] = Math.random(); // Green
+                colors[i * 3 + 2] = Math.random(); // Blue
+            }
+
+            // Set the color attribute to the geometry
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            // Now you can manipulate position and color attributes
+            for (let i = 0; i < geometry.attributes.position.array.length; i += 3) {
+                geometry.attributes.position.array[i] += randomInRange(-radius, radius);
+                geometry.attributes.position.array[i + 1] += randomInRange(-radius / 3, radius / 1.5);
+                geometry.attributes.position.array[i + 2] += randomInRange(-radius, radius);
+
+                // Update color values (optional if you want dynamic colors)
+                geometry.attributes.color.array[i] = Math.random();
+                geometry.attributes.color.array[i + 1] = Math.random();
+                geometry.attributes.color.array[i + 2] = Math.random();
+            }
+
+            // Recompute normals and mark attributes as needing updates
+            geometry.computeVertexNormals();
             geometry.attributes.position.needsUpdate = true;
+            geometry.attributes.color.needsUpdate = true;
+
         }
 
         sphereGeometries[radius] = geometry;
@@ -2086,7 +2101,7 @@ function getCachedLeafMaterial(color, map, transparent) {
         if (map) {
             leafMaterialArgs.map = map
         }
-        leafMaterials[color] = new THREE.MeshStandardMaterial(leafMaterialArgs);
+        leafMaterials[color] = new THREE.MeshBasicMaterial(leafMaterialArgs);
     }
     leafMaterials.needsUpdate = true
     return leafMaterials[color];
@@ -2170,7 +2185,7 @@ class Terrain {
                 trunk: {
                     map: TRUNKTEXTURE
                 },
-                trunkHeight: randomInRange(6, 9)
+                trunkHeight: randomInRange(9, 11)
             },
             oak: {
                 height: randomInRange(11.1, 60),
@@ -2189,7 +2204,7 @@ class Terrain {
         const instanceCount = Math.floor(tree[treeKind].height * 7); // Adjust count as needed
         const instancedMesh = new THREE.InstancedMesh(
             getCachedSphereGeometry(tree[treeKind].width / 2),
-            getCachedLeafMaterial(tree[treeKind].colors[0], tree[treeKind].map), // Initial color
+            getCachedLeafMaterial(tree[treeKind].colors[0], new THREE.TextureLoader().load('/images/leaf-branch.webp')), // Initial color
             instanceCount
         );
         instancedMesh.frustrumCulled = true
@@ -2206,7 +2221,7 @@ class Terrain {
                 continue
             }
             const progress = (y - Y) / tree[treeKind].height;
-            let radiusAtY = (1 - progress) * (tree[treeKind].width / 2) * randomInRange(0.83, 2.25);
+            let radiusAtY = (1 - progress) * (tree[treeKind].width / 2) * randomInRange(2, 3.25);
             if (radiusAtY < 1) radiusAtY = 1;
             if (none && ydiff++ < tree[treeKind].trunkHeight) {
                 radiusAtY = 0
@@ -2216,7 +2231,7 @@ class Terrain {
 
             const interpolatedColor = startColor.clone().lerp(endColor, progress);
 
-            for (let p = 0; p < twoPi && index < instanceCount; p += randomInRange(0.6, 1.0)) {
+            for (let p = 0; p < twoPi && index < instanceCount; p += randomInRange(0.6, 2.0)) {
                 const matrix = new THREE.Matrix4();
                 const randomAngle = randomInRange(-0.4, 0.4);
                 const randomHeightAdjustment = randomInRange(-0.3, 0.3);
@@ -2230,7 +2245,7 @@ class Terrain {
                 instancedMesh.setMatrixAt(index, matrix);
 
                 // Set color for each instance based on height progress
-                // instancedMesh.setColorAt(index, new THREE.Color(1,1,1));
+                instancedMesh.setColorAt(index, new THREE.Color(Math.random(), Math.random(), Math.random()));
 
                 index++;
             }
@@ -2485,8 +2500,10 @@ class Terrain {
             const CLIFF = Math.abs(triangleMesh.normal.y) < 0.4 && (Math.abs(triangleMesh.normal.x) > 0.4 || Math.abs(triangleMesh.normal.z) > 0.4)
             const YARD = isIn(trianglePosition, 'yard')
             const HOUSE = isIn(trianglePosition, 'house')
+            const DOCK = isIn(trianglePosition, 'dock')
             const SIDEYARD = isIn(trianglePosition, 'sideyard')
             const BACKYARD = isIn(trianglePosition, 'backyard')
+            const COVE = isIn(trianglePosition, 'cove')
 
            
             if (CLIFF) {
@@ -2494,11 +2511,14 @@ class Terrain {
             } else {
                 let cypressTreePosition
                 if (
-                        !CLIFF &&
-                        !isIn(trianglePosition, 'cove')
-                        && !isIn(trianglePosition, 'dock')
-                        && !isIn(trianglePosition, 'yard')
-                        && Math.random() < 0.05
+                        !CLIFF && !COVE && !HOUSE && !YARD && !SIDEYARD && !DOCK
+                        && (
+                            (
+                                trianglePosition.x > 20 ?  Math.random() < 0.005 : (
+                                    trianglePosition.z > 20 ? Math.random() < 0.08 : Math.random() < 0.003
+                                )
+                            )
+                        )
                     ) {
                     cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
                     var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
