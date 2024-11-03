@@ -2557,7 +2557,6 @@ class Terrain {
         v.y = (1 - x) * (1 - y) * this.v0.y + x * (1 - y) * this.v1.y + x * y * this.v2.y + (1 - x) * y * this.v3.y;
         v.z = (1 - x) * (1 - y) * this.v0.z + x * (1 - y) * this.v1.z + x * y * this.v2.z + (1 - x) * y * this.v3.z;
 
-    
         const t1 = TriangleMesh(vertices, a, b, d, this.width, this.height, groundTexture);
         const t2 = TriangleMesh(vertices, b, c, d, this.width, this.height, groundTexture);
 
@@ -2583,13 +2582,17 @@ class Terrain {
             } else {
                 let cypressTreePosition
                 if (
-                        !CLIFF && !COVE && !HOUSE && !YARD && !SIDEYARD && !DOCK
-                        && (
-                            (
-                                trianglePosition.x > 20 ?  Math.random() < 0.005 : (
-                                    trianglePosition.z > 20 ? Math.random() < 0.08 : Math.random() < 0.003
+                        (
+                            !CLIFF && !COVE && !HOUSE && !YARD && !SIDEYARD && !DOCK
+                            && (
+                                (
+                                    trianglePosition.x > 20 ?  Math.random() < 0.005 : (
+                                        trianglePosition.z > 20 ? Math.random() < 0.008 : Math.random() < 0.003
+                                    )
                                 )
                             )
+                        ) || (
+                            BACKYARD && Math.random() < 0.1
                         )
                     ) {
                     cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
@@ -2630,11 +2633,9 @@ class Terrain {
                     this.grasses.push(instancedMesh)
                 }
             }
-
-
-
-
         })
+
+       
     }
 
 
