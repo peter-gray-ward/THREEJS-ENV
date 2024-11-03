@@ -3364,13 +3364,13 @@ class UserController {
         var raycaster = new THREE.Raycaster();
         var mouse = new THREE.Vector2();
 
-        window.addEventListener('dblclick', e => {
-            let objectedit = ObjectEdit.isClass('object-edit', e.srcElement)
-            if (objectedit) {
-                return
-            }
-            return window.editor.renderModal(e)
-        })
+        // window.addEventListener('dblclick', e => {
+        //     let objectedit = ObjectEdit.isClass('object-edit', e.srcElement)
+        //     if (objectedit) {
+        //         return
+        //     }
+        //     return window.editor.renderModal(e)
+        // })
 
 
         window.addEventListener('click', (e) => {
