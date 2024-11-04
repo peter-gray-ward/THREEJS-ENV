@@ -248,6 +248,25 @@ def download_image(image_type, image_description):
     else:
         return jsonify({"error": "No URL provided"}), 400
 
+@app.route('/gltf-model/<name>', methods=('GET',))
+def fetch_gltf_model(name):
+    # Define the full path to the file
+    file_path = os.path.join('models', name)
+    
+    # Check if the file exists
+    if not os.path.exists(file_path):
+        print(f'not os.path.exists({file_path})')
+        return None
+    
+    # Serve the file
+    try:
+        print('sending_file ' + file_path)
+        return send_file(file_path, mimetype='application/octet-stream')
+    except Exception as e:
+        print(f'exception sending file {file_path}: {e}')
+        return None
+
+
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 8080))  # Fallback to 8080 if PORT is not set
     app.run(host="0.0.0.0", port=port)

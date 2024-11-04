@@ -3579,6 +3579,7 @@ class UserController {
 
 
         window.addEventListener('touchstart', (event) => {
+            event.preventDefault()
             this.touchdown = true;
             lastTouchX = event.touches[0].clientX;
             lastTouchY = event.touches[0].clientY;
@@ -3586,9 +3587,11 @@ class UserController {
                 event.touches[0].clientY > window.innerHeight - 100) {
                 this.shouldMoveForward = true
             }
-        });
+        }, { passive: false });
 
         window.addEventListener('touchmove', (event) => {
+
+            event.preventDefault()
             if (event.touches[0].clientX > window.innerWidth - 100 &&
                 event.touches[0].clientY > window.innerHeight - 100) {
                 return
@@ -3623,14 +3626,16 @@ class UserController {
                 lastTouchX = touch.clientX;
                 lastTouchY = touch.clientY;
             }
-        });
+        }, { passive: false });
 
         // Reset lastTouchX and lastTouchY when fingers are lifted
         window.addEventListener('touchend', () => {
+
+            event.preventDefault()
             this.touchdown = false;
             lastTouchX = null;
             lastTouchY = null;
-        });
+        }, { passive: false });
 
     }
 
