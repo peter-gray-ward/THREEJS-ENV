@@ -9,6 +9,7 @@
 			width: 100vw;
 			height: 100vh;
 			background: black;
+			user-select: none;
 		}
 
 		* {
@@ -24,7 +25,7 @@
 
 		body canvas {
 			position: fixed;
-			
+			user-select: none;
 		}
 
 		#map {
@@ -269,9 +270,23 @@
 			flex-direction: column;
 			justify-content: flex-end;
 		}
+
+		#walk {
+			position: absolute;
+			z-index: 9999999;
+			width: 100px;
+			height: 100px;
+			left: calc(100% - 100px);
+			top: calc(100% - 100px);
+			background: rgba(0,0,0,0.5);
+			border: none;
+			border-radius: 1rem;
+			color: white;
+		}
 		</style>
 </head>
 <body>
+	<button id="walk">walk</button>
 	<script src="/src/view.js" type="module"></script>
 </body>
 </html>

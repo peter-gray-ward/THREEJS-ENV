@@ -2285,43 +2285,51 @@ class Terrain {
         let index = 0;
         var none = true //Math.random() < 0.5
         var ydiff = 0
-        for (let y = Y; y < Y + tree[treeKind].height; y += 1) {
-            if (tree[treeKind].height > 20 && Math.random() < 0.5) {
-                continue
+        var hasFoliage = false
+        while (!hasFoliage) {
+            for (let y = Y; y < Y + tree[treeKind].height; y += 1) {
+                if (tree[treeKind].height > 20 && Math.random() < 0.5) {
+                    continue
+                }
+                const progress = (y - Y) / tree[treeKind].height;
+                let radiusAtY = (1 - progress) * (tree[treeKind].width / 2) * randomInRange(2, 3.25);
+                if (radiusAtY < 1) radiusAtY = 1;
+                if (none && ydiff++ < tree[treeKind].trunkHeight) {
+                    radiusAtY = 0
+                } else if (none) {
+                    radiusAtY *= randomInRange(1, 4)
+                }
+
+                if (Math.random() < 0.4) {
+                    radiusAtY = 0
+                }
+
+                if (radiusAtY > 0) {
+                    hasFoliage = true
+                }
+
+                const interpolatedColor = startColor.clone().lerp(endColor, progress);
+
+                for (let p = 0; p < twoPi && index < instanceCount; p += randomInRange(0.6, 2.0)) {
+                    const matrix = new THREE.Matrix4();
+                    const randomAngle = randomInRange(-0.4, 0.4);
+                    const randomHeightAdjustment = randomInRange(-0.3, 0.3);
+
+                    const xPos = x + (radiusAtY * Math.cos(p + randomAngle)) + randomInRange(-0.75, 0.75);
+                    const zPos = z + (radiusAtY * Math.sin(p + randomAngle)) + randomInRange(-0.75, 0.75);
+                    const yPos = y + randomHeightAdjustment;
+
+                    matrix.setPosition(xPos, yPos, zPos);
+                    matrix.scale(new THREE.Vector3(radiusAtY, radiusAtY, radiusAtY));
+                    instancedMesh.setMatrixAt(index, matrix);
+
+                    // Set color for each instance based on height progress
+                    instancedMesh.setColorAt(index, new THREE.Color(Math.random(), Math.random(), Math.random()));
+
+                    index++;
+                }
             }
-            const progress = (y - Y) / tree[treeKind].height;
-            let radiusAtY = (1 - progress) * (tree[treeKind].width / 2) * randomInRange(2, 3.25);
-            if (radiusAtY < 1) radiusAtY = 1;
-            if (none && ydiff++ < tree[treeKind].trunkHeight) {
-                radiusAtY = 0
-            } else if (none) {
-                radiusAtY *= randomInRange(1, 4)
-            }
 
-            if (Math.random() < 0.4) {
-                radiusAtY = 0
-            }
-
-            const interpolatedColor = startColor.clone().lerp(endColor, progress);
-
-            for (let p = 0; p < twoPi && index < instanceCount; p += randomInRange(0.6, 2.0)) {
-                const matrix = new THREE.Matrix4();
-                const randomAngle = randomInRange(-0.4, 0.4);
-                const randomHeightAdjustment = randomInRange(-0.3, 0.3);
-
-                const xPos = x + (radiusAtY * Math.cos(p + randomAngle)) + randomInRange(-0.75, 0.75);
-                const zPos = z + (radiusAtY * Math.sin(p + randomAngle)) + randomInRange(-0.75, 0.75);
-                const yPos = y + randomHeightAdjustment;
-
-                matrix.setPosition(xPos, yPos, zPos);
-                matrix.scale(new THREE.Vector3(radiusAtY, radiusAtY, radiusAtY));
-                instancedMesh.setMatrixAt(index, matrix);
-
-                // Set color for each instance based on height progress
-                instancedMesh.setColorAt(index, new THREE.Color(Math.random(), Math.random(), Math.random()));
-
-                index++;
-            }
         }
 
         instancedMesh.instanceMatrix.needsUpdate = true;
@@ -3358,7 +3366,7 @@ class UserController {
         var forward_Y = 2 * (_y * _z - _w * _x);
         var forward_Z = 1 - 2 * (_x**2 + _y**2);
         
-        var distance = -2;
+        var distance = -.5;
         forward_X *= distance;
         forward_Y *= distance;
         forward_Z *= distance;
@@ -3456,14 +3464,6 @@ class UserController {
 
         var raycaster = new THREE.Raycaster();
         var mouse = new THREE.Vector2();
-
-        // window.addEventListener('dblclick', e => {
-        //     let objectedit = ObjectEdit.isClass('object-edit', e.srcElement)
-        //     if (objectedit) {
-        //         return
-        //     }
-        //     return window.editor.renderModal(e)
-        // })
 
 
         window.addEventListener('click', (e) => {
@@ -3582,9 +3582,19 @@ class UserController {
             this.touchdown = true;
             lastTouchX = event.touches[0].clientX;
             lastTouchY = event.touches[0].clientY;
+            if (event.touches[0].clientX > window.innerWidth - 100 &&
+                event.touches[0].clientY > window.innerHeight - 100) {
+                this.shouldMoveForward = true
+            }
         });
 
         window.addEventListener('touchmove', (event) => {
+            if (event.touches[0].clientX > window.innerWidth - 100 &&
+                event.touches[0].clientY > window.innerHeight - 100) {
+                return
+            } else {
+                this.shouldMoveForward = false
+            }
             if (this.touchdown) {
                 const touch = event.touches[0];
                 const canvas = document.querySelector('canvas');
@@ -4091,7 +4101,7 @@ window.Animate = function() {
         UndulateWater()
         window.castle.update()
        
-        if (user.towndown) {
+        if (user.shouldMoveForward) {
             user.moveForward()
         }
 
