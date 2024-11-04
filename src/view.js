@@ -4098,23 +4098,23 @@ class View {
         // Add the wireframe to the scene
         window.scene.add(wireframeBox);
 
-        var userPosition = user.camera.position
-        var userRotation = {
-            x: user.camera.rotation._x,
-            y: user.camera.rotation._y,
-            z: user.camera.rotation._z
-        }
+        let position = '{"x":19.852216707186262,"y":11.200000001490116,"z":-11.458214068699375}'
+        let rotation = '{"x":2.924449624390635,"y":0.6338689705218558,"z":-3.011662049881017}'
 
         if (localStorage.position) {
-            userPosition = JSON.parse(localStorage.position)
+            position = JSON.parse(localStorage.position)
+        } else {
+            position = JSON.parse(position)
         }
 
         if (localStorage.rotation) {
-            userRotation = JSON.parse(localStorage.rotation)
+            rotation = JSON.parse(localStorage.rotation)
+        } else {
+            rotation = JSON.parse(localStorage.rotation)
         }
 
-        user.camera.position.set(userPosition.x, userPosition.y, userPosition.z)
-        user.camera.rotation.set(userRotation.x, userRotation.y, userRotation.z)
+        user.camera.position.set(position.x, position.y, position.z)
+        user.camera.rotation.set(rotation.x, rotation.y, rotation.z)
     }
 
 }
