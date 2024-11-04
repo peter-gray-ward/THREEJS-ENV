@@ -2170,7 +2170,7 @@ function getCachedLeafMaterial(color, map, transparent) {
         if (map) {
             leafMaterialArgs.map = map
         }
-        leafMaterials[color] = new THREE.MeshBasicMaterial(leafMaterialArgs);
+        leafMaterials[color] = new THREE.MeshStandardMaterial(leafMaterialArgs);
     }
     leafMaterials.needsUpdate = true
     return leafMaterials[color];
@@ -2250,7 +2250,7 @@ class Terrain {
                 width: randomInRange(1, 2),
                 colors: CYPRESSGREENS, 
                 trimmed: Math.random() < 0.5 ? true : false,
-                map: new THREE.TextureLoader().load("/images/leaf-branch.webp"),
+                map: new THREE.TextureLoader().load("/images/leaf-oval-green.png"),
                 trunk: {
                     map: TRUNKTEXTURE
                 },
@@ -2273,7 +2273,7 @@ class Terrain {
         const instanceCount = Math.floor(tree[treeKind].height * 7); // Adjust count as needed
         const instancedMesh = new THREE.InstancedMesh(
             getCachedSphereGeometry(tree[treeKind].width / 2),
-            getCachedLeafMaterial(tree[treeKind].colors[0], null, new THREE.TextureLoader().load('/images/leaf-branch.webp')), // Initial color
+            getCachedLeafMaterial(tree[treeKind].colors[0], tree[treeKind].map, new THREE.TextureLoader().load('/images/leaf-branch.webp')), // Initial color
             instanceCount
         );
         instancedMesh.frustrumCulled = true
@@ -2592,7 +2592,7 @@ class Terrain {
                                 )
                             )
                         ) || (
-                            BACKYARD && Math.random() < 0.1
+                            BACKYARD && Math.random() < 0.01
                         )
                     ) {
                     cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
@@ -3358,7 +3358,7 @@ class UserController {
         var forward_Y = 2 * (_y * _z - _w * _x);
         var forward_Z = 1 - 2 * (_x**2 + _y**2);
         
-        var distance = -0.21;
+        var distance = -2;
         forward_X *= distance;
         forward_Y *= distance;
         forward_Z *= distance;
@@ -3543,69 +3543,85 @@ class UserController {
         this.previous = { movementX: 0, movementY: 0 }
         this.targetLook = new THREE.Vector3();
 
+        window.addEventListener('mousedown', () => { this.mouseDown = true });
+        window.addEventListener('mouseup', () => { this.mouseDown = false });
 
-        window.addEventListener('mousedown', e => { this.mouseDown = true })
-        window.addEventListener('mouseup', e => { this.mouseDown = false })
+        let lastTouchX = null;
+        let lastTouchY = null;
 
         // Define the max angle for the arc (in radians)
-        // const maxAngle = THREE.MathUtils.degToRad(45);  // 45 degrees in radians
-        // var lastTouchX
-        // document.querySelector('canvas').addEventListener('mousemove', (event) => {
-        //     // Get the canvas dimensions
-        //     const canvas = document.querySelector('canvas');
-        //     const centerX = canvas.clientWidth / 2;
-        //     const centerY = canvas.clientHeight / 2;
+        const maxAngle = THREE.MathUtils.degToRad(45);  // 45 degrees in radians
+        const baseSensitivity = 0.0085; 
 
-        //     // Calculate distance from center of the screen
-        //     const deltaX = event.clientX - centerX;
-        //     const deltaY = event.clientY - centerY;
-        //     const distanceFromCenter = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        // Mouse move event for controlling camera rotation
+        window.addEventListener('mousemove', (event) => {
+            if (this.mouseDown) {
+                const canvas = document.querySelector('canvas');
+                const centerX = canvas.clientWidth / 2;
+                const centerY = canvas.clientHeight / 2;
+                const deltaX = event.clientX - centerX;
+                const deltaY = event.clientY - centerY;
+                const distanceFromCenter = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                const maxDistance = Math.sqrt(centerX * centerX + centerY * centerY);  // Max distance to edge of canvas
+                const scaledSensitivity = baseSensitivity * (distanceFromCenter / maxDistance);
 
-        //     // Scale the sensitivity based on distance from center
-        //     const baseSensitivity = 0.0085;  // Base sensitivity
-        //     const maxDistance = Math.sqrt(centerX * centerX + centerY * centerY);  // Max distance to edge of canvas
-        //     const scaledSensitivity = baseSensitivity * (distanceFromCenter / maxDistance);
+                // Apply scaled sensitivity to yaw and pitch adjustments
+                this.yaw -= event.movementX * scaledSensitivity;
+                this.pitch -= event.movementY * scaledSensitivity;
 
-        //     // Apply scaled sensitivity to yaw and pitch adjustments
-        //     this.yaw -= event.movementX * scaledSensitivity;
-        //     this.pitch -= event.movementY * scaledSensitivity;
+                // Clamp the pitch to avoid flipping
+                this.pitch = Math.max(-this.maxPitch, Math.min(this.maxPitch, this.pitch));
 
-        //     // Clamp the pitch to avoid flipping
-        //     this.pitch = Math.max(-this.maxPitch, Math.min(this.maxPitch, this.pitch));
-
-        //     const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');  // Yaw-Pitch-Roll
-        //     this.camera.quaternion.setFromEuler(euler);  // Apply rotation to the camera
-
-        //     // Move forward if mouse is down
-        //     if (this.mouseDown) {
-        //         this.moveForward();
-        //     }
-        // });
-
-        document.querySelector('canvas').addEventListener('touchmove', (event) => {
-            // Ensure two fingers are used for rotation
-            if (event.touches.length === 2) {
-                const touchX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
-                
-                if (lastTouchX !== null) {
-                    const movementX = touchX - lastTouchX;
-                    const sensitivity = 0.005;  // Adjust this sensitivity for the two-finger rotation
-
-                    // Apply movement to yaw for Y-axis rotation
-                    this.yaw -= movementX * sensitivity;
-
-                    const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');  // Yaw-Pitch-Roll
-                    this.camera.quaternion.setFromEuler(euler);  // Apply rotation to the camera
-                }
-
-                lastTouchX = touchX;  // Update lastTouchX for the next touchmove
+                const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');  // Yaw-Pitch-Roll
+                this.camera.quaternion.setFromEuler(euler);  // Apply rotation to the camera
             }
         });
 
-        // Reset lastTouchX when fingers are lifted
-        document.querySelector('canvas').addEventListener('touchend', () => {
-            lastTouchX = null;
+
+        window.addEventListener('touchstart', (event) => {
+            this.touchdown = true;
+            lastTouchX = event.touches[0].clientX;
+            lastTouchY = event.touches[0].clientY;
         });
+
+        window.addEventListener('touchmove', (event) => {
+            if (this.touchdown) {
+                const touch = event.touches[0];
+                const canvas = document.querySelector('canvas');
+                const centerX = canvas.clientWidth / 2;
+                const centerY = canvas.clientHeight / 2;
+                const deltaX = touch.clientX - centerX;
+                const deltaY = touch.clientY - centerY;
+                const distanceFromCenter = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                const maxDistance = Math.sqrt(centerX * centerX + centerY * centerY);  // Max distance to edge of canvas
+                const scaledSensitivity = baseSensitivity * (distanceFromCenter / maxDistance);
+
+                // Calculate movement relative to last touch position
+                const movementX = touch.clientX - lastTouchX;
+                const movementY = touch.clientY - lastTouchY;
+
+                this.yaw -= movementX * scaledSensitivity;
+                this.pitch -= movementY * scaledSensitivity;
+
+                // Clamp the pitch to avoid flipping
+                this.pitch = Math.max(-this.maxPitch, Math.min(this.maxPitch, this.pitch));
+
+                const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');  // Yaw-Pitch-Roll
+                this.camera.quaternion.setFromEuler(euler);  // Apply rotation to the camera
+
+                // Update last touch positions
+                lastTouchX = touch.clientX;
+                lastTouchY = touch.clientY;
+            }
+        });
+
+        // Reset lastTouchX and lastTouchY when fingers are lifted
+        window.addEventListener('touchend', () => {
+            this.touchdown = false;
+            lastTouchX = null;
+            lastTouchY = null;
+        });
+
     }
 
     handleMovement() {
@@ -4075,6 +4091,9 @@ window.Animate = function() {
         UndulateWater()
         window.castle.update()
        
+        if (user.towndown) {
+            user.moveForward()
+        }
 
         window.renderer.render(window.scene, window.user.camera);
 }
