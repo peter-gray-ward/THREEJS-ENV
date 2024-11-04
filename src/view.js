@@ -2327,7 +2327,7 @@ class Terrain {
         instancedMesh.instanceMatrix.needsUpdate = true;
         instancedMesh.castShadow = true;
         instancedMesh.receiveShadow = true;
-        var radiusBottom =  tree[treeKind].height * .01
+        var radiusBottom =  tree[treeKind].height * .02
         var radiusTop = radiusBottom * .1
         // Create the trunk
         const trunkGeometry = new THREE.CylinderGeometry(
