@@ -3617,7 +3617,7 @@ class UserController {
 
         // Define the max angle for the arc (in radians)
         const maxAngle = THREE.MathUtils.degToRad(45);  // 45 degrees in radians
-        const baseSensitivity = 0.0085; 
+        const baseSensitivity = 0.03; 
 
         // Mouse move event for controlling camera rotation
         window.addEventListener('mousemove', (event) => {
@@ -3651,9 +3651,13 @@ class UserController {
             if (event.touches[0].clientX > window.innerWidth - 100 &&
                 event.touches[0].clientY > window.innerHeight - 100) {
                 this.shouldMoveForward = true
+                document.getElementById('walk').classList.add('active')
             } else if (event.touches[0].clientX > window.innerWidth - 100 &&
                 event.touches[0].clientY > window.innerHeight - 200) {
                 this.shouldMoveForward = false
+                document.getElementById('not_walk').classList.add('active')
+                document.getElementById('walk').classList.remove('active')
+                setTimeout(() => document.getElementById('not_walk').classList.remove('active'), 500)
             }
         });
 

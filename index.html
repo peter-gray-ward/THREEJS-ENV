@@ -280,6 +280,14 @@
 			justify-content: flex-end;
 		}
 
+
+		.button {
+			background: rgba(0,0,0,0.05);
+		}
+		.button.active {
+			background: rgba(0,0,0,0.5);
+		}
+
 		#walk, #not_walk {
 			display: none;
 		}
@@ -294,7 +302,6 @@
 				height: 100px;
 				left: calc(100% - 100px);
 				top: calc(100% - 100px);
-				background: rgba(0,0,0,0.5);
 				border: none;
 				border-bottom-left-radius: 1rem;
 				color: white;
@@ -309,18 +316,19 @@
 				height: 100px;
 				left: calc(100% - 100px);
 				top: calc(100% - 200px);
-				background: rgba(0,0,0,0.5);
+				
 				border: none;
 				border-top-left-radius: 1rem;
 				color: white;
 				margin: 0.5rem;
 			}
 		}
+
 		</style>
 </head>
 <body>
-	<button id="walk">walk</button>
-	<button id="not_walk">not walk</button>
+	<button class="button" id="walk">walk</button>
+	<button class="button" id="not_walk">not walk</button>
 	<script src="/src/view.js" type="module"></script>
 </body>
 </html>
