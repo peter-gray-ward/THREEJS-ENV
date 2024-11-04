@@ -3590,47 +3590,47 @@ class UserController {
         }, { passive: false });
 
         window.addEventListener('touchmove', (event) => {
-
             event.preventDefault()
             if (event.touches[0].clientX > window.innerWidth - 100 &&
                 event.touches[0].clientY > window.innerHeight - 100) {
                 return
             } 
-            if (this.touchdown) {
-                const touch = event.touches[0];
-                const canvas = document.querySelector('canvas');
-                const centerX = canvas.clientWidth / 2;
-                const centerY = canvas.clientHeight / 2;
-                const deltaX = touch.clientX - centerX;
-                const deltaY = touch.clientY - centerY;
-                const distanceFromCenter = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-                const maxDistance = Math.sqrt(centerX * centerX + centerY * centerY);  // Max distance to edge of canvas
-                const scaledSensitivity = baseSensitivity * (distanceFromCenter / maxDistance);
+            const touch = event.touches[0];
+            const canvas = document.querySelector('canvas');
+            const centerX = canvas.clientWidth / 2;
+            const centerY = canvas.clientHeight / 2;
+            const deltaX = touch.clientX - centerX;
+            const deltaY = touch.clientY - centerY;
+            const distanceFromCenter = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            const maxDistance = Math.sqrt(centerX * centerX + centerY * centerY);  // Max distance to edge of canvas
+            const scaledSensitivity = baseSensitivity * (distanceFromCenter / maxDistance);
 
-                // Calculate movement relative to last touch position
-                const movementX = touch.clientX - lastTouchX;
-                const movementY = touch.clientY - lastTouchY;
+            // Calculate movement relative to last touch position
+            const movementX = touch.clientX - lastTouchX;
+            const movementY = touch.clientY - lastTouchY;
 
-                this.yaw -= movementX * scaledSensitivity;
-                this.pitch -= movementY * scaledSensitivity;
+            this.yaw -= movementX * scaledSensitivity;
+            this.pitch -= movementY * scaledSensitivity;
 
-                // Clamp the pitch to avoid flipping
-                this.pitch = Math.max(-this.maxPitch, Math.min(this.maxPitch, this.pitch));
+            // Clamp the pitch to avoid flipping
+            this.pitch = Math.max(-this.maxPitch, Math.min(this.maxPitch, this.pitch));
 
-                const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');  // Yaw-Pitch-Roll
-                this.camera.quaternion.setFromEuler(euler);  // Apply rotation to the camera
+            const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');  // Yaw-Pitch-Roll
+            this.camera.quaternion.setFromEuler(euler);  // Apply rotation to the camera
 
-                // Update last touch positions
-                lastTouchX = touch.clientX;
-                lastTouchY = touch.clientY;
-            }
-        }, { passive: false });
+            // Update last touch positions
+            lastTouchX = touch.clientX;
+            lastTouchY = touch.clientY;
+        }
 
         // Reset lastTouchX and lastTouchY when fingers are lifted
-        window.addEventListener('touchend', () => {
-
+        window.addEventListener('touchend', (event) => {
             event.preventDefault()
-            this.touchdown = false;
+             if (event.touches[0].clientX > window.innerWidth - 100 &&
+                event.touches[0].clientY > window.innerHeight - 100) {
+                this.shouldMoveForward = false
+            }
+            
             lastTouchX = null;
             lastTouchY = null;
         }, { passive: false });
