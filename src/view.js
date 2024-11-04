@@ -3390,6 +3390,18 @@ class UserController {
         );
     }
 
+    touchend (event) {
+        alert(`${event.touches[0].clientX}, ${event.touches[0].clientY}`)
+        if (event.touches[0].clientX > window.innerWidth - 100 &&
+            event.touches[0].clientY > window.innerHeight - 100) {
+            alert('this.shouldMoveForward = false')
+            this.shouldMoveForward = false
+        }
+        
+        lastTouchX = null;
+        lastTouchY = null;
+    }
+
     addEventListener() {
         window.addEventListener('keydown', (e) => {
             if (/object-edit/.test(e.srcElement.className)) return
@@ -3579,18 +3591,19 @@ class UserController {
 
 
         window.addEventListener('touchstart', (event) => {
-            event.preventDefault()
             this.touchdown = true;
             lastTouchX = event.touches[0].clientX;
             lastTouchY = event.touches[0].clientY;
             if (event.touches[0].clientX > window.innerWidth - 100 &&
                 event.touches[0].clientY > window.innerHeight - 100) {
                 this.shouldMoveForward = true
+            } else if (event.touches[0].clientX > window.innerWidth - 100 &&
+                event.touches[0].clientY > window.innerHeight - 200) {
+                this.shouldMoveForward = false
             }
-        }, { passive: false });
+        });
 
         window.addEventListener('touchmove', (event) => {
-            event.preventDefault()
             if (event.touches[0].clientX > window.innerWidth - 100 &&
                 event.touches[0].clientY > window.innerHeight - 100) {
                 return
@@ -3621,19 +3634,21 @@ class UserController {
             // Update last touch positions
             lastTouchX = touch.clientX;
             lastTouchY = touch.clientY;
-        }
+        })
 
-        // Reset lastTouchX and lastTouchY when fingers are lifted
-        window.addEventListener('touchend', (event) => {
-            event.preventDefault()
+
+
+        window.addEventListener('cancel', (event) => {
+            alert(`${event.touches[0].clientX}, ${event.touches[0].clientY}`)
              if (event.touches[0].clientX > window.innerWidth - 100 &&
                 event.touches[0].clientY > window.innerHeight - 100) {
+                alert('this.shouldMoveForward = false')
                 this.shouldMoveForward = false
             }
             
             lastTouchX = null;
             lastTouchY = null;
-        }, { passive: false });
+        });
 
     }
 
@@ -4110,9 +4125,5 @@ window.Animate = function() {
 
         window.renderer.render(window.scene, window.user.camera);
 }
-
-
-
-
 
 

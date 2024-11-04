@@ -280,23 +280,47 @@
 			justify-content: flex-end;
 		}
 
-		#walk {
-			position: absolute;
-			z-index: 9999999;
-			width: 100px;
-			height: 100px;
-			left: calc(100% - 100px);
-			top: calc(100% - 100px);
-			background: rgba(0,0,0,0.5);
-			border: none;
-			border-radius: 1rem;
-			color: white;
+		#walk, #not_walk {
+			display: none;
+		}
+		
 
+		@media (max-width: 600px) {
+			#walk {
+				display: initial;
+				position: absolute;
+				z-index: 9999999;
+				width: 100px;
+				height: 100px;
+				left: calc(100% - 100px);
+				top: calc(100% - 100px);
+				background: rgba(0,0,0,0.5);
+				border: none;
+				border-bottom-left-radius: 1rem;
+				color: white;
+				margin: 0.5rem;
+			}
+
+			#not_walk {
+				display: initial;
+				position: absolute;
+				z-index: 9999999;
+				width: 100px;
+				height: 100px;
+				left: calc(100% - 100px);
+				top: calc(100% - 200px);
+				background: rgba(0,0,0,0.5);
+				border: none;
+				border-top-left-radius: 1rem;
+				color: white;
+				margin: 0.5rem;
+			}
 		}
 		</style>
 </head>
 <body>
 	<button id="walk">walk</button>
+	<button id="not_walk">not walk</button>
 	<script src="/src/view.js" type="module"></script>
 </body>
 </html>
