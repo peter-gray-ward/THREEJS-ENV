@@ -3595,9 +3595,7 @@ class UserController {
             if (event.touches[0].clientX > window.innerWidth - 100 &&
                 event.touches[0].clientY > window.innerHeight - 100) {
                 return
-            } else {
-                this.shouldMoveForward = false
-            }
+            } 
             if (this.touchdown) {
                 const touch = event.touches[0];
                 const canvas = document.querySelector('canvas');
