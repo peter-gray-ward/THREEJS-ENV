@@ -4110,7 +4110,7 @@ class View {
         if (localStorage.rotation) {
             rotation = JSON.parse(localStorage.rotation)
         } else {
-            rotation = JSON.parse(localStorage.rotation)
+            rotation = JSON.parse(rotation)
         }
 
         user.camera.position.set(position.x, position.y, position.z)
