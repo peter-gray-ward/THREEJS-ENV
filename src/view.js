@@ -39,7 +39,7 @@ const t = 100
 const groundTexture = new THREE.TextureLoader().load("/images/ground-0.jpg", texture => {
     texture.wrapS = THREE.RepeatWrapping
     texture.wrapT = THREE.RepeatWrapping
-    texture.repeat.set(11, 11)
+    texture.repeat.set(20, 20)
 })
 
 var landscape = {
@@ -3651,12 +3651,23 @@ class UserController {
             if (event.touches[0].clientX > window.innerWidth - 100 &&
                 event.touches[0].clientY > window.innerHeight - 100) {
                 this.shouldMoveForward = true
+                switch (document.getElementById('walk').innerHTML) {
+                case 'walk':
+                    this.wS = .1
+                    document.getElementById('walk').innerHTML = 'run'
+                    break
+                case 'run':
+                    this.wS = 1
+                    break;
+                default: break;
+                } 
                 document.getElementById('walk').classList.add('active')
             } else if (event.touches[0].clientX > window.innerWidth - 100 &&
                 event.touches[0].clientY > window.innerHeight - 200) {
                 this.shouldMoveForward = false
                 document.getElementById('not_walk').classList.add('active')
                 document.getElementById('walk').classList.remove('active')
+                document.getElementById('walk').innerHTML = 'walk'
                 setTimeout(() => document.getElementById('not_walk').classList.remove('active'), 500)
             }
         });
