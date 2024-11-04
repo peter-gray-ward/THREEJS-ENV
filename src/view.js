@@ -18,6 +18,11 @@ window.GROUND2 = new THREE.TextureLoader().load("/images/ground-2.JPG",texture =
     texture.rotation = Math.random() * Math.PI * 2
     texture.repeat.set(100, 100)
 })
+window.rockTexture = new THREE.TextureLoader().load("/images/dry-rough-rock-face-texture.jpg", texture => {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(1, 1);
+})
 window.CYPRESSGREENS = ['#93b449', '#6b881c', '#a9cc4e']
 window.LATHECOLORS = ['#00ffff', '#ff00ff', '#ffff00']
 window.CYPRESSBRANCH = new THREE.TextureLoader().load("/images/branch.webp")
@@ -1405,21 +1410,12 @@ class Castle {
             y: -3,
             z: 3
         }
-        var dockMesh =  new THREE.Mesh(
-            new THREE.BoxGeometry(dock.width, dock.height, dock.depth),
-            new THREE.MeshStandardMaterial(opts)
-        );
-        dockMesh.position.set(dock.x, dock.y, dock.z)
-        dockMesh.receiveShadow = true
-        dockMesh.castShadow = true
-        dockMesh.frustrumCulled = true
-        scene.add(dockMesh)
-        this.parts.push(dockMesh)
+
+        this.createRocks(dock)
+
 
         var dockStepDepth = house.width * .4
         var dockWidth = (landscape.field.width / 2) - (house.width / 2)
-
-
         var stepWidth = .3
         var stepHeight = .15
         var stepY = boardwalk.center.y - (stepHeight / 2)
@@ -1948,7 +1944,6 @@ class Castle {
         }
     }
 
-
     building(floorY) {
         floorY += boardwalk.height
         for (var level = 0; level < 1; level++) {
@@ -2053,6 +2048,59 @@ class Castle {
         // this.objects.push(roof)
         // scene.add(roof)
     }
+
+createRocks(dock) {
+    const width = dock.width;
+    const depth = dock.depth;
+    const numRocks = 8;
+
+    // Define the grid size based on the number of rocks and dock dimensions
+    const gridCols = Math.ceil(Math.sqrt(numRocks));
+    const gridRows = Math.ceil(numRocks / gridCols);
+    const cellWidth = width / gridCols;
+    const cellDepth = depth / gridRows;
+
+    let rockPositions = []; // Store positions of rocks for reference
+
+    for (let i = 0; i < numRocks; i++) {
+        // Randomize rock size within each cell
+        const rockWidth = randomInRange(cellWidth / 2, cellWidth * 3)
+
+        // Calculate cell position based on index
+        const col = i % gridCols;
+        const row = Math.floor(i / gridCols);
+
+        // Calculate the center of the selected cell
+        const cellCenterX = (dock.x - width / 2) + col * cellWidth + cellWidth / 2;
+        const cellCenterZ = (dock.z - depth / 2) + row * cellDepth + cellDepth / 2;
+
+        // Randomize position within the cell boundaries, keeping rock within cell limits
+        const rockPosition = {
+            x: randomInRange(cellCenterX - cellWidth / 4, cellCenterX + cellWidth / 4),
+            y: dock.y,
+            z: randomInRange(cellCenterZ - cellDepth / 4, cellCenterZ + cellDepth / 4)
+        };
+
+        // Create and position the rock
+        let rock = new THREE.Mesh(
+            new THREE.IcosahedronGeometry(rockWidth / 2, 0),
+            new THREE.MeshStandardMaterial({ color: 'gray', map: rockTexture })
+        );
+        rock.position.set(rockPosition.x, randomInRange(rockPosition.y - 2, rockPosition.y - 5), rockPosition.z); // Assumes ground level is y = 0
+        rock.receiveShadow = true;
+        rock.castShadow = true;
+        rock.frustumCulled = true;
+
+        // Add the rock to the scene and to the parts array
+        scene.add(rock);
+        this.parts.push(rock);
+        
+        // Save the position for reference
+        rockPositions.push(rockPosition);
+    }
+}
+
+
 
     update() {
         for (var object of this.objects) {
@@ -3366,7 +3414,7 @@ class UserController {
         var forward_Y = 2 * (_y * _z - _w * _x);
         var forward_Z = 1 - 2 * (_x**2 + _y**2);
         
-        var distance = -.5;
+        var distance = -this.wS;
         forward_X *= distance;
         forward_Y *= distance;
         forward_Z *= distance;
@@ -3407,18 +3455,24 @@ class UserController {
             if (/object-edit/.test(e.srcElement.className)) return
             const key = e.key.toUpperCase();
             if (key == 'META') {
-                this.cmd = true
+                this.meta = true
             }
             if (this.cmd && key == 'S') {
-                // localStorage.position = JSON.stringify({ x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z })
-                // localStorage.rotation = JSON.stringify({ x: this.camera.rotation.x, y: this.camera.rotation.y, z: this.camera.rotation.z })
+                
             } if (key == 'W') {
                 this.w = true;
                 this.time_held.w = new Date().getTime();
             } else if (key == 'A') {
                 this.a = true;
             } else if (key == 'S') {
-                this.s = true;
+                event.preventDefault()
+                if (this.meta) {
+                    alert('saved')
+                    localStorage.position = JSON.stringify({ x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z })
+                    localStorage.rotation = JSON.stringify({ x: this.camera.rotation._x, y: this.camera.rotation._y, z: this.camera.rotation._z })
+                } else {
+                    this.s = true;
+                }
             } else if (key == 'D') {
                 this.d = true;
             } else if (key == ' ') {
@@ -4044,28 +4098,23 @@ class View {
         // Add the wireframe to the scene
         window.scene.add(wireframeBox);
 
+        var userPosition = user.camera.position
+        var userRotation = {
+            x: user.camera.rotation._x,
+            y: user.camera.rotation._y,
+            z: user.camera.rotation._z
+        }
 
-        // window.user.camera.position.set(33.953909365281795, 2.610000001490116, 23.053098469337314);
-        window.user.camera.position.set(
-            boardwalk.center.x,
-            boardwalk.center.y + 1.2,
-            boardwalk.center.z
-        )
+        if (localStorage.position) {
+            userPosition = JSON.parse(localStorage.position)
+        }
 
+        if (localStorage.rotation) {
+            userRotation = JSON.parse(localStorage.rotation)
+        }
 
-        var time = new Date().getTime()
-
-        var lookingInterval = setInterval(function() {
-            window.user.camera.lookAt(
-                sky.sphere.position
-                //new THREE.Vector3(1000000, 0, 0)
-            )
-            console.log('diff', new Date().getTime() - time)
-            if (new Date().getTime() - time > 1000) {
-                clearInterval(lookingInterval)
-            }
-        }, 300)
-        
+        user.camera.position.set(userPosition.x, userPosition.y, userPosition.z)
+        user.camera.rotation.set(userRotation.x, userRotation.y, userRotation.z)
     }
 
 }
