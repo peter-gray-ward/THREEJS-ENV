@@ -12,6 +12,12 @@
 			user-select: none;
 		}
 
+		html, body, canvas {
+			-webkit-user-select: none; /* Safari */
+		    -ms-user-select: none; /* IE 10+ */
+		    user-select: none; /* Standard syntax */
+		}
+
 		* {
 			box-sizing:	border-box;
 			margin: 0;
@@ -282,6 +288,7 @@
 			border: none;
 			border-radius: 1rem;
 			color: white;
+
 		}
 		</style>
 </head>
