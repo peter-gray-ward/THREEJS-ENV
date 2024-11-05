@@ -288,6 +288,10 @@
 			background: rgba(0,0,0,0.5);
 		}
 
+		.button.active.very-active {
+			background: rgba(255, 0, 0, 0.5);
+		}
+
 		#walk, #not_walk {
 			display: none;
 		}
@@ -314,11 +318,25 @@
 				z-index: 9999999;
 				width: 100px;
 				height: 100px;
-				left: calc(100% - 100px);
-				top: calc(100% - 200px);
+				left: calc(100% - 200px);
+				top: calc(100% - 100px);
 				
 				border: none;
 				border-top-left-radius: 1rem;
+				color: white;
+				margin: 0.5rem;
+			}
+
+			#jump {
+				display: initial;
+				position: absolute;
+				z-index: 9999999;
+				width: 100px;
+				height: 100px;
+				left: calc(100% - 100px);
+				top: calc(100% - 200px);
+				border: none;
+				border-bottom-left-radius: 1rem;
 				color: white;
 				margin: 0.5rem;
 			}
@@ -329,6 +347,7 @@
 <body>
 	<button class="button" id="walk">walk</button>
 	<button class="button" id="not_walk">stop</button>
+	<button class="button" id="jump">jump</button>
 	<script src="/src/view.js" type="module"></script>
 </body>
 </html>

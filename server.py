@@ -248,7 +248,7 @@ def download_image(image_type, image_description):
     else:
         return jsonify({"error": "No URL provided"}), 400
 
-@app.route('/gltf-model/<name>', methods=('GET',))
+@app.route('/models/<name>', methods=('GET',))
 def fetch_gltf_model(name):
     # Define the full path to the file
     file_path = os.path.join('models', name)
@@ -265,6 +265,23 @@ def fetch_gltf_model(name):
     except Exception as e:
         print(f'exception sending file {file_path}: {e}')
         return None
+
+
+
+
+
+
+
+@app.route('/save', methods=('POST',))
+def save():
+    body = request.get_json()
+    if 'position' in body and 'username' in body:
+        return jsonify({ 'status': True })
+    else:
+        return jsonify({ 'status': False })
+
+
+
 
 
 if __name__ == '__main__':

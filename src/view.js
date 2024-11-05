@@ -1,9 +1,15 @@
-import * as THREE from '/lib/Three.module.min.js';
 
+
+import * as THREE from '/lib/Three.module.min.js';
+import { GLTFLoader } from '/lib/GLTFLoader.js';
 import { CSG } from '/lib/CSG.js'
+import { Anima } from '/lib/Anima.js'
 import { SUBTRACTION, Brush, Evaluator } from '/lib/three-bvh-csg.js';
 import ViewModel from "/src/view-model.js";
 import { Reflector } from '/lib/Reflector.js'
+
+// window.anima = new Anima(GLTFLoader, '/models/Xbot.glb')
+
 
 var debounced_event = undefined
 
@@ -326,6 +332,9 @@ const cameraBoundingBox = () => new THREE.Box3().setFromCenterAndSize(
 
 window.sliding = false
 
+var SCENE = {
+    shamu_trainer: false
+}
 
 window.GRAVITY = -0.05
 window.TERMINAL_VELOCITY = -.5,
@@ -2049,56 +2058,65 @@ class Castle {
         // scene.add(roof)
     }
 
-createRocks(dock) {
-    const width = dock.width;
-    const depth = dock.depth;
-    const numRocks = 8;
+    createRocks(dock) {
+        const width = dock.width;
+        const depth = dock.depth;
+        const numRocks = 8;
 
-    // Define the grid size based on the number of rocks and dock dimensions
-    const gridCols = Math.ceil(Math.sqrt(numRocks));
-    const gridRows = Math.ceil(numRocks / gridCols);
-    const cellWidth = width / gridCols;
-    const cellDepth = depth / gridRows;
+        // Define the grid size based on the number of rocks and dock dimensions
+        const gridCols = Math.ceil(Math.sqrt(numRocks));
+        const gridRows = Math.ceil(numRocks / gridCols);
+        const cellWidth = width / gridCols;
+        const cellDepth = depth / gridRows;
 
-    let rockPositions = []; // Store positions of rocks for reference
+        let rockPositions = []; // Store positions of rocks for reference
 
-    for (let i = 0; i < numRocks; i++) {
-        // Randomize rock size within each cell
-        const rockWidth = randomInRange(cellWidth / 2, cellWidth * 3)
+        for (let i = 0; i < numRocks; i++) {
+            // Randomize rock size within each cell
+            const rockWidth = randomInRange(cellWidth / 2, cellWidth * 3)
 
-        // Calculate cell position based on index
-        const col = i % gridCols;
-        const row = Math.floor(i / gridCols);
+            // Calculate cell position based on index
+            const col = i % gridCols;
+            const row = Math.floor(i / gridCols);
 
-        // Calculate the center of the selected cell
-        const cellCenterX = (dock.x - width / 2) + col * cellWidth + cellWidth / 2;
-        const cellCenterZ = (dock.z - depth / 2) + row * cellDepth + cellDepth / 2;
+            // Calculate the center of the selected cell
+            const cellCenterX = (dock.x - width / 2) + col * cellWidth + cellWidth / 2;
+            const cellCenterZ = (dock.z - depth / 2) + row * cellDepth + cellDepth / 2;
 
-        // Randomize position within the cell boundaries, keeping rock within cell limits
-        const rockPosition = {
-            x: randomInRange(cellCenterX - cellWidth / 4, cellCenterX + cellWidth / 4),
-            y: dock.y,
-            z: randomInRange(cellCenterZ - cellDepth / 4, cellCenterZ + cellDepth / 4)
-        };
+            // Randomize position within the cell boundaries, keeping rock within cell limits
+            const rockPosition = {
+                x: randomInRange(cellCenterX - cellWidth / 4, cellCenterX + cellWidth / 4),
+                y: dock.y,
+                z: randomInRange(cellCenterZ - cellDepth / 4, cellCenterZ + cellDepth / 4)
+            };
 
-        // Create and position the rock
-        let rock = new THREE.Mesh(
-            new THREE.IcosahedronGeometry(rockWidth / 2, 0),
-            new THREE.MeshStandardMaterial({ color: 'gray', map: rockTexture })
-        );
-        rock.position.set(rockPosition.x, randomInRange(rockPosition.y - 2, rockPosition.y - 5), rockPosition.z); // Assumes ground level is y = 0
-        rock.receiveShadow = true;
-        rock.castShadow = true;
-        rock.frustumCulled = true;
+            // Create and position the rock
+            let rock = new THREE.Mesh(
+                new THREE.IcosahedronGeometry(rockWidth / 2, 0),
+                new THREE.MeshStandardMaterial({ color: 'gray', map: rockTexture })
+            );
+            rock.position.set(rockPosition.x, randomInRange(rockPosition.y - 2, rockPosition.y - 5), rockPosition.z); // Assumes ground level is y = 0
+            rock.receiveShadow = true;
+            rock.castShadow = true;
+            rock.frustumCulled = true;
+            
+            if (window.anima && SCENE.shamu_trainer == false) {
+                SCENE.shamu_trainer = true
+                
+                anima.API.model.scene.position.set(rockPosition.x, rockPosition.y + rockWidth / 2, rockPosition.z)
+                    
+                console.log('adding', anima.API.model.scene)
+                scene.add(anima.API.model.scene)
+            }
 
-        // Add the rock to the scene and to the parts array
-        scene.add(rock);
-        this.parts.push(rock);
-        
-        // Save the position for reference
-        rockPositions.push(rockPosition);
+            // Add the rock to the scene and to the parts array
+            scene.add(rock);
+            this.parts.push(rock);
+            
+            // Save the position for reference
+            rockPositions.push(rockPosition);
+        }
     }
-}
 
 
 
@@ -3468,16 +3486,15 @@ class UserController {
                 event.preventDefault()
                 if (this.meta) {
                     alert('saved')
-                    localStorage.position = JSON.stringify({ x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z })
-                    localStorage.rotation = JSON.stringify({ x: this.camera.rotation._x, y: this.camera.rotation._y, z: this.camera.rotation._z })
+                    sessionStorage.position = JSON.stringify({ x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z })
+                    sessionStorage.rotation = JSON.stringify({ x: this.camera.rotation._x, y: this.camera.rotation._y, z: this.camera.rotation._z })
                 } else {
                     this.s = true;
                 }
             } else if (key == 'D') {
                 this.d = true;
             } else if (key == ' ') {
-                this.isJumping = true;
-                this.jumpVelocity = this.run ? 1 : 0.2;
+                this.startJumping()
             } else if (key == 'ARROWUP') {
                 this.ArrowUp = true;
             } else if (key == 'ARROWDOWN') {
@@ -3648,8 +3665,14 @@ class UserController {
             this.touchdown = true;
             lastTouchX = event.touches[0].clientX;
             lastTouchY = event.touches[0].clientY;
+            const NOTWALK = event.touches[0].clientX > window.innerWidth - 200 &&
+                event.touches[0].clientY > window.innerHeight - 100
+            const JUMP = event.touches[0].clientX > window.innerWidth - 100 &&
+                event.touches[0].clientY > window.innerHeight - 200
+
             if (event.touches[0].clientX > window.innerWidth - 100 &&
-                event.touches[0].clientY > window.innerHeight - 100) {
+                event.touches[0].clientY > window.innerHeight - 100) 
+            {
                 this.shouldMoveForward = true
                 switch (document.getElementById('walk').innerHTML) {
                 case 'walk':
@@ -3658,17 +3681,20 @@ class UserController {
                     break
                 case 'run':
                     this.wS = 1
+                    document.getElementById('walk').classList.add('very-active')
                     break;
                 default: break;
                 } 
                 document.getElementById('walk').classList.add('active')
-            } else if (event.touches[0].clientX > window.innerWidth - 100 &&
-                event.touches[0].clientY > window.innerHeight - 200) {
+           } else if (NOTWALK) {
                 this.shouldMoveForward = false
                 document.getElementById('not_walk').classList.add('active')
                 document.getElementById('walk').classList.remove('active')
+                document.getElementById('walk').classList.remove('very-active')
                 document.getElementById('walk').innerHTML = 'walk'
                 setTimeout(() => document.getElementById('not_walk').classList.remove('active'), 500)
+            } else if (JUMP) {
+                this.startJumping()
             }
         });
 
@@ -3719,6 +3745,11 @@ class UserController {
             lastTouchY = null;
         });
 
+    }
+
+    startJumping() {
+        this.isJumping = true;
+        this.jumpVelocity = this.run ? 1 : 0.2;
     }
 
     handleMovement() {
@@ -4039,7 +4070,7 @@ class UserController {
         let closestIntersection = null;
         let minDistance = 1;
 
-        for (let m of scene.children) {
+        for (let m of scene.children.filter(child => !child.isPerson)) {
             var mesh = m.mesh ? m.mesh : m
             const intersects = raycaster.intersectObject(mesh, true);
             if (intersects.length > 0 && intersects[0].distance < minDistance) {
@@ -4116,14 +4147,14 @@ class View {
         let position = '{"x":19.852216707186262,"y":11.200000001490116,"z":-11.458214068699375}'
         let rotation = '{"x":2.924449624390635,"y":0.6338689705218558,"z":-3.011662049881017}'
 
-        if (localStorage.position) {
-            position = JSON.parse(localStorage.position)
+        if (sessionStorage.position) {
+            position = JSON.parse(sessionStorage.position)
         } else {
             position = JSON.parse(position)
         }
 
-        if (localStorage.rotation) {
-            rotation = JSON.parse(localStorage.rotation)
+        if (sessionStorage.rotation) {
+            rotation = JSON.parse(sessionStorage.rotation)
         } else {
             rotation = JSON.parse(rotation)
         }
@@ -4167,7 +4198,7 @@ window.view = new View();
 
 
 
-await VM.init("Peter", view);
+
 
 
 
@@ -4190,4 +4221,9 @@ window.Animate = function() {
         window.renderer.render(window.scene, window.user.camera);
 }
 
+
+if (window.anima) {
+    await anima.load()
+}
+await VM.init('peter', view)
 
