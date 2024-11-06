@@ -2423,7 +2423,6 @@ class Terrain {
                 height: randomInRange(11.1, 60),
                 width: randomInRange(1, 2),
                 colors: CYPRESSGREENS, 
-                trunkRadius: 0.2,
                 trimmed: Math.random() < 0.5 ? true : false,
                 map: new THREE.TextureLoader().load("/images/leaf-oval-green.png"),
                 trunk: {
@@ -2442,6 +2441,10 @@ class Terrain {
                 }
             }
         };
+
+        for (var kind in tree) {
+            tree[kind].trunkRadius = tree[kind].width * .3
+        }
 
 
         const twoPi = Math.PI * 2;
@@ -2510,8 +2513,8 @@ class Terrain {
         instancedMesh.instanceMatrix.needsUpdate = true;
         instancedMesh.castShadow = true;
         instancedMesh.receiveShadow = true;
-        var radiusBottom =  tree[treeKind].trunkRadius ? tree[treeKind].trunkRadius : tree[treeKind].height * .02
-        var radiusTop = radiusBottom * .1
+        var radiusBottom =  tree[treeKind].trunkRadius
+        var radiusTop = radiusBottom * .5
         // Create the trunk
         const trunkGeometry = new THREE.CylinderGeometry(
             radiusTop,// : Float, 
