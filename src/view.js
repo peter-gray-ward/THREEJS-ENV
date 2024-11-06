@@ -34,6 +34,20 @@ window.CYPRESSGREENS = ['#93b449', '#6b881c', '#a9cc4e']; // Cypress colors
 window.PINEGREENS = ['#4e8b2d', '#3b5e24', '#629441'];     // Pine colors
 window.OAKGREENS = ['#6f9e3e', '#4d7b26', '#86b454'];      // Oak colors
 
+
+Array.prototype.mingle = function(B) {
+    return new Set([...this, ...B])
+}
+
+// Usage example
+for (var str of ['CYPRESSGREENS','PINEGREENS', 'OAKGREENS']) {
+    for (var str2 of ['CYPRESSGREENS','PINEGREENS', 'OAKGREENS']) {
+        window[str].mingle(window[str2])
+    }
+}
+ 
+
+
 window.LATHECOLORS = ['#00ffff', '#ff00ff', '#ffff00']
 window.CYPRESSBRANCH = new THREE.TextureLoader().load("/images/branch.webp")
 window.TRUNKTEXTURE = new THREE.TextureLoader().load("/images/bark-5.jpg")
@@ -2295,10 +2309,10 @@ class Castle {
     }
 }
 
-function getCachedSphereGeometry(radius, map, transparent) {
+function SphereGeometry(radius, map, transparent, wireframe, varianceMultiplier = 1.1) {
     const geometry = new THREE.SphereGeometry(
         randomInRange(radius - 1, radius + 1), 
-        11, 11
+        10, 5
     );
     
     if (transparent) {
@@ -2322,9 +2336,12 @@ function getCachedSphereGeometry(radius, map, transparent) {
 
         // Now you can manipulate position and color attributes
         for (let i = 0; i < geometry.attributes.position.array.length; i += 3) {
-            geometry.attributes.position.array[i] += randomInRange(-radius, radius);
-            geometry.attributes.position.array[i + 1] += randomInRange(-radius / 2.5, radius / 2.5);
-            geometry.attributes.position.array[i + 2] += randomInRange(-radius, radius);
+
+            var variance = radius * varianceMultiplier
+
+            geometry.attributes.position.array[i] += randomInRange(-variance, variance);
+            geometry.attributes.position.array[i + 1] += randomInRange(-variance / 2.5, variance / 2.5);
+            geometry.attributes.position.array[i + 2] += randomInRange(-variance, variance);
 
             // Update color values (optional if you want dynamic colors)
             geometry.attributes.color.array[i] = Math.random();
@@ -2342,16 +2359,13 @@ function getCachedSphereGeometry(radius, map, transparent) {
     return geometry
 }
 
-function getCachedLeafMaterial(color, map, transparent) {
+function LeafMaterial(color, map, transparent, wireframe) {
 
     var leafMaterialArgs = { 
         color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
         side: THREE.DoubleSide,
-        transparent: true,
-        // opacity: .8
-    }
-    if (map) {
-        leafMaterialArgs.map = map
+        transparent: false,
+        wireframe
     }
     return new THREE.MeshStandardMaterial(leafMaterialArgs);
 }
@@ -2454,10 +2468,10 @@ class Terrain {
 
 
         const twoPi = Math.PI * 2;
-        const instanceCount = Math.floor(tree[treeKind].height * 7); // Adjust count as needed
+        const instanceCount = Math.floor(tree[treeKind].height / randomInRange(3, 8)); // Adjust count as needed
         const instancedMesh = new THREE.InstancedMesh(
-            getCachedSphereGeometry(tree[treeKind].width / 2),
-            getCachedLeafMaterial(tree[treeKind].colors[0], tree[treeKind].map, new THREE.TextureLoader().load('/images/leaf-branch.webp')), // Initial color
+            SphereGeometry(tree[treeKind].width / 2),
+            LeafMaterial(tree[treeKind].colors[0], tree[treeKind].map, new THREE.TextureLoader().load('/images/leaf-branch.webp'), true), // Initial color
             instanceCount
         );
         instancedMesh.frustrumCulled = true
@@ -2745,36 +2759,25 @@ class Terrain {
                 trunkWidth: cw / 3,  // Specific trunk width for cypress
                 foliageType: 'full',
                 trunkRadius: 0.3,
-                geometry: getCachedSphereGeometry(cw, null, false),
+                geometry: SphereGeometry(cw, null, false, false),
                 material: new THREE.MeshStandardMaterial({
                     side: THREE.DoubleSide,
                     color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)]
                 })
             },
-            pine: {
-                height: randomInRange(30, 70),
-                width: pw,
-                colors: PINEGREENS,
-                trunkWidth: pw / 3,  // Specific trunk width for pine
-                foliageType: 'sparse',
-                geometry: getCachedSphereGeometry(pw / 2, null, false),
+            'big-cypress': {
+                height: randomInRange(45, 40),
+                width: cw * 1.5,
+                colors: CYPRESSGREENS,
+                trunkWidth: cw / 3,  // Specific trunk width for cypress
+                foliageType: 'full',
+                trunkRadius: 0.3,
+                geometry: SphereGeometry(cw, null, false, false, 2),
                 material: new THREE.MeshStandardMaterial({
                     side: THREE.DoubleSide,
-                    color: PINEGREENS[Math.floor(Math.random() * PINEGREENS.length)],
+                    color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)]
                 })
             },
-            oak: {
-                height: randomInRange(15, 40),
-                width: ow,
-                colors: OAKGREENS,
-                trunkWidth: ow *1.25,  // Specific trunk width for oak
-                foliageType: 'canopy',
-                geometry: getCachedSphereGeometry(ow / 2, null, false),
-                material: new THREE.MeshStandardMaterial({
-                    side: THREE.DoubleSide,
-                    color: OAKGREENS[Math.floor(Math.random() * OAKGREENS.length)]
-                })
-            }
         };
 
         const treeData = tree[treeKind];
@@ -2793,24 +2796,18 @@ class Terrain {
 
         // Generate foliage based on tree type
         while (!hasFoliage) {
-            for (let y = Y; y < Y + treeData.height; y += 1) {
+            for (let y = Y; y < Y + treeData.height; y += 2) {
                 const progress = (y - Y) / treeData.height;
                 let radiusAtY = treeData.width;
 
                 // Apply different foliage patterns
                 if (treeData.foliageType === 'full') {
                     radiusAtY *= (1 - progress) * progress; // Full foliage for cypress
-                } else if (treeData.foliageType === 'sparse') {
-                    if (y < Y + treeData.height * 0.5) {
-                        radiusAtY = 0; // Sparse foliage, starts halfway up for pine
-                    }
-                } else if (treeData.foliageType === 'canopy') {
-                    if (progress < 0.5) {
-                        radiusAtY = 0; // Mostly foliage at the top for oak
-                    } else {
-                        radiusAtY *= randomInRange(1.1, 1.2); // Larger canopy effect
+                    if (y < treeData.height * .3) {
+                        radiusAtY *= randomInRange(1.5, 3)
                     }
                 }
+
 
                 if (radiusAtY > 0) hasFoliage = true;
 
@@ -2924,7 +2921,8 @@ class Terrain {
                     cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
                     var cypressTree;
                     if (Math.random() < 0.25) {
-                        cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
+                        cypressTree = this.createCypress(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'big-cypress')
+                        
                     } else {
                         cypressTree = this.createCypress(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
                     }
