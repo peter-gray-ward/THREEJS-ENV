@@ -6,6 +6,7 @@ import urllib.request
 import random
 import json
 from io import BytesIO
+import glob
 
 app = Flask(__name__)
 
@@ -33,6 +34,7 @@ IMAGES = os.listdir('./images')
 class Model:
     def __init__(self, user):
         center = {'x': 0, 'y': 0, 'z': 0}
+        self.art_gallery_photos = self.loadArtMuseum1('./images/art-museum-1')
         self.images = {
             'leaf': [f"/images/{filename}" for filename in IMAGES if re.match(r'^leaf', filename)],
             'ground': [f"/images/{filename}" for filename in IMAGES if re.match(r'^ground', filename)],
@@ -47,10 +49,10 @@ class Model:
                 'noiseHeight': t,
                 'segments': 50,
                 'sop': {
-                    'trees': t * 2,
+                    'trees': t ,
                     'grasses': t / 2,
-                    'grounds': t * 2,
-                    'cliffs': 50
+                    'grounds': t ,
+                    'cliffs': t 
                 },
                 'grasses': [],
                 'grounds': [],
@@ -135,6 +137,16 @@ class Model:
             }
         }
         self.user = user
+
+    def loadArtMuseum1(self, museumPath):
+        # List files in the hardcoded directory
+        fs_paths = [f'/images/art-museum-1/{filename}/' for filename in os.listdir('./images/art-museum-1')]
+
+        # List files in the provided museumPath directory
+        museum_paths = [f'/{museumPath}/{filename}' for filename in os.listdir(museumPath)]
+
+        # Combine both lists and return
+        return fs_paths + museum_paths
 
 # Routes
 flowers = [
@@ -268,7 +280,51 @@ def fetch_gltf_model(name):
 
 
 
+@app.route('/audio/process', methods=('POST',))
+def process_audio():
+    data = request.json
+    
+    # Extract props
+    file = data.get('file')
+    action = data.get('action')
+    details = data.get('details', {})
 
+    # Check if required props are present
+    if not file or not action:
+        return jsonify({"error": "Missing 'file' or 'action' in request body."}), 400
+
+    # Initialize response structure
+    result = {"file": file, "action": action, "details": {}}
+
+    # Handle different actions based on props
+    if action == "analyze":
+        if details.get("frequencies"):
+            result["details"]["frequencies"] = analyze_frequencies(file)  # Call a frequency analysis function
+        if details.get("metadata"):
+            result["details"]["metadata"] = extract_metadata(file)  # Call a metadata extraction function
+    
+    elif action == "transform":
+        if details.get("volume_adjustment"):
+            result["details"]["volume"] = adjust_volume(file, details["volume_adjustment"])  # Placeholder
+    
+    else:
+        return jsonify({"error": f"Unknown action '{action}'"}), 400
+
+    # Return the response with analysis results
+    return jsonify(result)
+
+# Placeholder functions for audio processing
+def analyze_frequencies(file):
+    # Your frequency analysis logic here
+    return "Frequency analysis results"
+
+def extract_metadata(file):
+    # Your metadata extraction logic here
+    return "Metadata analysis results"
+
+def adjust_volume(file, level):
+    # Your volume adjustment logic here
+    return f"Volume adjusted to {level}"
 
 
 

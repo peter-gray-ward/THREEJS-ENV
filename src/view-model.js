@@ -15,6 +15,9 @@ export default class ViewModel {
             console.log("model loaded", model);
             this.user = model.user;
             this.map = model.map[this.user.level];
+
+            window.house.foundation.art_gallery_photos = model.art_gallery_photos;
+
             await view.init(model);
             
         });

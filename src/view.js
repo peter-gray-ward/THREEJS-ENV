@@ -29,7 +29,11 @@ window.rockTexture = new THREE.TextureLoader().load("/images/dry-rough-rock-face
     texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(1, 1);
 })
-window.CYPRESSGREENS = ['#93b449', '#6b881c', '#a9cc4e']
+// Define color schemes for different types of trees
+window.CYPRESSGREENS = ['#93b449', '#6b881c', '#a9cc4e']; // Cypress colors
+window.PINEGREENS = ['#4e8b2d', '#3b5e24', '#629441'];     // Pine colors
+window.OAKGREENS = ['#6f9e3e', '#4d7b26', '#86b454'];      // Oak colors
+
 window.LATHECOLORS = ['#00ffff', '#ff00ff', '#ffff00']
 window.CYPRESSBRANCH = new THREE.TextureLoader().load("/images/branch.webp")
 window.TRUNKTEXTURE = new THREE.TextureLoader().load("/images/bark-5.jpg")
@@ -67,11 +71,14 @@ var house = {
     depth: 20,
     height: 3,
     foundation: {
+        center: landscape.field.center,
         width: 20,
         height: 1,
-        depth: 20
+        depth: 20,
+        art_gallery_photos: [] 
     }
 }
+window.house = house
 var dockDepth = house.width
 const boardwalk = {
     width: (landscape.field.width / 2) - (house.width / 2),
@@ -738,12 +745,17 @@ function colorshade(rgb) {
     }
 }
 
-class Sky {
+class $ky {
+    $tarparis = {
+        _whoami: function() {
+            console.log("thi$ i$...$ky.$tarparis!")
+        }
+    }
     time = 0
     constructor(user) {
         this.counter = 0;
         this.user = user;
-        this.sceneRadius = 550;
+        this.sceneRadius = 500;
         this.full_circle = 2 * Math.PI;
 
         this.starLight = new THREE.AmbientLight(0xfefeff,  .06); // Sky and ground color
@@ -751,7 +763,7 @@ class Sky {
         scene.add(this.starLight);
 
         
-        this.sun = new THREE.DirectionalLight(0xffffff, 3);
+        this.sun = new THREE.DirectionalLight(0xffffff, 1);
         this.sun.position.set(0, sceneRadius, 0);
         scene.add(this.sun)
         this.sun.lookAt(0, 0, 0)
@@ -791,12 +803,69 @@ class Sky {
 
         //     scene.add(cloud)
         // }
+    }
 
+    AudioContext(audioUrl) {
+        console.log("if this is a static $ky class, then what is this?", this)
+        this.audioUrl = audioUrl;
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        this.analyser = this.audioContext.createAnalyser();
+        this.analyser.fftSize = 2048; // Determines frequency bin resolution
+        this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+        this.source = null;
+        this.animationFrameId = null;
+        class AudioProcessor {
+
+            async loadAudio() {
+                // Fetch and decode audio
+                const response = await fetch(this.audioUrl);
+                const arrayBuffer = await response.arrayBuffer();
+                const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+
+                // Set up the audio buffer source
+                this.source = this.audioContext.createBufferSource();
+                this.source.buffer = audioBuffer;
+                this.source.connect(this.analyser);
+                this.analyser.connect(this.audioContext.destination);
+            }
+
+            play() {
+                if (this.source) {
+                    this.source.start();
+                    this.animate();
+                } else {
+                    console.error("Audio source not initialized. Call loadAudio() first.");
+                }
+            }
+
+            stop() {
+                if (this.source) {
+                    this.source.stop();
+                    cancelAnimationFrame(this.animationFrameId);
+                }
+            }
+
+            animate() {
+                // Set up the next animation frame
+                this.animationFrameId = requestAnimationFrame(() => this.animate());
+
+                // Get frequency data
+                this.analyser.getByteFrequencyData(this.dataArray);
+
+                // Call the onFrame callback with the dataArray
+                if (this.onFrame) this.onFrame(this.dataArray);
+            }
+
+            onFrame(callback) {
+                // Attach a custom callback for real-time data processing
+                this.onFrame = callback;
+            }
+        }
     }
 
     createStars(points) {
         var starMaterial = new THREE.PointsMaterial({
-            size: 2,
+            size: .5,
             vertexColors: true,
             transparent: true,
             opacity: 0.1
@@ -867,6 +936,9 @@ class Sky {
                 if (z > maxdist) maxdist = z;
             }
         }
+
+        // create them star pairs
+
 
         this.createStars(starPoints)
 
@@ -1015,12 +1087,8 @@ class Sky {
         }
 
         // Increment time for next update
-        this.time += 0.005;
+        this.time += 0.0001;
     }
-
-
-
-
 
     MakeCloud() {
         // Create a group to hold the cloud's spheres
@@ -1357,7 +1425,7 @@ class Castle {
         var floorY = foundationY
 
 
-        this.building(foundationY)
+        // this.building(foundationY)
         
         this.lamplight = this.createHarryPotterLampPost(
             boardwalk.center.x - boardwalk.width / 2 + 1, 
@@ -1971,48 +2039,129 @@ class Castle {
             this.parts.push(foundation)
             scene.add(foundation)
 
-
-
-            if (level == 0) continue
-
             for (var i = 0; i < 4; i++) {
                 const group = new THREE.Group()
-                var geometry = new THREE.PlaneGeometry(i % 2 == 0 ? house.depth : house.width, house.height);
-                const wall = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
-                    color: 0x777777,
-                    opacity: 0.5,
-                    side: THREE.DoubleSide,
-                    transparent: true
-                }));
+                var canvasMaterial
+                // Create a canvas element
+                const canvas = document.createElement('canvas');
+                canvas.width = 512;
+                canvas.height = 512;
 
+                // Get the 2D context of the canvas
+                const context = canvas.getContext('2d');
+
+                // Set the background color for the canvas
+                context.fillStyle = '#A9A9A9'; // Base stone gray color
+                context.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Function to draw an ornate, organic brick pattern
+                function drawBricks() {
+                    const brickWidth = randomInRange(20, 60); // Base brick width
+                    const brickHeight = randomInRange(30, 35); // Base brick height
+                    const brickOffset = 5; // Space between bricks
+
+                    for (let y = 0; y < canvas.height; y += brickHeight + brickOffset) {
+                        for (let x = 0; x < canvas.width; x += brickWidth + brickOffset) {
+                            // Randomize dimensions for organic feel
+                            const widthVariation = brickWidth * (Math.random() * 0.2 - 0.1); // ±10% width variation
+                            const heightVariation = brickHeight * (Math.random() * 0.2 - 0.1); // ±10% height variation
+                            const currentBrickWidth = brickWidth + widthVariation;
+                            const currentBrickHeight = brickHeight + heightVariation;
+
+                            // Set brick color with slight gray variations for each brick
+                            const grayValue = 120 + Math.random() * 50; // Gray color range
+                            context.fillStyle = `rgb(${grayValue}, ${grayValue}, ${grayValue})`;
+                            context.fillRect(
+                                x + Math.random() * 5, // Add slight horizontal offset for irregularity
+                                y + Math.random() * 5, // Add slight vertical offset for irregularity
+                                currentBrickWidth,
+                                currentBrickHeight
+                            );
+
+                            // Add subtle highlights and shadows to enhance texture
+                            context.lineWidth = 1;
+                            context.strokeStyle = `rgba(255, 255, 255, 0.1)`; // Subtle highlight
+                            context.beginPath();
+                            context.moveTo(x, y);
+                            context.lineTo(x + currentBrickWidth, y);
+                            context.lineTo(x + currentBrickWidth, y + currentBrickHeight);
+                            context.stroke();
+
+                            context.strokeStyle = `rgba(0, 0, 0, 0.2)`; // Subtle shadow
+                            context.beginPath();
+                            context.moveTo(x, y);
+                            context.lineTo(x, y + currentBrickHeight);
+                            context.lineTo(x + currentBrickWidth, y + currentBrickHeight);
+                            context.stroke();
+                        }
+                    }
+                }
+
+                // Draw the ornate, organic brick wall
+                drawBricks();
+
+
+       
+                // Create a texture from the canvas
+                const texture = new THREE.CanvasTexture(canvas);
+
+                // Create the plane geometry and apply the canvas texture
+                const geometry = new THREE.PlaneGeometry(i % 2 === 0 ? house.depth : house.width, house.height);
+                const material = new THREE.MeshStandardMaterial({
+                    map: texture,                  // Use the canvas texture
+                    metalness: 0,
+                    roughness: 1,
+                    side: THREE.DoubleSide,
+                    transparent: false,
+                    opacity: 1,
+                    wireframe: true
+                });
+
+                const wall = new THREE.Mesh(geometry, material);
+
+                // Position the wall
                 wall.position.set(
                     house.center.x, 
                     floorY + house.height / 2 + house.foundation.height / 2,
                     house.center.z
-                )
+                );
+
+                wall.castShadow = true
+                wall.receiveShadow = true
+
+                // Add wall to the scene
+                scene.add(wall);
+
                 switch (i) {
-                case 0:
-                    wall.rotation.y = Math.PI / 2
-                    wall.position.x = house.width / 2
-                    break
-                case 1:
-                    wall.position.z = house.depth / 2
-                    break
-                case 2:
-                    wall.rotation.y = Math.PI / 2
-                    wall.position.x = -house.width / 2
-                    break
-                case 3:
-                    wall.position.z = -house.depth / 2
-                    break
+                    case 0:
+                        wall.rotation.y = Math.PI / 2;            // 90 degrees for left wall
+                        wall.position.x = house.width / 2;        // Position on positive X
+                        break;
+                    case 1:
+                        wall.rotation.y = 0;                      // No rotation for front wall
+                        wall.position.z = house.depth / 2;        // Position on positive Z
+                        break;
+                    case 2:
+                        wall.rotation.y = Math.PI / 2;            // 90 degrees for right wall
+                        wall.position.x = -house.width / 2;       // Position on negative X
+                        break;
+                    case 3:
+                        wall.rotation.y = Math.PI;                // 180 degrees for back wall
+                        wall.position.z = -house.depth / 2;       // Position on negative Z
+                        break;
                 }
+
                 group.add(wall)
                 scene.add(group)
                 this.parts.push(group)
                 this.objects.push(group);
             }
+            
 
             floorY += house.height + house.foundation.height
+
+
+
         }
 
         const roofVertices = [];
@@ -2041,21 +2190,7 @@ class Castle {
                 }
             }
         }
-        // const roofGeo = new THREE.BufferGeometry()
-        // roofGeo.setAttribute('position', new THREE.Float32BufferAttribute(roofVertices, 3))
-        // roofGeo.setIndex(roofIndices)
-        // roofGeo.computeVertexNormals()
-        // var roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({
-        //     color: 'silver',
-        //     metalness: 1,
-        //     roughness: 0,
-        //     side: THREE.DoubleSide
-        // }))
-        // roof.castShadow = true
-        // roof.receiveShadow = true
-        // roof.position.set(house.center.x, floorY, house.center.z)
-        // this.objects.push(roof)
-        // scene.add(roof)
+        
     }
 
     createRocks(dock) {
@@ -2154,92 +2289,65 @@ class Castle {
     }
 }
 
-const sphereGeometries = {};
-const leafMaterials = {};
-
-function OrganizeFoliage(mesh) {
-        for (let i = 0; i < mesh.geometry.attributes.position.array.length; i += 3) {
-            mesh.geometry.attributes.position.array[i] += mesh.geometry.hlod[i];
-            mesh.geometry.attributes.position.array[i + 1] += mesh.geometry.hlod[i + 1];
-            mesh.geometry.attributes.position.array[i + 2] += mesh.geometry.hlod[i + 2];
-        }
-        mesh.geometry.needsUpdate = true
-}
-
-function DisrganizeFoliage(mesh) {
-        for (let i = 0; i < mesh.geometry.attributes.position.array.length; i += 3) {
-            mesh.geometry.attributes.position.array[i] += mesh.geometry.llod[i];
-            mesh.geometry.attributes.position.array[i + 1] += mesh.geometry.llod[i + 1];
-            mesh.geometry.attributes.position.array[i + 2] += mesh.geometry.llod[i + 2];
-        }
-        mesh.geometry.needsUpdate = true
-}
-
 function getCachedSphereGeometry(radius, map, transparent) {
-    if (!sphereGeometries[radius]) {
-        const geometry = new THREE.SphereGeometry(
-            randomInRange(radius - 1, radius + 1), 
-            11, 11
-        );
+    const geometry = new THREE.SphereGeometry(
+        randomInRange(radius - 1, radius + 1), 
+        11, 11
+    );
+    
+    if (transparent) {
         
-        if (transparent) {
-            
-        } else {
+    } else {
 
-            // Add a color attribute with an array of random colors for each vertex
-            const vertexCount = geometry.attributes.position.count;
-            const colors = new Float32Array(vertexCount * 3); // 3 values (RGB) per vertex
+        // Add a color attribute with an array of random colors for each vertex
+        const vertexCount = geometry.attributes.position.count;
+        const colors = new Float32Array(vertexCount * 3); // 3 values (RGB) per vertex
 
-            // Populate the color array with initial random colors
-            for (let i = 0; i < vertexCount; i++) {
-                colors[i * 3] = Math.random();     // Red
-                colors[i * 3 + 1] = Math.random(); // Green
-                colors[i * 3 + 2] = Math.random(); // Blue
-            }
-
-            // Set the color attribute to the geometry
-            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-
-            // Now you can manipulate position and color attributes
-            for (let i = 0; i < geometry.attributes.position.array.length; i += 3) {
-                geometry.attributes.position.array[i] += randomInRange(-radius, radius);
-                geometry.attributes.position.array[i + 1] += randomInRange(-radius / 3, radius / 1.5);
-                geometry.attributes.position.array[i + 2] += randomInRange(-radius, radius);
-
-                // Update color values (optional if you want dynamic colors)
-                geometry.attributes.color.array[i] = Math.random();
-                geometry.attributes.color.array[i + 1] = Math.random();
-                geometry.attributes.color.array[i + 2] = Math.random();
-            }
-
-            // Recompute normals and mark attributes as needing updates
-            geometry.computeVertexNormals();
-            geometry.attributes.position.needsUpdate = true;
-            geometry.attributes.color.needsUpdate = true;
-
+        // Populate the color array with initial random colors
+        for (let i = 0; i < vertexCount; i++) {
+            colors[i * 3] = Math.random();     // Red
+            colors[i * 3 + 1] = Math.random(); // Green
+            colors[i * 3 + 2] = Math.random(); // Blue
         }
 
-        sphereGeometries[radius] = geometry;
+        // Set the color attribute to the geometry
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+
+        // Now you can manipulate position and color attributes
+        for (let i = 0; i < geometry.attributes.position.array.length; i += 3) {
+            geometry.attributes.position.array[i] += randomInRange(-radius, radius);
+            geometry.attributes.position.array[i + 1] += randomInRange(-radius / 2.5, radius / 2.5);
+            geometry.attributes.position.array[i + 2] += randomInRange(-radius, radius);
+
+            // Update color values (optional if you want dynamic colors)
+            geometry.attributes.color.array[i] = Math.random();
+            geometry.attributes.color.array[i + 1] = Math.random();
+            geometry.attributes.color.array[i + 2] = Math.random();
+        }
+
+        // Recompute normals and mark attributes as needing updates
+        geometry.computeVertexNormals();
+        geometry.attributes.position.needsUpdate = true;
+        geometry.attributes.color.needsUpdate = true;
+
     }
-    return sphereGeometries[radius];
+
+    return geometry
 }
 
 function getCachedLeafMaterial(color, map, transparent) {
-    if (!leafMaterials[color]) {
-        var leafMaterialArgs = { 
-            color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
-            side: THREE.DoubleSide,
-            transparent: true,
-            // opacity: .8
-        }
-        if (map) {
-            leafMaterialArgs.map = map
-        }
-        leafMaterials[color] = new THREE.MeshStandardMaterial(leafMaterialArgs);
+
+    var leafMaterialArgs = { 
+        color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
+        side: THREE.DoubleSide,
+        transparent: true,
+        // opacity: .8
     }
-    leafMaterials.needsUpdate = true
-    return leafMaterials[color];
+    if (map) {
+        leafMaterialArgs.map = map
+    }
+    return new THREE.MeshStandardMaterial(leafMaterialArgs);
 }
 
 
@@ -2358,7 +2466,7 @@ class Terrain {
                     continue
                 }
                 const progress = (y - Y) / tree[treeKind].height;
-                let radiusAtY = (1 - progress) * (tree[treeKind].width / 2) * randomInRange(2, 3.25);
+                let radiusAtY = (1 - progress) * (tree[treeKind].width / 2)
                 if (radiusAtY < 1) radiusAtY = 1;
                 if (none && ydiff++ < tree[treeKind].trunkHeight) {
                     radiusAtY = 0
@@ -2614,6 +2722,139 @@ class Terrain {
         this.clusterCliffs()
     }
 
+    createCypress(x, Y, z, treeKind) {
+        let cw = randomInRange(1.5, 2.2);
+        let pw = randomInRange(1.25, 1.75);
+        let ow = randomInRange(1, 1);
+
+        const tree = {
+            cypress: {
+                height: randomInRange(20, 40),
+                width: cw,
+                colors: CYPRESSGREENS,
+                trunkWidth: cw / 3,  // Specific trunk width for cypress
+                foliageType: 'full',
+                geometry: getCachedSphereGeometry(cw, null, false),
+                material: new THREE.MeshStandardMaterial({
+                    side: THREE.DoubleSide,
+                    color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)]
+                })
+            },
+            pine: {
+                height: randomInRange(30, 70),
+                width: pw,
+                colors: PINEGREENS,
+                trunkWidth: pw / 3,  // Specific trunk width for pine
+                foliageType: 'sparse',
+                geometry: getCachedSphereGeometry(pw / 2, null, false),
+                material: new THREE.MeshStandardMaterial({
+                    side: THREE.DoubleSide,
+                    color: PINEGREENS[Math.floor(Math.random() * PINEGREENS.length)],
+                })
+            },
+            oak: {
+                height: randomInRange(15, 40),
+                width: ow,
+                colors: OAKGREENS,
+                trunkWidth: ow *1.25,  // Specific trunk width for oak
+                foliageType: 'canopy',
+                geometry: getCachedSphereGeometry(ow / 2, null, false),
+                material: new THREE.MeshStandardMaterial({
+                    side: THREE.DoubleSide,
+                    color: OAKGREENS[Math.floor(Math.random() * OAKGREENS.length)]
+                })
+            }
+        };
+
+        const treeData = tree[treeKind];
+        const startColor = new THREE.Color(treeData.colors[0]);
+        const endColor = new THREE.Color(treeData.colors[treeData.colors.length - 1]);
+        const twoPi = Math.PI * 2;
+        const instanceCount = Math.floor(treeData.height * 7);
+        let index = 0;
+        let hasFoliage = false;
+
+        const instancedMesh = new THREE.InstancedMesh(
+            treeData.geometry,
+            treeData.material,
+            instanceCount
+        );
+
+        // Generate foliage based on tree type
+        while (!hasFoliage) {
+            for (let y = Y; y < Y + treeData.height; y += 1) {
+                const progress = (y - Y) / treeData.height;
+                let radiusAtY = treeData.width;
+
+                // Apply different foliage patterns
+                if (treeData.foliageType === 'full') {
+                    radiusAtY *= (1 - progress) * progress; // Full foliage for cypress
+                } else if (treeData.foliageType === 'sparse') {
+                    if (y < Y + treeData.height * 0.5) {
+                        radiusAtY = 0; // Sparse foliage, starts halfway up for pine
+                    }
+                } else if (treeData.foliageType === 'canopy') {
+                    if (progress < 0.5) {
+                        radiusAtY = 0; // Mostly foliage at the top for oak
+                    } else {
+                        radiusAtY *= randomInRange(1.1, 1.2); // Larger canopy effect
+                    }
+                }
+
+                if (radiusAtY > 0) hasFoliage = true;
+
+                const interpolatedColor = startColor.clone().lerp(endColor, progress);
+
+                // Place foliage instances around trunk
+                for (let p = 0; p < twoPi && index < instanceCount; p += randomInRange(0.6, 2.0)) {
+                    const matrix = new THREE.Matrix4();
+                    const randomAngle = randomInRange(-0.4, 0.4);
+                    const randomHeightAdjustment = randomInRange(-0.3, 0.3);
+
+                    const xPos = x + (radiusAtY * Math.cos(p + randomAngle)) + randomInRange(-0.75, 0.75);
+                    const zPos = z + (radiusAtY * Math.sin(p + randomAngle)) + randomInRange(-0.75, 0.75);
+                    const yPos = y + randomHeightAdjustment;
+
+                    matrix.setPosition(xPos, yPos, zPos);
+                    matrix.scale(new THREE.Vector3(radiusAtY, radiusAtY, radiusAtY));
+                    instancedMesh.setMatrixAt(index, matrix);
+
+                    // Apply interpolated color based on height progress
+                    instancedMesh.setColorAt(index, interpolatedColor);
+
+                    index++;
+                }
+            }
+        }
+
+        instancedMesh.instanceMatrix.needsUpdate = true;
+        instancedMesh.castShadow = true;
+        instancedMesh.receiveShadow = true;
+
+        // Create the trunk with specific width
+        const trunkGeometry = new THREE.CylinderGeometry(
+            treeData.trunkWidth / 2, // Radius at top
+            treeData.trunkWidth,      // Radius at bottom
+            tree[treeKind].height,     // Height
+            8,                        // Radial segments
+            1,                        // Height segments
+            true                      // Open-ended for natural growth
+        );
+
+        const trunkMaterial = new THREE.MeshStandardMaterial({
+            map: TRUNKTEXTURE,
+            transparent: false
+        });
+
+        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+        trunk.position.set(x, Y + tree[treeKind].height / 2, z);
+        trunk.castShadow = true;
+        trunk.receiveShadow = true;
+
+        return new Terrain.Tree(trunk, instancedMesh);
+    }
+
+
     addTerrainFeature(i, j, segmentSize, vertices, indices) {
         let a = i + j * (this.segments + 1);
         let b = (i + 1) + j * (this.segments + 1);
@@ -2666,11 +2907,16 @@ class Terrain {
                                 )
                             )
                         ) || (
-                            BACKYARD && Math.random() < 0.01
+                            BACKYARD && !HOUSE && Math.random() < 0.1
                         )
                     ) {
                     cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                    var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
+                    var cypressTree;
+                    if (Math.random() < 0.25) {
+                        cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
+                    } else {
+                        cypressTree = this.createCypress(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
+                    }
                     this.trees.push(cypressTree)
                 }
 
@@ -3513,7 +3759,7 @@ class UserController {
         window.addEventListener('keyup', (e) => {
             const key = e.key.toUpperCase();
             if (key == 'META') {
-                this.cmd = false
+                this.meta = false
             }
             if (key == 'W') {
                 user.w = false;
@@ -4112,7 +4358,7 @@ class View {
         window.user = new UserController(terrain);
 
 
-        window.sky = new Sky(window.user);
+        window.sky = new $ky(window.user);
 
         var castleBaseCenter = new THREE.Vector3(0, 0, 0)
 
