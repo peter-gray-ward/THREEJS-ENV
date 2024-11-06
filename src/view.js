@@ -2423,6 +2423,7 @@ class Terrain {
                 height: randomInRange(11.1, 60),
                 width: randomInRange(1, 2),
                 colors: CYPRESSGREENS, 
+                trunkRadius: 0.2,
                 trimmed: Math.random() < 0.5 ? true : false,
                 map: new THREE.TextureLoader().load("/images/leaf-oval-green.png"),
                 trunk: {
@@ -2509,7 +2510,7 @@ class Terrain {
         instancedMesh.instanceMatrix.needsUpdate = true;
         instancedMesh.castShadow = true;
         instancedMesh.receiveShadow = true;
-        var radiusBottom =  tree[treeKind].height * .02
+        var radiusBottom =  tree[treeKind].trunkRadius ? tree[treeKind].trunkRadius : tree[treeKind].height * .02
         var radiusTop = radiusBottom * .1
         // Create the trunk
         const trunkGeometry = new THREE.CylinderGeometry(
@@ -2734,6 +2735,7 @@ class Terrain {
                 colors: CYPRESSGREENS,
                 trunkWidth: cw / 3,  // Specific trunk width for cypress
                 foliageType: 'full',
+                trunkRadius: 0.3,
                 geometry: getCachedSphereGeometry(cw, null, false),
                 material: new THREE.MeshStandardMaterial({
                     side: THREE.DoubleSide,
@@ -2833,8 +2835,8 @@ class Terrain {
 
         // Create the trunk with specific width
         const trunkGeometry = new THREE.CylinderGeometry(
-            treeData.trunkWidth / 2, // Radius at top
-            treeData.trunkWidth,      // Radius at bottom
+            treeData.trunkRadius * .2, // Radius at top
+            treeData.trunkRadius,      // Radius at bottom
             tree[treeKind].height,     // Height
             8,                        // Radial segments
             1,                        // Height segments
