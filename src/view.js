@@ -37,6 +37,12 @@ window.OAKGREENS = ['#6f9e3e', '#4d7b26', '#86b454'];      // Oak colors
 window.LATHECOLORS = ['#00ffff', '#ff00ff', '#ffff00']
 window.CYPRESSBRANCH = new THREE.TextureLoader().load("/images/branch.webp")
 window.TRUNKTEXTURE = new THREE.TextureLoader().load("/images/bark-5.jpg")
+window.TRUNKTEXTUREOAK = new THREE.TextureLoader().load("/images/bark-4.jpg", texture => {
+    texture.wrapS = THREE.RepeatWrapping
+    texture.wrapT = THREE.RepeatWrapping
+    texture.rotation = Math.random() * Math.PI * 2
+    texture.repeat.set(3, 10)
+})
 window.cementTexture = new THREE.TextureLoader().load("/images/ground-0.jpg", texture => {
     texture.wrapS = THREE.RepeatWrapping
     texture.wrapT = THREE.RepeatWrapping
@@ -2426,7 +2432,7 @@ class Terrain {
                 trimmed: Math.random() < 0.5 ? true : false,
                 map: new THREE.TextureLoader().load("/images/leaf-oval-green.png"),
                 trunk: {
-                    map: TRUNKTEXTURE
+                    map: TRUNKTEXTUREOAK
                 },
                 trunkHeight: randomInRange(9, 11)
             },
@@ -2437,13 +2443,13 @@ class Terrain {
                 trimmed: Math.random() < 0.5 ? true : false,
                 map: new THREE.TextureLoader().load("/images/leaf-branch.webp"),
                 trunk: {
-                    map: TRUNKTEXTURE
+                    map: TRUNKTEXTUREOAK
                 }
             }
         };
 
         for (var kind in tree) {
-            tree[kind].trunkRadius = tree[kind].width * .3
+            tree[kind].trunkRadius = tree[kind].width * .77
         }
 
 
