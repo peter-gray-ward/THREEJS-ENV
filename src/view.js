@@ -30,13 +30,13 @@ window.rockTexture = new THREE.TextureLoader().load("/images/dry-rough-rock-face
     texture.repeat.set(1, 1);
 })
 // Define color schemes for different types of trees
-window.CYPRESSGREENS = ['#93b449', '#6b881c', '#a9cc4e']; // Cypress colors
-window.PINEGREENS = ['#4e8b2d', '#3b5e24', '#629441'];     // Pine colors
-window.OAKGREENS = ['#6f9e3e', '#4d7b26', '#86b454'];      // Oak colors
+window.CYPRESSGREENS = ['#93b449', '#6b881c', '#a9cc4e', 'purple', 'purple', 'purple']; // Cypress colors
+window.PINEGREENS = ['#4e8b2d', '#3b5e24', '#629441', 'orange', 'orange', 'orange'];     // Pine colors
+window.OAKGREENS = ['#6f9e3e', '#4d7b26', '#86b454', 'red', 'red', 'red'];      // Oak colors
 
 
 Array.prototype.mingle = function(B) {
-    return new Set([...this, ...B])
+    return Array.from(new Set([...this, ...B]))
 }
 
 // Usage example
@@ -2342,11 +2342,6 @@ function SphereGeometry(radius, map, transparent, wireframe, varianceMultiplier 
             geometry.attributes.position.array[i] += randomInRange(-variance, variance);
             geometry.attributes.position.array[i + 1] += randomInRange(-variance / 2.5, variance / 2.5);
             geometry.attributes.position.array[i + 2] += randomInRange(-variance, variance);
-
-            // Update color values (optional if you want dynamic colors)
-            geometry.attributes.color.array[i] = Math.random();
-            geometry.attributes.color.array[i + 1] = Math.random();
-            geometry.attributes.color.array[i + 2] = Math.random();
         }
 
         // Recompute normals and mark attributes as needing updates
@@ -2361,7 +2356,8 @@ function SphereGeometry(radius, map, transparent, wireframe, varianceMultiplier 
 
 function LeafMaterial(color, map, transparent, wireframe) {
 
-    var leafMaterialArgs = { 
+    var leafMaterialArgs = {
+        vertexColors: true,
         color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
         side: THREE.DoubleSide,
         transparent: false,
@@ -2755,27 +2751,33 @@ class Terrain {
             cypress: {
                 height: randomInRange(20, 40),
                 width: cw,
-                colors: CYPRESSGREENS,
+                colors: CYPRESSGREENS
+                    .mingle(PINEGREENS)
+                    .mingle(OAKGREENS),
                 trunkWidth: cw / 3,  // Specific trunk width for cypress
                 foliageType: 'full',
                 trunkRadius: 0.3,
                 geometry: SphereGeometry(cw, null, false, false),
                 material: new THREE.MeshStandardMaterial({
                     side: THREE.DoubleSide,
+                    vertexColors: true,
                     color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)]
                 })
             },
             'big-cypress': {
                 height: randomInRange(45, 40),
                 width: cw * 1.5,
-                colors: CYPRESSGREENS,
+                colors: CYPRESSGREENS
+                    .mingle(PINEGREENS)
+                    .mingle(OAKGREENS),
                 trunkWidth: cw / 3,  // Specific trunk width for cypress
                 foliageType: 'full',
                 trunkRadius: 0.3,
                 geometry: SphereGeometry(cw, null, false, false, 2),
                 material: new THREE.MeshStandardMaterial({
                     side: THREE.DoubleSide,
-                    color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)]
+                    vertexColors: true//,
+                    //color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)]
                 })
             },
         };
