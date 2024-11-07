@@ -8,7 +8,7 @@ import { SUBTRACTION, Brush, Evaluator } from '/lib/three-bvh-csg.js';
 import ViewModel from "/src/view-model.js";
 import { Reflector } from '/lib/Reflector.js'
 
-// window.anima = new Anima(GLTFLoader, '/models/Xbot.glb')
+window.anima = new Anima(GLTFLoader, '/models/Xbot.glb')
 
 
 var debounced_event = undefined
@@ -201,16 +201,6 @@ function RailingPost(start, end, scale = 0.01, ballScale = 5, justPost = false) 
     postCap2.rotation.x = Math.PI / 2
     postCap2.position.y = 0.8; // Place on top of the post
 
-    // Create the post ball
-    var postBall = new THREE.Mesh(
-        new THREE.SphereGeometry(scale * ballScale, 8, 8),
-        new THREE.MeshBasicMaterial({ 
-            color: 'red',
-            transparent: true,
-            opacity: 0.2
-         })
-    );
-    postBall.position.y = 0.85; // Place on top of the cap
 
 
     var amplitude = 0.1
@@ -236,7 +226,6 @@ function RailingPost(start, end, scale = 0.01, ballScale = 5, justPost = false) 
     if (!justPost) {
         group.add(postRailing)
     }
-    group.add(postBall);
 
 
     // Set the overall position of the group
@@ -1107,7 +1096,7 @@ class $ky {
         }
 
         // Increment time for next update
-        this.time += 0.0001;
+        this.time += 0.01;
     }
 
     MakeCloud() {
@@ -2254,16 +2243,7 @@ class Castle {
             rock.receiveShadow = true;
             rock.castShadow = true;
             rock.frustumCulled = true;
-            
-            if (window.anima && SCENE.shamu_trainer == false) {
-                SCENE.shamu_trainer = true
-                
-                anima.API.model.scene.position.set(rockPosition.x, rockPosition.y + rockWidth / 2, rockPosition.z)
-                    
-                console.log('adding', anima.API.model.scene)
-                scene.add(anima.API.model.scene)
-            }
-
+        
             // Add the rock to the scene and to the parts array
             scene.add(rock);
             this.parts.push(rock);
@@ -4400,6 +4380,23 @@ class View {
 
         // Add the wireframe to the scene
         window.scene.add(wireframeBox);
+        
+        anima.API.model.scene.receiveShadow = true
+        anima.API.model.scene.castShadow = true
+        anima.API.model.scene.position.set(
+            landscape.field.center.x, 
+            landscape.field.center.y, 
+            landscape.field.center.z
+        )
+        anima.API.model.scene.rotation.set(
+            0, Math.PI / 2, 0
+        )
+
+        anima.API.model.scene.scale.set(
+            6, 6, 6
+        )
+            
+        scene.add(anima.API.model.scene)
 
         let position = '{"x":19.852216707186262,"y":11.200000001490116,"z":-11.458214068699375}'
         let rotation = '{"x":2.924449624390635,"y":0.6338689705218558,"z":-3.011662049881017}'
