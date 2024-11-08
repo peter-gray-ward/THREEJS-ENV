@@ -29,9 +29,9 @@ window.rockTexture = new THREE.TextureLoader().load("/images/dry-rough-rock-face
 })
 window.SPACECOLORS = ['#0c2338', '#2e3d53', '#2b425c', '#708ca8']
 // Define color schemes for different types of trees
-window.CYPRESSGREENS = ['#93b449', '#6b881c', '#a9cc4e', 'purple', 'purple', 'purple']; // Cypress colors
-window.PINEGREENS = ['#4e8b2d', '#3b5e24', '#629441', 'orange', 'orange', 'orange'];     // Pine colors
-window.OAKGREENS = ['#6f9e3e', '#4d7b26', '#86b454', 'red', 'red', 'red'];      // Oak colors
+window.CYPRESSGREENS = ['#93b449', '#6b881c', '#a9cc4e']; // Cypress colors
+window.PINEGREENS = ['#4e8b2d', '#3b5e24', '#629441'];     // Pine colors
+window.OAKGREENS = ['#6f9e3e', '#4d7b26', '#86b454'];      // Oak colors
 
 
 Array.prototype.mingle = function(B) {
@@ -260,12 +260,10 @@ function isIn(v, which) {
             && v.z < house.center.z + house.depth / 2
     case 'sideyard':
         return (
-            v.x >= (house.center.z - house.foundation.depth / 2 - 5) && 
-            v.x <= (house.center.x - house.foundation.width / 2 - 30) &&
             v.y >= (house.center.y - house.foundation.height / 2) && 
             v.y <= (house.center.y + house.foundation.height / 2) &&
-            v.z >= (house.center.z - house.foundation.depth / 2 - 50) && 
-            v.z <= (house.center.z - house.foundation.depth / 2 - 5)
+            v.z >= (house.center.z - house.foundation.depth / 2) && 
+            v.z <= (house.center.z - house.foundation.depth / 2)
         );
     case 'backyard':
         return (
@@ -761,7 +759,7 @@ class $ky {
             console.log("thi$ i$...$ky.$tarparis!")
         }
     }
-    time = Math.PI + 0.15
+    time = .5
     constructor(user) {
         this.counter = 0;
         this.user = user;
@@ -1460,28 +1458,28 @@ class Castle {
         const boardwalkTexture = new THREE.TextureLoader().load("/images/cobblestone.jpg", texture => {
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
-            texture.repeat.set(2, 2);
+            texture.repeat.set(6, 6);
         })
 
         const boardwalk2Texture = new THREE.TextureLoader().load("/images/cobblestone.jpg", texture => {
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
             texture.rotation = Math.PI / 2
-            texture.repeat.set(1, 2);
+            texture.repeat.set(3, 6);
         })
 
         const alleyTexture = new THREE.TextureLoader().load("/images/cobblestone.jpg", texture => {
            texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
             texture.rotation = Math.PI / 2
-            texture.repeat.set(1, 2);
+            texture.repeat.set(3, 6);
         })
         
 
         const steptexture = new THREE.TextureLoader().load("/images/floor2.jpg", texture => {
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
-            texture.repeat.set(2, 2);
+            texture.repeat.set(6, 6);
         })
         
 
@@ -2376,6 +2374,7 @@ class Terrain {
     segments = 79
     visited = { }
     paintings = [ ]
+    bladesOfGrass = [ ]
     constructor(options) {
         // this.grassTexture = new THREE.TextureLoader().load("/images/nasturtiums1.jpg")
         this.Grass = [
@@ -2572,7 +2571,7 @@ class Terrain {
         this.populateTerrainFeatures(vertices, indices);
     }
 
-   createWaterMesh(vertices, indices) {
+    createWaterMesh(vertices, indices) {
         // var vertices = [];
         // var indices = [];
         var widthSegments = 20; // Number of segments along the width
@@ -2895,7 +2894,152 @@ class Terrain {
             const BACKYARD = isIn(trianglePosition, 'backyard')
             const COVE = isIn(trianglePosition, 'cove')
 
-           
+            // if (HOUSE || (!COVE && !CLIFF && !HOUSE && !DOCK)) {
+            //     // Number of grass blades
+            //     const bladeCount = 100;
+
+            //     // Create a single geometry and material for all instances
+            //     const bladeGeometry = new THREE.PlaneGeometry(randomInRange(0.08, 0.1), randomInRange(0.4, 0.6));
+            //     const bladeMaterial = new THREE.MeshStandardMaterial({
+            //         color: window.CYPRESSGREENS[Math.floor(Math.random() * window.CYPRESSGREENS.length)],
+            //         side: THREE.DoubleSide
+            //     });
+            //     bladeMaterial.receiveShadow = true;
+
+            //     // Create the instanced mesh
+            //     const bladesOfGrass = new THREE.InstancedMesh(bladeGeometry, bladeMaterial, bladeCount);
+            //     bladesOfGrass.receiveShadow = true;
+
+            //     // Calculate triangle normal for alignment
+            //     const triangleNormal = new THREE.Vector3();
+            //     triangle.getNormal(triangleNormal);
+            //     const normalQuaternion = new THREE.Quaternion();
+            //     normalQuaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), triangleNormal);
+
+            //     // Apply random transformations to each instance
+            //     for (let i = 0; i < bladeCount; i++) {
+            //         // Randomize the position within the triangle
+            //         const bladePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c);
+
+            //         // Create a transformation matrix for each blade instance
+            //         const matrix = new THREE.Matrix4();
+            //         const position = new THREE.Vector3(bladePosition.x, bladePosition.y, bladePosition.z);
+
+            //         // Random rotation around the blade's own y-axis (normal direction)
+            //         const randomYRotation = new THREE.Quaternion().setFromEuler(
+            //             new THREE.Euler(
+            //                 randomInRange(0, 0.7),               // random rotation around x-axis
+            //                 Math.random() * Math.PI * 2,          // random rotation around y-axis
+            //                 randomInRange(0, 0.7)                // random rotation around z-axis
+            //             )
+            //         );
+
+            //         // Combine the normal alignment and random rotation
+            //         const finalRotation = new THREE.Quaternion();
+            //         finalRotation.multiplyQuaternions(normalQuaternion, randomYRotation);
+
+            //         // Apply transformations to the matrix
+            //         matrix.compose(position, finalRotation, new THREE.Vector3(1, 1, 1));
+
+            //         // Set the transformation matrix for this instance
+            //         bladesOfGrass.setMatrixAt(i, matrix);
+
+            //         // Optionally store the original rotation if you need it for further bending or animations
+            //         bladesOfGrass.userData[`blade_${i}`] = {
+            //             originRotation: finalRotation.clone()
+            //         };
+            //     }
+
+            //     // Update the instance matrix to apply transformations
+            //     bladesOfGrass.instanceMatrix.needsUpdate = true;
+
+            //     // Store the triangle associated with this instanced mesh for future reference
+            //     bladesOfGrass.triangle = triangle;
+
+            //     // Add the instanced mesh to your array or scene
+            //     this.bladesOfGrass.push(bladesOfGrass);
+            // }
+            if (HOUSE || (!COVE && !CLIFF && !HOUSE && !DOCK)) {
+                // Number of main grass blades (each will be a "comb" of smaller blades)
+                const bladeCount = 300;
+
+                // Create a single geometry and material for each small blade in a comb
+                const smallBladeGeometry = new THREE.PlaneGeometry(randomInRange(0.02, 0.03), randomInRange(0.4, 0.6)); // Smaller width
+                const bladeMaterial = new THREE.MeshStandardMaterial({
+                    color: window.CYPRESSGREENS[Math.floor(Math.random() * window.CYPRESSGREENS.length)],
+                    side: THREE.DoubleSide
+                });
+                bladeMaterial.receiveShadow = true;
+
+                // Create the instanced mesh for the entire group of comb-like blades
+                const bladesOfGrass = new THREE.InstancedMesh(smallBladeGeometry, bladeMaterial, bladeCount * 5); // 5 small blades per main blade
+                bladesOfGrass.receiveShadow = true;
+
+                // Calculate triangle normal for alignment
+                const triangleNormal = new THREE.Vector3();
+                triangle.getNormal(triangleNormal);
+                const normalQuaternion = new THREE.Quaternion();
+                normalQuaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), triangleNormal);
+
+                // Apply random transformations to each group (each comb of 5 small blades)
+                for (let i = 0; i < bladeCount; i++) {
+                    // Randomize the position within the triangle
+                    const bladePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c);
+
+                    // Base position and rotation for the main blade
+                    const basePosition = new THREE.Vector3(bladePosition.x, bladePosition.y, bladePosition.z);
+                    const baseRotation = new THREE.Quaternion();
+                    const randomYRotation = new THREE.Quaternion().setFromEuler(
+                        new THREE.Euler(
+                            randomInRange(0, 0.7),               // random rotation around x-axis
+                            Math.random() * Math.PI * 2,          // random rotation around y-axis
+                            randomInRange(0, 0.7)                // random rotation around z-axis
+                        )
+                    );
+
+                    // Combine the normal alignment and random rotation
+                    baseRotation.multiplyQuaternions(normalQuaternion, randomYRotation);
+
+                    // Define spacing and angle offset for the small blades in the comb
+                    const spacing = 0.02;  // Distance between each small blade in the comb
+                    const angleOffset = 0.1; // Angle offset between each blade in radians
+
+                    // Apply transformations to each small blade in the comb
+                    for (let j = 0; j < 5; j++) {
+                        const matrix = new THREE.Matrix4();
+
+                        // Offset each small blade in the x-axis to create the "comb" effect
+                        const offsetPosition = basePosition.clone().add(new THREE.Vector3((j - 2) * spacing, 0, 0));
+
+                        // Apply a slight angle offset for each blade in the comb
+                        const individualRotation = baseRotation.clone();
+                        individualRotation.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, (j - 2) * angleOffset)));
+
+                        // Apply the transformations to the matrix
+                        matrix.compose(offsetPosition, individualRotation, new THREE.Vector3(1, 1, 1));
+
+                        // Set the transformation matrix for this small blade instance
+                        bladesOfGrass.setMatrixAt(i * 5 + j, matrix); // Each main blade has 5 small blades
+                    }
+
+                    // Optionally store the original rotation if you need it for further bending or animations
+                    bladesOfGrass.userData[`blade_${i}`] = {
+                        originRotation: baseRotation.clone()
+                    };
+                }
+
+                // Update the instance matrix to apply transformations
+                bladesOfGrass.instanceMatrix.needsUpdate = true;
+
+                // Store the triangle associated with this instanced mesh for future reference
+                bladesOfGrass.triangle = triangle;
+
+                // Add the instanced mesh to your array or scene
+                this.bladesOfGrass.push(bladesOfGrass);
+
+            }
+
+
             if (CLIFF) {
                 this.cliffs.push(triangle)
             } else {
@@ -2906,39 +3050,6 @@ class Terrain {
                         var cypressTree = this.createCypress(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'big-cypress')
                         this.trees.push(cypressTree)
                     }
-                }
-
-                if (false && (YARD || SIDEYARD) && !HOUSE) {
-                    var instanceCount = YARD ? 9000 : 1000
-                    var instancedMesh = new THREE.InstancedMesh(
-                        new THREE.PlaneGeometry(randomInRange(.01, 0.08), randomInRange(.1, 0.2)),
-                        new THREE.MeshStandardMaterial({ color: 'green', side: THREE.DoubleSide }),
-                        instanceCount
-                    )
-                    instancedMesh.castShadow = true
-                    instancedMesh.receiveShadow = true
-                    // instancedMesh.position.set(trianglePosition.x, trianglePosition.y, trianglePosition.z)
-                    instancedMesh.triangle = triangle
-                   for (let k = 0; k < instanceCount; k++) {
-                        // Generate a random position on the triangle
-                        const pos = randomPointOnTriangle(triangle.a, triangle.b, triangle.c);
-                        const grass = new THREE.Object3D();
-                        grass.position.copy(pos);
-                        grass.rotation.y = Math.random() * Math.PI * 2;
-                        grass.rotation.x = randomInRange(0, 0.2);
-                        const heightScale = randomInRange(0.5, 1.5);
-                        grass.scale.set(1, heightScale, 1);
-                        grass.updateMatrix();
-                        instancedMesh.setMatrixAt(k, grass.matrix);
-                        instancedMesh.setColorAt(k, new THREE.Color(randomInRange(0, 0.2), randomInRange(0.8, 1),randomInRange(0, 0.2)));
-                    }
-
-                    // Ensure the instance color attribute is updated
-                    instancedMesh.instanceColor.needsUpdate = true;
-                    instancedMesh.instanceMatrix.needsUpdate = true;
-
-                    scene.add(instancedMesh)
-                    this.grasses.push(instancedMesh)
                 }
             }
         })
@@ -3473,27 +3584,27 @@ class Terrain {
             }
         })
 
-        // Remove triangles outside the SOP from the scene
-        this.grasses.forEach(grass => {
-            var t = this.getTriangleCenter(grass.triangle)
-            const pos = new THREE.Vector3(
-                t.x, t.y, t.z
-            ).distanceTo(user.camera.position)
-            if (grass.parent && pos > this.sop.grasses) {
-                scene.remove(grass)
-            } else if (!grass.parent && pos < this.sop.grasses) {
-                scene.add(grass)
-            }
-        });
 
-         this.cliffs.forEach(cliff => {
+        this.cliffs.forEach(cliff => {
             var pos = this.getTriangleCenter(cliff.triangle)
             if (cliff.parent && !isInSOP(pos, sopCenter, this.sop.cliffs)) {
                 scene.remove(cliff);
             } else if (!cliff.parent && isInSOP(pos, sopCenter, this.sop.cliffs)) {
                 scene.add(cliff);
             }
-        });       
+        });
+
+        this.bladesOfGrass.forEach(instancedMesh => {
+            var t = this.getTriangleCenter(instancedMesh.triangle)
+            const pos = new THREE.Vector3(
+                t.x, t.y, t.z
+            ).distanceTo(user.camera.position)
+            if (instancedMesh.parent && pos > this.sop.grasses) {
+                scene.remove(instancedMesh)
+            } else if (!instancedMesh.parent && pos < this.sop.grasses) {
+                scene.add(instancedMesh)
+            }
+        })
     }
 
     getTriangleCenter(triangle) {
@@ -4162,6 +4273,14 @@ class UserController {
                 }
             }
 
+
+            const grassBendStrength = 0.1; // Adjust this for more or less bending
+
+            // Update the camera direction vector
+            var cameraDirection = new THREE.Vector3()
+            this.camera.getWorldDirection(cameraDirection);
+
+       
 
             if (this.isJumping) {
                 var closestGround = undefined

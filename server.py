@@ -50,7 +50,7 @@ class Model:
                 'segments': 50,
                 'sop': {
                     'trees': t ,
-                    'grasses': t / 2,
+                    'grasses': 11,
                     'grounds': t ,
                     'cliffs': t 
                 },
