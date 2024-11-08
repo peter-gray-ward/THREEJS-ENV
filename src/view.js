@@ -2966,7 +2966,7 @@ class Terrain {
 
             if (HOUSE || (!COVE && !CLIFF && !HOUSE && !DOCK && !BOARDWALK)) {
                 // Number of main grass blades (each will be a "comb" of smaller blades)
-                const bladeCount = 100;
+                const bladeCount = 300;
 
                 // Create a single geometry and material for each small blade in a comb
                 const smallBladeGeometry = new THREE.PlaneGeometry(randomInRange(0.02, 0.03), randomInRange(0.4, 0.6)); // Smaller width
@@ -3049,13 +3049,13 @@ class Terrain {
             if (CLIFF) {
                 this.cliffs.push(triangle)
             } else {
-                let cypressTreePosition
-                if (!COVE && !CLIFF && !HOUSE && !DOCK && !YARD && !WALKWAY) {
-                    if (Math.random() < 0.1) {
-                        let ct = this.createCypress(trianglePosition.x, trianglePosition.y, trianglePosition.z, 'cypress')
-                        this.trees.push(ct)
-                    }
-                }
+                // let cypressTreePosition
+                // if (!COVE && !CLIFF && !HOUSE && !DOCK && !YARD && !WALKWAY) {
+                //     if (Math.random() < 0.1) {
+                //         let ct = this.createCypress(trianglePosition.x, trianglePosition.y, trianglePosition.z, 'cypress')
+                //         this.trees.push(ct)
+                //     }
+                // }
 
             }
         })     
