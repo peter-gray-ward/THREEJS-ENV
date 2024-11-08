@@ -49,7 +49,7 @@ class Model:
                 'noiseHeight': t,
                 'segments': 50,
                 'sop': {
-                    'trees': t * .5 ,
+                    'trees': t ,
                     'grasses': t / 2,
                     'grounds': t ,
                     'cliffs': t 

@@ -1,5 +1,3 @@
-
-
 import * as THREE from '/lib/Three.module.min.js';
 import { GLTFLoader } from '/lib/GLTFLoader.js';
 import { CSG } from '/lib/CSG.js'
@@ -29,6 +27,7 @@ window.rockTexture = new THREE.TextureLoader().load("/images/dry-rough-rock-face
     texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(1, 1);
 })
+window.SPACECOLORS = ['#0c2338', '#2e3d53', '#2b425c', '#708ca8']
 // Define color schemes for different types of trees
 window.CYPRESSGREENS = ['#93b449', '#6b881c', '#a9cc4e', 'purple', 'purple', 'purple']; // Cypress colors
 window.PINEGREENS = ['#4e8b2d', '#3b5e24', '#629441', 'orange', 'orange', 'orange'];     // Pine colors
@@ -286,6 +285,8 @@ function isIn(v, which) {
         const inZRange = Math.abs(v.z - boardwalk.center.z - windingZ) < COVEZ; // Width of the winding path
         return (inXRange && inZRange)
     
+    case 'tree-viable-placement':
+
     default:
         return false;
     }
@@ -760,7 +761,7 @@ class $ky {
             console.log("thi$ i$...$ky.$tarparis!")
         }
     }
-    time = 0
+    time = Math.PI + 0.15
     constructor(user) {
         this.counter = 0;
         this.user = user;
@@ -874,14 +875,19 @@ class $ky {
 
     createStars(points) {
         var starMaterial = new THREE.PointsMaterial({
-            size: .5,
+            size: randomInRange(.5, 3),
             vertexColors: true,
             transparent: true,
             opacity: 0.1
         })
+        var white = {
+            r: randomInRange(0.5, 1),
+            g: randomInRange(0.5, 1),
+            b: randomInRange(0.5, 1)
+        }
         var colors = []
         for (var i = 0; i < points.length; i += 3) {
-            colors.push(1, 1, 1)
+            colors.push(white.r, white.g, white.b)
         }
         var starGeometry = new THREE.BufferGeometry()
         starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3))
@@ -939,7 +945,9 @@ class $ky {
                 thetaPhiArray.push({ theta: theta, phi: phi });
 
                 if (Math.random() < 0.09) {
-                    starPoints.push(randomInRange(x - 25, x  + 25), y - 50, randomInRange(z - 25, z + 25))
+                    for (var k = 0; k < 6; k++) {
+                        starPoints.push(randomInRange(x - 25, x  + 25), y - 50, randomInRange(z - 25, z + 25))
+                    }
                 }
 
                 if (z > maxdist) maxdist = z;
@@ -980,11 +988,14 @@ class $ky {
         // Base colors for each sky state
         const skyDay = new THREE.Color(0xbde9ff);
         const skyDawnDusk = new THREE.Color(0x74c1e8);
-        const skyNight = new THREE.Color(0x001f3f);
+        const skyNight = new THREE.Color(0x000000);
+        const skyNightHorizon = new THREE.Color(0x001f3f)
         const horizonDay = new THREE.Color(0xffffff);
         const horizonDawnDusk = new THREE.Color(0xffc0cb);
 
-        // Set transition factor based on time (0 for day, 1 for dawn/dusk, 2 for night)
+        // 0 for day
+        // 1 for dawn/dusk
+        // 2 for night
         let transitionFactor = (
             (
                 this.time > Math.PI * 2 - Math.PI / 16
@@ -1031,12 +1042,15 @@ class $ky {
 
             // Define base sky and horizon colors based on transitionFactor
             let skyColor, horizonColor;
-            if (transitionFactor < 1) {
+            if (transitionFactor === 0) {
                 skyColor = new THREE.Color().lerpColors(skyDay, skyDawnDusk, transitionFactor);
                 horizonColor = new THREE.Color().lerpColors(horizonDay, horizonDawnDusk, transitionFactor);
-            } else {
+            } else if (transitionFactor === 1) {
                 skyColor = new THREE.Color().lerpColors(skyDawnDusk, skyNight, transitionFactor - 1);
                 horizonColor = new THREE.Color().lerpColors(horizonDawnDusk, skyNight, transitionFactor - 1);
+            } else if (transitionFactor === 2) {
+                skyColor = new THREE.Color().lerpColors(skyNight, skyNight, transitionFactor - 1);
+                horizonColor = new THREE.Color().lerpColors(skyNightHorizon, skyNightHorizon, transitionFactor - 1);
             }
 
             // Horizon effect: blend between horizon and sky color based on height
@@ -2237,7 +2251,7 @@ class Castle {
             // Create and position the rock
             let rock = new THREE.Mesh(
                 new THREE.IcosahedronGeometry(rockWidth / 2, 0),
-                new THREE.MeshStandardMaterial({ color: 'gray', map: rockTexture })
+                new THREE.MeshBasicMaterial({ map: rockTexture })
             );
             rock.position.set(rockPosition.x, randomInRange(rockPosition.y - 2, rockPosition.y - 5), rockPosition.z); // Assumes ground level is y = 0
             rock.receiveShadow = true;
@@ -2546,10 +2560,10 @@ class Terrain {
         const vertices = this.generateVertices(perlinNoise, centerX, centerY, centerZ);
 
         // Generate cove vertices and indices
-        const { theCove, indices } = this.generateCoveVertices(-this.width / 2, this.width / 2, -this.height / 2, this.height / 2);
+        const { sea, indices } = this.generateSeaVertices(-this.width / 2, this.width / 2, -this.height / 2, this.height / 2);
 
         // Create and add water mesh
-        this.water = this.createWaterMesh(theCove, indices);
+        this.water = this.createWaterMesh(sea, indices);
 
         // Adjust terrain based on existing meshes
         this.adjustVerticesBasedOnMeshes(vertices);
@@ -2664,8 +2678,8 @@ class Terrain {
         if (isIn(v, 'sideyard')) v.y = house.center.y;
     }
 
-    generateCoveVertices(minX, maxX, minZ, maxZ) {
-        const theCove = [];
+    generateSeaVertices(minX, maxX, minZ, maxZ) {
+        const sea = [];
         const indices = [];
         const xStep = (maxX - minX) / this.segments;
         const zStep = (maxZ - minZ) / this.segments;
@@ -2674,7 +2688,7 @@ class Terrain {
             for (let j = 0; j <= this.segments; j++) {
                 let x = minX + i * xStep;
                 let z = minZ + j * zStep;
-                theCove.push(x, -5, z);
+                sea.push(x, -5, z);
 
                 // Generate indices for two triangles in each grid cell
                 if (i < this.segments && j < this.segments) {
@@ -2686,7 +2700,7 @@ class Terrain {
                 }
             }
         }
-        return { theCove, indices };
+        return { sea, indices };
     }
 
 
@@ -2886,29 +2900,12 @@ class Terrain {
                 this.cliffs.push(triangle)
             } else {
                 let cypressTreePosition
-                if (
-                        (
-                            !CLIFF && !COVE && !HOUSE && !YARD && !SIDEYARD && !DOCK
-                            && (
-                                (
-                                    trianglePosition.x > 20 ?  Math.random() < 0.005 : (
-                                        trianglePosition.z > 20 ? Math.random() < 0.008 : Math.random() < 0.003
-                                    )
-                                )
-                            )
-                        ) || (
-                            BACKYARD && !HOUSE && Math.random() < 0.1
-                        )
-                    ) {
-                    cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                    var cypressTree;
-                    if (Math.random() < 0.25) {
-                        cypressTree = this.createCypress(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'big-cypress')
-                        
-                    } else {
-                        cypressTree = this.createCypress(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'cypress')
+                if (!COVE && !CLIFF && !HOUSE && !DOCK && !YARD) { 
+                    if (Math.random() < 0.007) {
+                        cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
+                        var cypressTree = this.createCypress(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'big-cypress')
+                        this.trees.push(cypressTree)
                     }
-                    this.trees.push(cypressTree)
                 }
 
                 if (false && (YARD || SIDEYARD) && !HOUSE) {
@@ -4380,23 +4377,7 @@ class View {
 
         // Add the wireframe to the scene
         window.scene.add(wireframeBox);
-        
-        anima.API.model.scene.receiveShadow = true
-        anima.API.model.scene.castShadow = true
-        anima.API.model.scene.position.set(
-            landscape.field.center.x, 
-            landscape.field.center.y, 
-            landscape.field.center.z
-        )
-        anima.API.model.scene.rotation.set(
-            0, Math.PI / 2, 0
-        )
-
-        anima.API.model.scene.scale.set(
-            6, 6, 6
-        )
-            
-        scene.add(anima.API.model.scene)
+    
 
         let position = '{"x":19.852216707186262,"y":11.200000001490116,"z":-11.458214068699375}'
         let rotation = '{"x":2.924449624390635,"y":0.6338689705218558,"z":-3.011662049881017}'
@@ -4458,7 +4439,7 @@ window.view = new View();
 
 
 
-
+var i = 0
 window.Animate = function() {
         window.requestAnimationFrame(Animate);
 
@@ -4473,10 +4454,16 @@ window.Animate = function() {
         }
 
         window.renderer.render(window.scene, window.user.camera);
+
+        i += 1
+
+        if (i > 999) {
+            i = 0
+        }
 }
 
 
-if (window.anima) {
+if (false && window.anima) {
     await anima.load()
 }
 await VM.init('peter', view)
