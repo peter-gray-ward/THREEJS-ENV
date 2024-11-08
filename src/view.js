@@ -249,10 +249,13 @@ function RailingPost(start, end, scale = 0.01, ballScale = 5, justPost = false) 
 
 const COVEZ = randomInRange(3, 10)
 
+
 function isIn(v, which) {
    
         
     switch (which) {
+    case 'walkway':
+        return (v.z < 15 && v.z > -15 && v.x < alley.depth / 2 && v.x > -alley.depth)
     case 'yard':
         return v.x > landscape.center.x - landscape.width / 2
             && v.x < landscape.center.x + landscape.width / 2
@@ -2372,6 +2375,77 @@ function LeafMaterial(color, map, transparent, wireframe) {
     return new THREE.MeshStandardMaterial(leafMaterialArgs);
 }
 
+    const sphereGeometries = {};
+const leafMaterials = {};
+
+function OrganizeFoliage(mesh) {
+        for (let i = 0; i < mesh.geometry.attributes.position.array.length; i += 3) {
+            mesh.geometry.attributes.position.array[i] += mesh.geometry.hlod[i];
+            mesh.geometry.attributes.position.array[i + 1] += mesh.geometry.hlod[i + 1];
+            mesh.geometry.attributes.position.array[i + 2] += mesh.geometry.hlod[i + 2];
+        }
+        mesh.geometry.needsUpdate = true
+}
+
+function DisrganizeFoliage(mesh) {
+        for (let i = 0; i < mesh.geometry.attributes.position.array.length; i += 3) {
+            mesh.geometry.attributes.position.array[i] += mesh.geometry.llod[i];
+            mesh.geometry.attributes.position.array[i + 1] += mesh.geometry.llod[i + 1];
+            mesh.geometry.attributes.position.array[i + 2] += mesh.geometry.llod[i + 2];
+        }
+        mesh.geometry.needsUpdate = true
+}
+
+function getCachedSphereGeometry(radius, map, transparent) {
+    if (!sphereGeometries[radius]) {
+        const geometry = new THREE.SphereGeometry(
+            radius, 
+            Math.floor(randomInRange(3, 11)), 
+            Math.floor(randomInRange(3, 11))
+        );
+        
+        if (transparent) {
+            
+        } else {
+            geometry.llod = []
+            geometry.hlod = []
+            for (let i = 0; i < geometry.attributes.position.array.length; i += 3) {
+                if (Math.random() < 0.5) {
+
+                    // Apply offset to create more organic shapes and layers
+                    geometry.attributes.position.array[i] += randomInRange(-radius, radius);
+                    geometry.attributes.position.array[i + 1] += randomInRange(0, radius);;
+                    geometry.attributes.position.array[i + 2] += randomInRange(-radius, radius);;
+                }
+                // geometry.llod.push(geometry.attributes.position.array[i], geometry.attributes.position.array[i + 1], geometry.attributes.position.array[i + 2])
+                // geometry.hlod.push(geometry.attributes.position.array[i], geometry.attributes.position.array[i + 1], geometry.attributes.position.array[i + 2])
+           }
+            geometry.computeVertexNormals()
+            geometry.attributes.position.needsUpdate = true;
+        }
+
+        sphereGeometries[radius] = geometry;
+    }
+    return sphereGeometries[radius];
+}
+
+function getCachedLeafMaterial(color, map, transparent) {
+    if (!leafMaterials[color]) {
+        var leafMaterialArgs = { 
+            color: CYPRESSGREENS[Math.floor(Math.random() * CYPRESSGREENS.length)],
+            side: THREE.DoubleSide,
+            transparent: true,
+            // opacity: .8
+        }
+        if (map) {
+            leafMaterialArgs.map = map
+        }
+        leafMaterials[color] = new THREE.MeshStandardMaterial(leafMaterialArgs);
+    }
+    leafMaterials.needsUpdate = true
+    return leafMaterials[color];
+}
+
 
 const tree = {
         cypress: {
@@ -2440,112 +2514,118 @@ class Terrain {
         return optionalTarget;
     }
 
+
     createFlora(x, Y, z, treeKind) {
-        const height = randomInRange(12, 30);
-        const tree = {
-            oak: {
-                height,
-                baseHeight: height,
+        var tree = {
+            cypress: {
+                height: randomInRange(11.1, 60),
                 width: randomInRange(1, 2),
-                colors: ['#a2e650', '#4cb021'],
-                trimmed: Math.random() < 0.5,
-                map: new THREE.TextureLoader().load("/images/Elm-leaf-texture.png", texture => {
-                    texture.wrapS = THREE.RepeatWrapping;
-                    texture.wrapT = THREE.RepeatWrapping;
-                    texture.repeat.set(1, 1);
-                }),
+                colors: CYPRESSGREENS, // Cypress leaf colors
+                trimmed: Math.random() < 0.5 ? true : false,
+                map: new THREE.TextureLoader().load("/images/Elm-leaf-texture.png"),
                 trunk: {
-                    map: TRUNKTEXTUREOAK
+                    map: TRUNKTEXTURE
+                },
+                trunkHeight: randomInRange(6, 9)
+            },
+            oak: {
+                height: randomInRange(11.1, 60),
+                width: randomInRange(1, 2),
+                colors: CYPRESSGREENS, // Cypress leaf colors
+                trimmed: Math.random() < 0.5 ? true : false,
+                map: new THREE.TextureLoader().load("/images/Elm-leaf-texture.png"),
+                trunk: {
+                    map: TRUNKTEXTURE
                 }
             }
         };
 
-        const treeData = tree[treeKind];
-        const trunkRadius = treeData.width * 0.5;
 
-        // Create a curved path for the trunk
-        const trunkPath = new THREE.CatmullRomCurve3([
-            new THREE.Vector3(x, Y, z),
-            new THREE.Vector3(x + randomInRange(-0.5, 0.5), Y + height * 0.3, z + randomInRange(-0.5, 0.5)),
-            new THREE.Vector3(x + randomInRange(-0.8, 0.8), Y + height * 0.6, z + randomInRange(-0.8, 0.8)),
-            new THREE.Vector3(x, Y + height, z)
-        ]);
+        const twoPi = Math.PI * 2;
+        const instanceCount = Math.floor(tree[treeKind].height * 7); // Adjust count as needed
+        const instancedMesh = new THREE.InstancedMesh(
+            getCachedSphereGeometry(tree[treeKind].width),
+            getCachedLeafMaterial(tree[treeKind].colors[0], tree[treeKind].map), // Initial color
+            instanceCount
+        );
+        instancedMesh.frustrumCulled = true
 
-        const trunkGeometry = new THREE.TubeGeometry(trunkPath, 20, trunkRadius, 8, false);
-        const trunkMaterial = new THREE.MeshStandardMaterial({ map: treeData.trunk.map });
-        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-        trunk.castShadow = true;
-        trunk.receiveShadow = true;
-
-        const primaryBranchCount = 6;
-        const smallBranchCount = 3;
-        const foliagePerSmallBranch = 5;
-        const instanceCount = primaryBranchCount * smallBranchCount * foliagePerSmallBranch;
-
-        // Create instanced foliage mesh
-        const sphereGeometry = new THREE.SphereGeometry(treeData.width / 8, 6, 6); // Smaller leaf size
-        const sphereMaterial = new THREE.MeshStandardMaterial({ color: new THREE.Color(treeData.colors[1]), transparent: true });
-        const foliageInstancedMesh = new THREE.InstancedMesh(sphereGeometry, sphereMaterial, instanceCount);
-
-        const startColor = new THREE.Color(treeData.colors[0]);
-        const endColor = new THREE.Color(treeData.colors[1]);
+        // Define gradient colors for leaves
+        const startColor = new THREE.Color(tree[treeKind].colors[0]); // Darker color at the base
+        const endColor = new THREE.Color(tree[treeKind].colors[tree[treeKind].colors.length - 1]); // Lighter color at the top
 
         let index = 0;
-        for (let i = 0; i < primaryBranchCount; i++) {
-            const branchStartProgress = 0.3 + (i * 0.1);
-            const branchStart = trunkPath.getPoint(branchStartProgress);
-            const angle = (i * (Math.PI * 2) / primaryBranchCount) + randomInRange(-0.5, 0.5);
-            const outwardX = Math.cos(angle);
-            const outwardZ = Math.sin(angle);
+        var none = true //Math.random() < 0.5
+        var ydiff = 0
+        for (let y = Y; y < Y + tree[treeKind].height; y += 1) {
+            if (tree[treeKind].height > 20 && Math.random() < 0.5) {
+                continue
+            }
+            const progress = (y - Y) / tree[treeKind].height;
+            let radiusAtY = (1 - progress) * (tree[treeKind].width / 2)
+            if (radiusAtY < 1) radiusAtY = 1;
+            if (none && ydiff++ < tree[treeKind].trunkHeight) {
+                radiusAtY = 0
+            } else if (none) {
+                radiusAtY *= randomInRange(1, 4)
+            }
 
-            const primaryBranchPath = new THREE.CatmullRomCurve3([
-                branchStart,
-                new THREE.Vector3(
-                    branchStart.x + outwardX * randomInRange(2, 4),
-                    branchStart.y + randomInRange(2, 3),
-                    branchStart.z + outwardZ * randomInRange(2, 4)
-                )
-            ]);
+            if (y < Y + 15 || Math.random() < 0.5) {
+                continue
+            }
 
-            const primaryBranchGeometry = new THREE.TubeGeometry(primaryBranchPath, 8, 0.15 * trunkRadius, 8, false);
-            const primaryBranch = new THREE.Mesh(primaryBranchGeometry, trunkMaterial);
-            primaryBranch.castShadow = true;
-            primaryBranch.receiveShadow = true;
-            trunk.add(primaryBranch);
+            const interpolatedColor = startColor.clone().lerp(endColor, progress);
 
-            for (let j = 0; j < smallBranchCount; j++) {
-                const smallBranchProgress = (j + 1) / (smallBranchCount + 1);
-                const smallBranchStart = primaryBranchPath.getPoint(smallBranchProgress);
+            for (let p = 0; p < twoPi && index < instanceCount; p += 3) {
+                const matrix = new THREE.Matrix4();
+                const randomAngle = randomInRange(-0.4, 0.4);
+                const randomHeightAdjustment = randomInRange(-0.3, 0.3);
 
-                for (let k = 0; k < foliagePerSmallBranch; k++) {
-                    if (index >= instanceCount) break;
+                const xPos = x + (radiusAtY * Math.cos(p + randomAngle)) + randomInRange(-0.75, 0.75);
+                const zPos = z + (radiusAtY * Math.sin(p + randomAngle)) + randomInRange(-0.75, 0.75);
+                const yPos = y + randomHeightAdjustment;
 
-                    const heightOffset = randomInRange(-0.2, 0.2);
-                    const foliagePosition = smallBranchStart.clone();
-                    foliagePosition.y += heightOffset;
+                matrix.setPosition(xPos, yPos, zPos);
+                const s = progress * 3
+                matrix.scale(new THREE.Vector3(s,s,s));
+                instancedMesh.setMatrixAt(index, matrix);
 
-                    const matrix = new THREE.Matrix4();
-                    matrix.setPosition(foliagePosition.x, foliagePosition.y, foliagePosition.z);
-                    matrix.scale(new THREE.Vector3(randomInRange(0.5, 1), randomInRange(0.5, 1), randomInRange(0.5, 1)));
+                // Set color for each instance based on height progress
+                // instancedMesh.setColorAt(index, new THREE.Color(1,1,1));
 
-                    foliageInstancedMesh.setMatrixAt(index, matrix);
-
-                    const color = startColor.clone().lerp(endColor, smallBranchProgress);
-                    foliageInstancedMesh.setColorAt(index, color);
-
-                    index++;
-                }
+                index++;
             }
         }
 
-        foliageInstancedMesh.instanceMatrix.needsUpdate = true;
-        foliageInstancedMesh.castShadow = true;
-        foliageInstancedMesh.receiveShadow = true;
+        instancedMesh.instanceMatrix.needsUpdate = true;
+        instancedMesh.castShadow = true;
+        instancedMesh.receiveShadow = true;
+        var radiusBottom =  tree[treeKind].height * .015
+        var radiusTop = radiusBottom * .1
+        // Create the trunk
+        const trunkGeometry = new THREE.CylinderGeometry(
+            radiusTop,// : Float, 
+            radiusBottom,// : Float, 
+            tree[treeKind].height,//height : Float, 
+            3,//radialSegments : Integer, 
+            7,//heightSegments : Integer, 
+            true,//openEnded : Boolean, 
+            Math.random() * Math.PI * 2,//thetaStart : Float, 
+            Math.PI * 2//thetaLength : Float
+        );
+        const trunkMaterial = new THREE.MeshStandardMaterial({
+            map: TRUNKTEXTURE,
+            transparent: false
+        });
+        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+        trunk.position.set(x, Y + tree[treeKind].height / 2, z);
+        trunk.branches = [];
+        trunk.castShadow = true;
+        trunk.receiveShadow = true;
+        trunk.center = new THREE.Vector3(x, Y + tree[treeKind].height / 2, z)
 
-        trunk.add(foliageInstancedMesh);
-        trunk.center = new THREE.Vector3(x, Y + treeData.height / 2, z)
 
-        return new Terrain.Tree(trunk, foliageInstancedMesh);
+        return new Terrain.Tree(trunk, instancedMesh);
     }
 
 
@@ -2738,19 +2818,15 @@ class Terrain {
 
         // add  cypress trees
         // x: 21.334397056875094, y: 11, z: -15.511049750710187
-        // for (let cx = 21; cx > 0 - landscape.field.width / 2; cx -= 3) {
-        //     var cypressTree = this.createCypress(cx, 9, -15.5, 'cypress')
-        //     this.trees.push(cypressTree)
-        // }
+        for (let cx = 21; cx > 0 - landscape.field.width / 2; cx -= 3) {
+            var cypressTree = this.createCypress(cx, 9, -15.5, 'cypress')
+            this.trees.push(cypressTree)
+        }
 
-        // for (let cx = 21; cx > 0 - landscape.field.width / 2; cx -= 3) {
-        //     var cypressTree = this.createCypress(cx, 9, 14, 'cypress')
-        //     this.trees.push(cypressTree)
-        // }
-
-
-        var godsWood = this.createFlora(0, 9, 0, 'oak')
-        this.trees.push(godsWood)
+        for (let cx = 21; cx > 0 - landscape.field.width / 2; cx -= 3) {
+            var cypressTree = this.createCypress(cx, 9, 16, 'cypress')
+            this.trees.push(cypressTree)
+        }
         
 
         this.clusterCliffs()
@@ -2884,7 +2960,7 @@ class Terrain {
             const BOARDWALK = isIn(trianglePosition, 'boardwalk')
             const HOUSE = isIn(trianglePosition, 'house')
             const DOCK = isIn(trianglePosition, 'dock')
-
+            const WALKWAY = isIn(trianglePosition, 'walkway')
             const BACKYARD = isIn(trianglePosition, 'backyard')
             const COVE = isIn(trianglePosition, 'cove')
 
@@ -2974,22 +3050,11 @@ class Terrain {
                 this.cliffs.push(triangle)
             } else {
                 let cypressTreePosition
-                if (!COVE && !CLIFF && !HOUSE && !DOCK && !YARD) {
-                    const elm = Math.random() < 0.008
-                    if (false) {
-                        cypressTreePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c)
-                        var cypressTree = this.createFlora(cypressTreePosition.x, cypressTreePosition.y, cypressTreePosition.z, 'oak')
-                        this.trees.push(cypressTree)
-                    } else if (Math.random() < 0.01) {
-                        cypressTree = this.createCypress(trianglePosition.x, trianglePosition.y, trianglePosition.z, 'cypress')
-                        this.trees.push(cypressTree)
+                if (!COVE && !CLIFF && !HOUSE && !DOCK && !YARD && !WALKWAY) {
+                    if (Math.random() < 0.1) {
+                        let ct = this.createCypress(trianglePosition.x, trianglePosition.y, trianglePosition.z, 'cypress')
+                        this.trees.push(ct)
                     }
-                }
-
-                if (trianglePosition.x >= -24 && trianglePosition.x < -22 && trianglePosition.z > -14 && trianglePosition.z < 15) {
-
-                    cypressTree = this.createCypress(trianglePosition.x, trianglePosition.y, trianglePosition.z, 'cypress')
-                    this.trees.push(cypressTree)
                 }
 
             }
