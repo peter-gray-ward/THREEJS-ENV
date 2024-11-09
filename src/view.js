@@ -2975,7 +2975,7 @@ class Terrain {
 
             if (HOUSE || (!COVE && !CLIFF && !HOUSE && !DOCK && !BOARDWALK)) {
                 // Number of main grass blades (each will be a "comb" of smaller blades)
-                const bladeCount = window.innerWidth < 800 ? 50 : 300;
+                const bladeCount = window.innerWidth < 800 ? 255 : 300;
 
                 // Create a single geometry and material for each small blade in a comb
                 const smallBladeGeometry = new THREE.PlaneGeometry(randomInRange(0.02, 0.03), randomInRange(0.4, 0.6)); // Smaller width
