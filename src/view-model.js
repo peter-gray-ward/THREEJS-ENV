@@ -15,6 +15,9 @@ export default class ViewModel {
             console.log("model loaded", model);
             this.user = model.user;
             this.map = model.map[this.user.level];
+            if (window.innerWidth < 800) {
+                this.map.sop.grasses = 15
+            }
 
             window.house.foundation.art_gallery_photos = model.art_gallery_photos;
 
