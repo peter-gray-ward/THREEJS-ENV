@@ -152,7 +152,7 @@ class RailingCurve extends THREE.Curve {
     }
 }
 
-function RailingPost(start, end, scale = 0.01, ballScale = 5, justPost = false) {
+function RailingPost(start, end, scale = 0.01, ball, justPost = false) {
 
     var post = new THREE.Mesh(
         new THREE.BoxGeometry(0.075, 0.75, 0.075),
@@ -192,7 +192,7 @@ function RailingPost(start, end, scale = 0.01, ballScale = 5, justPost = false) 
             steps: 6,
             depth: .03,
             bevelThickness: scale * .9,
-            bevelSize: scale * 5,
+            bevelSize: scale * 6,
             bevelOffset: 0,
             bevelSegments: 11
         }),
@@ -205,7 +205,16 @@ function RailingPost(start, end, scale = 0.01, ballScale = 5, justPost = false) 
     postCap2.rotation.x = Math.PI / 2
     postCap2.position.y = 0.8; // Place on top of the post
 
-
+    var postBall = new THREE.Mesh(
+        new THREE.SphereGeometry(.075, 11, 11),
+        new THREE.MeshStandardMaterial({
+            color: 'silver',
+            roughness: 0,
+            metalness: 1
+        }))
+    postBall.castShadow = true
+    postBall.receiveShadow = true
+    postBall.position.y = .85
 
     var amplitude = 0.1
 
@@ -221,11 +230,11 @@ function RailingPost(start, end, scale = 0.01, ballScale = 5, justPost = false) 
 
     // Group the parts together
     var group = new THREE.Group();
-    
-    if (ballScale >= 5) {
+    if (ball) {
         group.add(post);
         group.add(postCap);
         group.add(postCap2)
+        group.add(postBall)
     }
     if (!justPost) {
         group.add(postRailing)
@@ -1665,7 +1674,7 @@ class Castle {
             var rp = RailingPost(
                 new THREE.Vector3(x, y - 0.2, z), 
                 new THREE.Vector3(x, y - 0.2, z + 2),
-                0.01, 5, justPost
+                0.01, 1, justPost
             )
             scene.add(rp)
             this.objects.push(rp)
@@ -1673,7 +1682,7 @@ class Castle {
             rp = RailingPost(
                 new THREE.Vector3(x, y - 0.4, z), 
                 new THREE.Vector3(x, y - 0.2, z + 2),
-                0.01, 3, justPost
+                0.01, 0, justPost
             )
             scene.add(rp)
 
@@ -1682,7 +1691,7 @@ class Castle {
             rp = RailingPost(
                 new THREE.Vector3(x, y - 0.6, z), 
                 new THREE.Vector3(x, y - 0.2, z + 2),
-                0.01, 3, justPost
+                0.01, 0, justPost
             )
             scene.add(rp)
 
@@ -2904,7 +2913,7 @@ class Terrain {
 
         // Create a tall, narrow trunk
         const trunkGeometry = new THREE.CylinderGeometry(
-            treeData.trunkRadius * 0.8, // Radius at top
+            treeData.trunkRadius * 0.3, // Radius at top
             treeData.trunkRadius,      // Radius at bottom
             treeData.height,     // Slightly shorter than total height
             8,
@@ -2966,7 +2975,7 @@ class Terrain {
 
             if (HOUSE || (!COVE && !CLIFF && !HOUSE && !DOCK && !BOARDWALK)) {
                 // Number of main grass blades (each will be a "comb" of smaller blades)
-                const bladeCount = window.innerWidth < 800 ? 50 : 500;
+                const bladeCount = window.innerWidth < 800 ? 50 : 300;
 
                 // Create a single geometry and material for each small blade in a comb
                 const smallBladeGeometry = new THREE.PlaneGeometry(randomInRange(0.02, 0.03), randomInRange(0.4, 0.6)); // Smaller width
