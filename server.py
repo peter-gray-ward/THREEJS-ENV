@@ -172,7 +172,7 @@ cliffs = [
 def index():
     return send_file('index.html')
 
-@app.route('/favicon')
+@app.route('/favicon.ico')
 def favicon():
     file_path = os.path.join('favicon.ico')
     response = make_response(send_file(file_path))

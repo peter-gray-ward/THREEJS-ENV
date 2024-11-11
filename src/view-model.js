@@ -7,22 +7,15 @@ export default class ViewModel {
         this.user = null;
         this.map = null;
     }
-    async init(username, view) {
+    init(username, callback) {
         var xhr = new XMLHttpRequest();
         xhr.open("GET", `/load/${username}`, true);
         xhr.addEventListener('load', async () => {
             const model = JSON.parse(xhr.response);
-            console.log("model loaded", model);
-            this.user = model.user;
-            this.map = model.map[this.user.level];
-            if (window.innerWidth < 800) {
-                this.map.sop.grasses = 15
+            for (var key in model) {
+                this[key] = model[key]
             }
-
-            window.house.foundation.art_gallery_photos = model.art_gallery_photos;
-
-            await view.init(model);
-            
+            callback()
         });
         xhr.send();
     }
