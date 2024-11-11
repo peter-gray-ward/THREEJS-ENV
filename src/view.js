@@ -15,9 +15,22 @@ const t = 100
 const width = t * 2
 const height = t * 2
 const depth = t / 2
-const GREENS = ['#93b449', '#6b881c', '#a9cc4e', '#4e8b2d', '#3b5e24', '#629441', '#6f9e3e', '#4d7b26', '#86b454']; 
+const GREENS = ['#93b449', '#6b881c', '#a9cc4e', '#4e8b2d', '#3b5e24', '#629441', '#6f9e3e', '#4d7b26', '#86b454'];
+const RGBGREENS = [
+    [147, 180, 73],
+    [107, 136, 28],
+    [169, 204, 78],
+    [78, 139, 45],
+    [59, 94, 36],
+    [98, 148, 65],
+    [111, 158, 62],
+    [77, 123, 38],
+    [134, 180, 84]
+]
+
 
 class World {
+    grass = []
     constructor(scene) {
         this.makeTerrain(0, 0, 0);
     }
@@ -30,6 +43,8 @@ class World {
         const terrainGeometry = new THREE.BufferGeometry();
         const vertices = [];
         const indices = [];
+        const uvs = [];
+        const colors = [];
         const segments = t / 2
         const segmentSize = 1 / segments;
         const noiseWidth = t * 2
@@ -45,6 +60,9 @@ class World {
             for (let j = 0; j <= segments; j++) {
                 const xRatio = i * segmentSize;
                 const yRatio = j * segmentSize;
+
+                uvs.push(xRatio, yRatio)
+
                 let v = new THREE.Vector3(
                     (1 - xRatio) * (1 - yRatio) * v0.x + xRatio * (1 - yRatio) * v1.x + xRatio * yRatio * v2.x + (1 - xRatio) * yRatio * v3.x,
                     (1 - xRatio) * (1 - yRatio) * v0.y + xRatio * (1 - yRatio) * v1.y + xRatio * yRatio * v2.y + (1 - xRatio) * yRatio * v3.y,
@@ -64,6 +82,9 @@ class World {
 
                 vertices.push(v.x, v.y, v.z);
 
+                const color = RGBGREENS[Math.floor(Math.random() * RGBGREENS.length)]
+                colors.push(color[0] / 255, color[1] / 255, color[2] / 255)
+
                 if (Math.random() < 0.007 && !startingPoint) {
                     startingPoint = new THREE.Vector3(v.x, v.y + 10, v.z)
                 }
@@ -77,46 +98,65 @@ class World {
                 const c = (i + 1) * (segments + 1) + j;
                 const d = (i + 1) * (segments + 1) + (j + 1);
 
-                // Triangle 1
                 indices.push(a, b, d);
-                // Triangle 2
                 indices.push(a, d, c);
 
-                const vertexPositions = [
+                const vertexPositionsA = [
                     vertices[a * 3], vertices[a * 3 + 1], vertices[a * 3 + 2],
                     vertices[b * 3], vertices[b * 3 + 1], vertices[b * 3 + 2],
                     vertices[c * 3], vertices[c * 3 + 1], vertices[c * 3 + 2]
                 ];
 
-                var triangle = new THREE.Triangle(
-                    new THREE.Vector3(vertexPositions[0], vertexPositions[1], vertexPositions[2]),
-                    new THREE.Vector3(vertexPositions[3], vertexPositions[4], vertexPositions[5]),
-                    new THREE.Vector3(vertexPositions[6], vertexPositions[7], vertexPositions[8])
+                const vertexPositionsB = [
+                    vertices[b * 3], vertices[b * 3 + 1], vertices[b * 3 + 2],
+                    vertices[c * 3], vertices[c * 3 + 1], vertices[c * 3 + 2],
+                    vertices[d * 3], vertices[d * 3 + 1], vertices[d * 3 + 2]
+                ];
+
+                var triangleA = new THREE.Triangle(
+                    new THREE.Vector3(vertexPositionsA[0], vertexPositionsA[1], vertexPositionsA[2]),
+                    new THREE.Vector3(vertexPositionsA[3], vertexPositionsA[4], vertexPositionsA[5]),
+                    new THREE.Vector3(vertexPositionsA[6], vertexPositionsA[7], vertexPositionsA[8])
                 );
 
+                var triangleB = new THREE.Triangle(
+                    new THREE.Vector3(vertexPositionsB[0], vertexPositionsB[1], vertexPositionsB[2]),
+                    new THREE.Vector3(vertexPositionsB[3], vertexPositionsB[4], vertexPositionsB[5]),
+                    new THREE.Vector3(vertexPositionsB[6], vertexPositionsB[7], vertexPositionsB[8])
+                );
+
+
+                this.makeBladesOfGrass(triangleA)
+                this.makeBladesOfGrass(triangleB)
             }
         }
 
         terrainGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        terrainGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        terrainGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
         terrainGeometry.setIndex(indices);
         terrainGeometry.computeVertexNormals();
-        const terrain = new THREE.Mesh(terrainGeometry, new THREE.MeshBasicMaterial({
-            wireframe: true,
-            color: 'white',
-            transparent: true,
-            opacity: 0.15
+
+        const terrain = new THREE.Mesh(terrainGeometry, new THREE.MeshStandardMaterial({
+            side: THREE.DoubleSide,
+            vertexColors: true
         }));
+
+        terrain.receiveShadow = true
+        terrain.castShadow = true
+
         view.scene.add(terrain);
+
         terrain.bvh = new MeshBVH(terrainGeometry);
         terrainGeometry.boundsTree = terrain.bvh;
+
         this.terrain = terrain
         this.startingPoint = startingPoint
-
     }
 
-    makeBladeOfGrass(triangle) {
+    makeBladesOfGrass(triangle) {
         // Number of main grass blades (each will be a "comb" of smaller blades)
-        const bladeCount = 50//window.innerWidth < 800 ? 100 : 300;
+        const bladeCount = 500//window.innerWidth < 800 ? 100 : 300;
 
         // Create a single geometry and material for each small blade in a comb
         const smallBladeGeometry = new THREE.PlaneGeometry(randomInRange(0.02, 0.03), randomInRange(0.4, 0.6)); // Smaller width
@@ -124,7 +164,6 @@ class World {
             color: GREENS[Math.floor(Math.random() * GREENS.length)],
             side: THREE.DoubleSide
         });
-        bladeMaterial.receiveShadow = true;
 
         // Create the instanced mesh for the entire group of comb-like blades
         const bladesOfGrass = new THREE.InstancedMesh(smallBladeGeometry, bladeMaterial, bladeCount * 5); // 5 small blades per main blade
@@ -146,9 +185,9 @@ class World {
             const baseRotation = new THREE.Quaternion();
             const randomYRotation = new THREE.Quaternion().setFromEuler(
                 new THREE.Euler(
-                    randomInRange(0, 0.7),               // random rotation around x-axis
+                    randomInRange(0, 0.17),               // random rotation around x-axis
                     Math.random() * Math.PI * 2,          // random rotation around y-axis
-                    randomInRange(0, 0.7)                // random rotation around z-axis
+                    randomInRange(0, 0.17)                // random rotation around z-axis
                 )
             );
 
@@ -190,7 +229,21 @@ class World {
         bladesOfGrass.triangle = triangle;
 
         // Add the instanced mesh to your array or scene
-        view.scene.add(bladesOfGrass);
+        this.grass.push(bladesOfGrass);
+    }
+
+    update() {
+        for (var i = 0; i < this.grass.length; i++) {
+            const centerX = (this.grass[i].triangle.a.x + this.grass[i].triangle.b.x + this.grass[i].triangle.c.x) / 3;
+            const centerY = (this.grass[i].triangle.a.y + this.grass[i].triangle.b.y + this.grass[i].triangle.c.y) / 3;
+            const centerZ = (this.grass[i].triangle.a.z + this.grass[i].triangle.b.z + this.grass[i].triangle.c.z) / 3;
+            const pos = new THREE.Vector3(centerX, centerY, centerZ)
+            if (user.camera.position.distanceTo(pos) < t / 3) {
+                view.scene.add(this.grass[i])
+            } else if (this.grass[i].parent) {
+                view.scene.remove(this.grass[i])
+            }
+        }
     }
 
 }
@@ -203,7 +256,7 @@ class $ky {
         this.sceneRadius = 500;
         this.full_circle = 2 * Math.PI;
 
-        this.starLight = new THREE.AmbientLight(0xfefeff,  .06); // Sky and ground color
+        this.starLight = new THREE.AmbientLight(0xfefeff,  .1); // Sky and ground color
         this.starLight.position.set(0, 0, 0);
         view.scene.add(this.starLight);
 
@@ -222,10 +275,6 @@ class $ky {
         // Configure the shadow camera for the directional light (this affects shadow casting area)
         this.sun.shadow.camera.near = 0.005;
         this.sun.shadow.camera.far = 9900;
-        this.sun.shadow.camera.left = -100;
-        this.sun.shadow.camera.right = 100;
-        this.sun.shadow.camera.top = 100;
-        this.sun.shadow.camera.bottom = -100;
         this.sky = [];
         this.sphere = new THREE.Mesh(
             new THREE.SphereGeometry(11, 30, 30), 
@@ -613,9 +662,8 @@ class User {
 
         if (this.jumping) {
             this.camera.position.y += this.jumpVelocity;
-            this.jumpVelocity -= 0.1;  // Reduce jump velocity over time to simulate gravity
+            this.jumpVelocity -= 0.1;
 
-            // Transition from jumping to falling if jump velocity is low or negative
             if (this.jumpVelocity <= 0) {
                 this.jumping = false;
                 this.falling = true;
@@ -758,7 +806,6 @@ class User {
 
     surround() {
         this.grid.position.copy(this.camera.position)
-
         
     }
 
@@ -766,10 +813,9 @@ class User {
     handleCollision() {
         const cameraBox = new THREE.Box3().setFromCenterAndSize(
             this.camera.position.clone(),
-            new THREE.Vector3(1.5, 5.11, 1)  // Adjust dimensions based on the camera size
+            new THREE.Vector3(1.5, 5.11, 1)
         );
 
-        // Define the directions to check for intersections
         const directions = [
             new THREE.Vector3(0, -1, 0),   // Down
             new THREE.Vector3(0, 1, 0),    // Up
@@ -846,6 +892,7 @@ class View {
         user.handleMovement()
         user.handleCollision()
         sky.update()
+        world.update()
         this.renderer.render(this.scene, this.camera);
         requestAnimationFrame(this.animate.bind(this));
     }
