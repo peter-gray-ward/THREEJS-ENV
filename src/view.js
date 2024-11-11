@@ -161,7 +161,7 @@ class World {
         // Create a single geometry and material for each small blade in a comb
         const smallBladeGeometry = new THREE.PlaneGeometry(randomInRange(0.02, 0.03), randomInRange(0.4, 0.6)); // Smaller width
         const bladeMaterial = new THREE.MeshStandardMaterial({
-            color: GREENS[Math.floor(Math.random() * GREENS.length)],
+            color: new THREE.Color(...RGBGREENS[Math.floor(Math.random() * RGBGREENS.length)].map(rgb => rgb / 255 * 1.5)),
             side: THREE.DoubleSide
         });
 
