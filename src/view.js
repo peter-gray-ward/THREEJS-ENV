@@ -30,75 +30,90 @@ const RGBGREENS = [
 
 
 class World {
+    segments = t / 2
+    segmentSize = 1 / (t / 2)
     grass = []
+    heightMap = {}
+    startingPoint = new THREE.Vector3()
     constructor(scene) {
+        console.log(this.segmentSize)
         this.makeTerrain(0, 0, 0);
     }
+    getIJ(x, z) {
+
+        let i = Math.round(x / this.segmentSize);
+        let j = Math.round(z / this.segmentSize);
+        return { i, j }
+    }
+
     makeTerrain(x, y, z) {
         const perlinNoise = generatePerlinNoise(width, height, {
             octaveCount: 5,
             amplitude: 0.05,
             persistence: 0.1
         });
+
         const terrainGeometry = new THREE.BufferGeometry();
         const vertices = [];
         const indices = [];
         const uvs = [];
         const colors = [];
-        const segments = t / 2
-        const segmentSize = 1 / segments;
-        const noiseWidth = t * 2
-        const noiseHeight = t
+        const noiseWidth = t * 2;
+        const noiseHeight = t;
         const altitudeVariance = t / 5;
         const v0 = { x: x - t, y: y, z: z + t };
-        const v1 = { x: x + t, y: y, z: z + t }; 
-        const v2 = { x: x + t, y: y, z: z - t }; 
+        const v1 = { x: x + t, y: y, z: z + t };
+        const v2 = { x: x + t, y: y, z: z - t };
         const v3 = { x: x - t, y: y, z: z - t };
-        var startingPoint = undefined
 
-        for (let i = 0; i <= segments; i++) {
-            for (let j = 0; j <= segments; j++) {
-                const xRatio = i * segmentSize;
-                const yRatio = j * segmentSize;
+        const minX = Math.floor(Math.min(v0.x, v1.x, v2.x, v3.x));
+        const maxX = Math.ceil(Math.max(v0.x, v1.x, v2.x, v3.x));
+        const minZ = Math.floor(Math.min(v0.z, v1.z, v2.z, v3.z));
+        const maxZ = Math.ceil(Math.max(v0.z, v1.z, v2.z, v3.z));
 
-                uvs.push(xRatio, yRatio)
+        for (let xKey = minX; xKey <= maxX; xKey++) {
+            this.heightMap[xKey] = this.heightMap[xKey] || {};
+            for (let zKey = minZ; zKey <= maxZ; zKey++) {
+                // Map xKey and zKey to ratios in the range [0, 1] to sample Perlin noise
+                const xRatio = (xKey - minX) / (maxX - minX);
+                const zRatio = (zKey - minZ) / (maxZ - minZ);
 
-                let v = new THREE.Vector3(
-                    (1 - xRatio) * (1 - yRatio) * v0.x + xRatio * (1 - yRatio) * v1.x + xRatio * yRatio * v2.x + (1 - xRatio) * yRatio * v3.x,
-                    (1 - xRatio) * (1 - yRatio) * v0.y + xRatio * (1 - yRatio) * v1.y + xRatio * yRatio * v2.y + (1 - xRatio) * yRatio * v3.y,
-                    (1 - xRatio) * (1 - yRatio) * v0.z + xRatio * (1 - yRatio) * v1.z + xRatio * yRatio * v2.z + (1 - xRatio) * yRatio * v3.z
-                );
-
-                // Calculate noise coordinates
+                // Calculate Perlin noise indices
                 const noiseX = Math.floor(xRatio * (noiseWidth - 1));
-                const noiseY = Math.floor(yRatio * (noiseHeight - 1));
+                const noiseY = Math.floor(zRatio * (noiseHeight - 1));
                 const noiseIndex = noiseY * noiseWidth + noiseX;
+
+                // Sample altitude and apply variance
                 const variance = perlinNoise[noiseIndex] * altitudeVariance;
+                const yValue = y + variance;
 
-                v.y += variance;
+                // Populate heightMap with precision 1
+                this.heightMap[xKey][zKey] = yValue;
 
-                vertices.push(v.x, v.y, v.z);
+                // Create vertex and color for rendering
+                vertices.push(xKey, yValue, zKey);
+                uvs.push(xRatio, zRatio);
+                const color = RGBGREENS[Math.floor(Math.random() * RGBGREENS.length)];
+                colors.push(color[0] / 255, color[1] / 255, color[2] / 255);
 
-                const color = RGBGREENS[Math.floor(Math.random() * RGBGREENS.length)]
-                colors.push(color[0] / 255, color[1] / 255, color[2] / 255)
-
-                if (Math.random() < 0.007 && !startingPoint) {
-                    startingPoint = new THREE.Vector3(v.x, v.y + 10, v.z)
+                if (Math.random() < 0.007 && !this.startingPoint) {
+                    this.startingPoint = new THREE.Vector3(v.x, v.y + 10, v.z)
                 }
             }
         }
 
-        for (let i = 0; i < segments; i++) {
-            for (let j = 0; j < segments; j++) {
-                const a = i * (segments + 1) + j;
-                const b = i * (segments + 1) + (j + 1);
-                const c = (i + 1) * (segments + 1) + j;
-                const d = (i + 1) * (segments + 1) + (j + 1);
+        // Populate indices for rendering the terrain as triangles
+        for (let i = 0; i < maxX - minX; i++) {
+            for (let j = 0; j < maxZ - minZ; j++) {
+                const a = i * (maxZ - minZ + 1) + j;
+                const b = i * (maxZ - minZ + 1) + (j + 1);
+                const c = (i + 1) * (maxZ - minZ + 1) + j;
+                const d = (i + 1) * (maxZ - minZ + 1) + (j + 1);
 
                 indices.push(a, b, d);
                 indices.push(a, d, c);
 
-                const vertexPositionsA = [
+                 const vertexPositionsA = [
                     vertices[a * 3], vertices[a * 3 + 1], vertices[a * 3 + 2],
                     vertices[b * 3], vertices[b * 3 + 1], vertices[b * 3 + 2],
                     vertices[c * 3], vertices[c * 3 + 1], vertices[c * 3 + 2]
@@ -139,20 +154,20 @@ class World {
             vertexColors: true
         }));
 
-        terrain.receiveShadow = true
-        terrain.castShadow = true
+        terrain.receiveShadow = true;
+        terrain.castShadow = true;
 
         view.scene.add(terrain);
 
         terrain.bvh = new MeshBVH(terrainGeometry);
         terrainGeometry.boundsTree = terrain.bvh;
 
-        this.terrain = terrain
-        this.startingPoint = startingPoint
+        this.terrain = terrain;
     }
 
+
     makeBladesOfGrass(triangle) {
-        const bladeCount = 500
+        const bladeCount = 11
 
         const smallBladeGeometry = new THREE.PlaneGeometry(randomInRange(0.02, 0.03), randomInRange(0.4, 0.6));
         const bladeMaterial = new THREE.MeshStandardMaterial({
@@ -169,10 +184,7 @@ class World {
         normalQuaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), triangleNormal);
 
         for (let i = 0; i < bladeCount; i++) {
-            // Randomize the position within the triangle
             const bladePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c);
-
-            // Base position and rotation for the main blade
             const basePosition = new THREE.Vector3(bladePosition.x, bladePosition.y, bladePosition.z);
             const baseRotation = new THREE.Quaternion();
             const randomYRotation = new THREE.Quaternion().setFromEuler(
@@ -183,32 +195,23 @@ class World {
                 )
             );
 
-            // Combine the normal alignment and random rotation
             baseRotation.multiplyQuaternions(normalQuaternion, randomYRotation);
 
-            // Define spacing and angle offset for the small blades in the comb
-            const spacing = 0.02;  // Distance between each small blade in the comb
-            const angleOffset = 0.1; // Angle offset between each blade in radians
+            const spacing = 0.02;
+            const angleOffset = 0.1; 
 
-            // Apply transformations to each small blade in the comb
             for (let j = 0; j < 5; j++) {
                 const matrix = new THREE.Matrix4();
 
-                // Offset each small blade in the x-axis to create the "comb" effect
                 const offsetPosition = basePosition.clone().add(new THREE.Vector3((j - 2) * spacing, 0, 0));
 
-                // Apply a slight angle offset for each blade in the comb
                 const individualRotation = baseRotation.clone();
                 individualRotation.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, (j - 2) * angleOffset)));
 
-                // Apply the transformations to the matrix
                 matrix.compose(offsetPosition, individualRotation, new THREE.Vector3(1, 1, 1));
 
-                // Set the transformation matrix for this small blade instance
-                bladesOfGrass.setMatrixAt(i * 5 + j, matrix); // Each main blade has 5 small blades
+                bladesOfGrass.setMatrixAt(i * 5 + j, matrix);
             }
-
-            // Optionally store the original rotation if you need it for further bending or animations
             bladesOfGrass.userData[`blade_${i}`] = {
                 originRotation: baseRotation.clone()
             };
@@ -227,7 +230,7 @@ class World {
             const centerY = (this.grass[i].triangle.a.y + this.grass[i].triangle.b.y + this.grass[i].triangle.c.y) / 3;
             const centerZ = (this.grass[i].triangle.a.z + this.grass[i].triangle.b.z + this.grass[i].triangle.c.z) / 3;
             const pos = new THREE.Vector3(centerX, centerY, centerZ)
-            if (user.camera.position.distanceTo(pos) < t / 3) {
+            if (user.camera.position.distanceTo(pos) < t / 5) {
                 view.scene.add(this.grass[i])
             } else if (this.grass[i].parent) {
                 view.scene.remove(this.grass[i])
@@ -567,14 +570,19 @@ class $ky {
 }
 
 class User {
+    width = 1.5
+    height = 5.11
+    depth = 1
     aS = .5
     wS = .5
     sS = .5
     dS = .5
     tS = .2
+    shift = false
     falling = true
     jumpVelocity = 1
     gravityVelocity = -0.5
+    lastKnownPosition = undefined
 
     constructor() {
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
@@ -594,7 +602,7 @@ class User {
             case 'S': this.s = true; break;
             case 'D': this.d = true; break;
             case ' ': this.startJumping(); break;
-            case 'SHIFT': this.run = true; break;
+            case 'SHIFT': this.shift = true; break;
             case 'META': this.meta = true; break;
             case 'ARROWUP': this.ArrowUp = true; break;
             case 'ARROWDOWN': this.ArrowDown = true; break;
@@ -612,7 +620,7 @@ class User {
             case 'S': this.s = false; break;
             case 'D': this.d = false; break;
             case ' ': this.space = false; break;
-            case 'SHIFT': this.run = false; break;
+            case 'SHIFT': this.shift = false; break;
             case 'META': this.meta = false; break;
             case 'ARROWUP': this.ArrowUp = false; break;
             case 'ARROWDOWN': this.ArrowDown = false; break;
@@ -631,63 +639,63 @@ class User {
     handleMovement() {
         this.surround()
 
-        if (this.jumping) {
-            this.camera.position.y += this.jumpVelocity;
-            this.jumpVelocity -= 0.05;
+        var downMovement = new THREE.Vector3(0, 0, 0)
 
-            if (this.jumpVelocity <= 0.2) {
-                this.jumping = false;
-            }
-        }
+        // if (this.jumping) {
+        //     this.camera.position.y += this.jumpVelocity;
+        //     this.jumpVelocity -= 0.05;
+        //     console.log(this.jumpVelocity)
+        // }
 
-        if (this.falling) {
-            this.camera.position.y += this.gravityVelocity
-        }
+        // if (this.falling) {
+        //     downMovement.y = this.gravityVelocity
+        // }
 
 
         var combinedMovement = new THREE.Vector3();
-        if (this.w || this.a || this.s || this.d) {
-            var direction = new THREE.Vector3();
-            var right = new THREE.Vector3();
-            var forwardMovement = new THREE.Vector3();
-            var rightMovement = new THREE.Vector3();
-            var combinedMovement = new THREE.Vector3();  // To store the final movement result
 
+       if (this.w || this.a || this.s || this.d) {
+            // Step size or speed of movement
+            const stepSize = 1;
+
+            // Get the direction the user is facing in world space
+            let direction = new THREE.Vector3();
+            this.camera.getWorldDirection(direction);
+
+            // Adjust direction based on key pressed
             if (this.w) {
-                this.camera.getWorldDirection(direction);
-                direction.y = 0;  // Ignore vertical movement
-                direction.normalize();  // Ensure consistent vector length
-                forwardMovement.add(direction.multiplyScalar(this.wS));  // Move forward by this.wS
+                // Forward (no change needed)
+                direction.multiplyScalar(stepSize);
+            } else if (this.s) {
+                // Backward
+                direction.multiplyScalar(-stepSize);
+            } else if (this.a) {
+                // Left (rotate 90 degrees counter-clockwise from forward)
+                direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2).multiplyScalar(stepSize);
+            } else if (this.d) {
+                // Right (rotate 90 degrees clockwise from forward)
+                direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2).multiplyScalar(stepSize);
             }
 
-            if (this.s) {
-                this.camera.getWorldDirection(direction);
-                direction.y = 0;
-                direction.normalize();  // Normalize for consistent movement
-                forwardMovement.sub(direction.multiplyScalar(this.sS));  // Move backward by this.sS
+            // Calculate the new position by adding the scaled direction to the current position
+            let newPosition = new THREE.Vector3().copy(this.camera.position).add(direction);
+
+            // Ensure the new position is within the bounds of the height map
+            let roundedX = Math.round(newPosition.x);
+            let roundedZ = Math.round(newPosition.z);
+
+            // Check if the new position is valid in the heightMap
+            if (world.heightMap[roundedX] && world.heightMap[roundedX][roundedZ] !== undefined) {
+                // Adjust the new position to the terrain height
+                newPosition.y = world.heightMap[roundedX][roundedZ] + user.height / 2;
+
+                // Move the user to the new position
+                this.camera.position.set(newPosition.x, newPosition.y, newPosition.z);
+            } else {
+                console.log("New position is out of bounds or invalid.");
             }
-
-            if (this.a) {
-                this.camera.getWorldDirection(direction);
-                direction.y = 0;  // Keep movement in the horizontal plane
-                right.crossVectors(this.camera.up, direction).normalize();  // Calculate the right vector
-                rightMovement.add(right.multiplyScalar(this.aS));  // Move right
-            } 
-
-            if (this.d) {
-                this.camera.getWorldDirection(direction);
-                direction.y = 0;  // Keep movement in the horizontal plane
-                right.crossVectors(this.camera.up, direction).normalize();  // Calculate the right vector
-                rightMovement.sub(right.multiplyScalar(this.dS)); 
-            }
-
-
-            combinedMovement.add(forwardMovement).add(rightMovement);
-
-            this.camera.position.add(combinedMovement);
-
-
         }
+
 
         // Handle rotation
         if (this.ArrowUp || this.ArrowDown) {
@@ -715,6 +723,24 @@ class User {
         }
 
         this.camera.position.add(combinedMovement);
+
+        try {
+            var xkey = Math.round(this.camera.position.x)
+            var zkey = Math.round(this.camera.position.z)
+            var y = world.heightMap[xkey][zkey] + user.height / 2
+            if (Number.isNaN(y) == false) {
+                this.camera.position.y = y
+            } else {
+                while (Number.isNaN(y)) {
+                    xkey++
+                    y = world.heightMap[xkey][zkey] + user.height / 2
+                }
+                this.camera.position.y = y
+            }
+        } catch {
+            
+        }
+        
     }
 
     init(scene) {
@@ -777,7 +803,23 @@ class User {
 
     surround() {
         this.grid.position.copy(this.camera.position)
-        
+        view.renderer.render(view.scene, this.camera);
+
+
+        if (this.shift && this.camera.position !== this.lastKnownPosition) {
+            this.lastKnownPosition = new THREE.Vector3(this.camera.position.x, this.camera.position.y, this.camera.position.z)
+            const cameraBox = new THREE.Mesh(
+                new THREE.BoxGeometry(1.5, 5.11, 1),
+                new THREE.MeshBasicMaterial({
+                    wireframe: false,
+                    color: this.falling ? 'red' : 'blue',
+                    transparent: true,
+                    opacity: 0.5
+                })
+            );
+            cameraBox.position.copy(this.lastKnownPosition)
+            view.scene.add(cameraBox)
+        }
     }
 
 
@@ -816,7 +858,7 @@ class User {
                 var intersectionPoint = intersects[0].point;
                 const intersectionDistance = intersects[0].distance
                 intersectionPoint.y += 3
-                if (intersectionDistance < 2 && direction.y == 1) {
+                if (intersectionDistance < 1.5 && direction.y == 1) {
                     this.camera.position.copy(intersectionPoint)
                     this.falling = false
                 }                
@@ -827,7 +869,6 @@ class User {
         if (!hasIntersection) {
             this.falling = true
         }
-
     }
 }
 
@@ -864,7 +905,7 @@ class View {
         user.handleCollision()
         sky.update()
         world.update()
-        this.renderer.render(this.scene, this.camera);
+        this.renderer.render(this.scene, user.camera);
         requestAnimationFrame(this.animate.bind(this));
     }
 }
