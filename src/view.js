@@ -72,12 +72,9 @@ class World {
                 // Calculate noise coordinates
                 const noiseX = Math.floor(xRatio * (noiseWidth - 1));
                 const noiseY = Math.floor(yRatio * (noiseHeight - 1));
-                
-                // Calculate index in the perlinNoise array
                 const noiseIndex = noiseY * noiseWidth + noiseX;
-                
-                // Apply altitude variance based on the noise
                 const variance = perlinNoise[noiseIndex] * altitudeVariance;
+
                 v.y += variance;
 
                 vertices.push(v.x, v.y, v.z);
@@ -155,27 +152,22 @@ class World {
     }
 
     makeBladesOfGrass(triangle) {
-        // Number of main grass blades (each will be a "comb" of smaller blades)
-        const bladeCount = 500//window.innerWidth < 800 ? 100 : 300;
+        const bladeCount = 500
 
-        // Create a single geometry and material for each small blade in a comb
-        const smallBladeGeometry = new THREE.PlaneGeometry(randomInRange(0.02, 0.03), randomInRange(0.4, 0.6)); // Smaller width
+        const smallBladeGeometry = new THREE.PlaneGeometry(randomInRange(0.02, 0.03), randomInRange(0.4, 0.6));
         const bladeMaterial = new THREE.MeshStandardMaterial({
             color: new THREE.Color(...RGBGREENS[Math.floor(Math.random() * RGBGREENS.length)].map(rgb => rgb / 255 * 1.5)),
             side: THREE.DoubleSide
         });
 
-        // Create the instanced mesh for the entire group of comb-like blades
-        const bladesOfGrass = new THREE.InstancedMesh(smallBladeGeometry, bladeMaterial, bladeCount * 5); // 5 small blades per main blade
+        const bladesOfGrass = new THREE.InstancedMesh(smallBladeGeometry, bladeMaterial, bladeCount * 5);
         bladesOfGrass.receiveShadow = true;
 
-        // Calculate triangle normal for alignment
         const triangleNormal = new THREE.Vector3();
         triangle.getNormal(triangleNormal);
         const normalQuaternion = new THREE.Quaternion();
         normalQuaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), triangleNormal);
 
-        // Apply random transformations to each group (each comb of 5 small blades)
         for (let i = 0; i < bladeCount; i++) {
             // Randomize the position within the triangle
             const bladePosition = randomPointOnTriangle(triangle.a, triangle.b, triangle.c);
@@ -222,13 +214,10 @@ class World {
             };
         }
 
-        // Update the instance matrix to apply transformations
         bladesOfGrass.instanceMatrix.needsUpdate = true;
 
-        // Store the triangle associated with this instanced mesh for future reference
         bladesOfGrass.triangle = triangle;
 
-        // Add the instanced mesh to your array or scene
         this.grass.push(bladesOfGrass);
     }
 
@@ -519,12 +508,9 @@ class $ky {
                 this.sky[0].material.opacity = 1
             }
 
-            // Calculate angular position in the x direction
-            let theta = Math.atan2(y, x); // Angle of the point in the horizontal plane
-            let sunsetAngle = Math.PI / 8; // Define the center angle for sunset/sunrise effect
-            let edgeFalloff = sunsetAngle * 1.5; // Define a wider range for gradual blending
-
-            // Define base sky and horizon colors based on transitionFactor
+            let theta = Math.atan2(y, x);
+            let sunsetAngle = Math.PI / 8; 
+            let edgeFalloff = sunsetAngle * 1.5;
             let skyColor, horizonColor;
             if (transitionFactor === 0) {
                 skyColor = new THREE.Color().lerpColors(skyDay, skyDawnDusk, transitionFactor);
@@ -537,11 +523,8 @@ class $ky {
                 horizonColor = new THREE.Color().lerpColors(skyNightHorizon, skyNightHorizon, transitionFactor - 1);
             }
 
-            // Horizon effect: blend between horizon and sky color based on height
             let horizonFactor = Math.pow(Math.abs(y / this.sceneRadius), 0.5);
             let baseColor = new THREE.Color().lerpColors(horizonColor, skyColor, horizonFactor);
-
-            // Determine if vertex is within the sunset zone with a gradual transition
             let thetaOffset = Math.abs(theta) - sunsetAngle;
             let isNearSunsetZone = transitionFactor === 1 && Math.abs(theta) < edgeFalloff;
 
@@ -549,7 +532,6 @@ class $ky {
                 ? Math.max(0, 1 - (thetaOffset / (edgeFalloff - sunsetAngle)))
                 : 0;
 
-            // Blend between sunset color and base color within the sunset zone
             let sunColors = transitionFactor == 1 ? [
                 new THREE.Color(0xffc099),  // Soft yellow
                 baseColor
@@ -565,35 +547,21 @@ class $ky {
             let nextColorIndex = Math.min(colorIndex + 1, sunColors.length - 1);
             let blendFactor = distanceFactor * (sunColors.length - 1) - colorIndex;
 
-            let positionFactor = (Math.sin(x * 0.1 + y * 0.1 + z * 0.1) + 1) / 2; // Position-based blending factor (0 to 1)
-            // let colorIndex = Math.abs(Math.floor((x + y + z) * 0.1) % sunColors.length);
-            // let nextColorIndex = (colorIndex + 1) % sunColors.length;
+            let positionFactor = (Math.sin(x * 0.1 + y * 0.1 + z * 0.1) + 1) / 2; 
             let sunEffectColor = new THREE.Color(sunColors[Math.floor(Math.random() * sunColors.length)])
             let vertexColor = new THREE.Color().lerpColors(sunColors[colorIndex], sunColors[nextColorIndex], blendFactor);
 
-            // Additional blending with white if the vertex is very close to the sun
             let distanceToSun = new THREE.Vector3(x, y, z).distanceTo(this.sun.position);
             let dist = transitionFactor == 1 ? twilightspan : 80
             vertexColor = distanceToSun < dist
                 ? new THREE.Color().lerpColors(transitionFactor == 1 ? vertexColor : baseColor, new THREE.Color(0xffffff), 1 - (distanceToSun / dist))
                 : baseColor;
 
-            // Set the color for this vertex in the color attribute
             colorAttribute.setXYZ(i, vertexColor.r, vertexColor.g, vertexColor.b);
         }
 
-        // Update the color attribute to apply changes
         colorAttribute.needsUpdate = true;
 
-        // if (this.time > Math.PI + Math.PI / 16 && this.time < Math.PI * 2 - Math.PI / 16) {
-        //     this.sun.intensity = 0
-        //     castle.lamplight.intensity = 15
-        // } else {
-        //     this.sun.intensity = 3
-        //     castle.lamplight.intensity = 0
-        // }
-
-        // Increment time for next update
         this.time += 0.0001;
     }
 }
@@ -605,6 +573,8 @@ class User {
     dS = .5
     tS = .2
     falling = true
+    jumpVelocity = 1
+    gravityVelocity = -0.5
 
     constructor() {
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
@@ -655,6 +625,7 @@ class User {
     startJumping() {
         this.jumping = true;
         this.jumpVelocity = 1
+        this.falling = true;
     }
 
     handleMovement() {
@@ -662,17 +633,17 @@ class User {
 
         if (this.jumping) {
             this.camera.position.y += this.jumpVelocity;
-            this.jumpVelocity -= 0.1;
+            this.jumpVelocity -= 0.05;
 
-            if (this.jumpVelocity <= 0) {
+            if (this.jumpVelocity <= 0.2) {
                 this.jumping = false;
-                this.falling = true;
             }
         }
 
         if (this.falling) {
-            this.camera.position.y += -0.5
+            this.camera.position.y += this.gravityVelocity
         }
+
 
         var combinedMovement = new THREE.Vector3();
         if (this.w || this.a || this.s || this.d) {
