@@ -21,7 +21,6 @@
 		}
 
 		* {
-			cursor: none;
 			box-sizing:	border-box;
 			margin: 0;
 			--electric-blue: #7DF9FF;
@@ -326,9 +325,18 @@
 			}
 		}
 
+		#loading {
+			align-self: center;
+			justify-self: center;
+			color: white;
+			font-size: 10vw;
+			font-family: Andale Mono;
+			text-align: justify;
+		}
 		</style>
 </head>
 <body>
+	<div id="loading">Loading . . .</div>
 	<button class="button" id="walk">walk</button>
 	<button class="button" id="not_walk">stop</button>
 	<button class="button" id="jump">jump</button>
