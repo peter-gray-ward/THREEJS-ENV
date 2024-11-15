@@ -5,8 +5,12 @@ import { Anima } from '/lib/Anima.js'
 import { SUBTRACTION, Brush, Evaluator } from '/lib/three-bvh-csg.js';
 import ViewModel from "/src/view-model.js";
 import { Reflector } from '/lib/Reflector.js'
+import { TextGeometry } from '/lib/TextGeometry.js'
+import { FontLoader } from '/lib/FontLoader.js'
 
 window.anima = new Anima(GLTFLoader, '/models/Xbot.glb')
+
+window.dev = false
 
 
 var debounced_event = undefined
@@ -37,6 +41,70 @@ window.OAKGREENS = ['#6f9e3e', '#4d7b26', '#86b454'];      // Oak colors
 Array.prototype.mingle = function(B) {
     return Array.from(new Set([...this, ...B]))
 }
+
+function createSign(mesh, position, fontSize = 0.1, offset = 0.5) {
+    let text = `${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}`
+    const fontLoader = new FontLoader();
+
+    // Sign dimensions
+    const signWidth = 1;
+    const signHeight = 0.5;
+    const signDepth = 0.05;
+
+    // Sign base (rectangular plane)
+    const signBase = new THREE.Mesh(
+        new THREE.BoxGeometry(signWidth, signHeight, signDepth),
+        new THREE.MeshBasicMaterial({
+            color: 'white'
+        })
+    );
+
+    // Position sign above the mesh
+    const boundingBox = new THREE.Box3().setFromObject(mesh);
+    const meshHeight = boundingBox.max.y - boundingBox.min.y;
+
+    signBase.position.set(
+        position.x,
+        position.y + meshHeight + offset,
+        position.z
+    );
+
+    // Add text
+    fontLoader.load('/lib/helvetica.json', (font) => {
+        const textGeometry = new TextGeometry(text, {
+            font: font,
+            size: fontSize,
+            height: 0.02,
+        });
+
+        const textMaterial = new THREE.MeshBasicMaterial({
+            color: 'black',
+        });
+
+        const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+
+        // Center the text on the sign
+        textGeometry.computeBoundingBox();
+        const textWidth = textGeometry.boundingBox.max.x - textGeometry.boundingBox.min.x;
+        const textHeight = textGeometry.boundingBox.max.y - textGeometry.boundingBox.min.y;
+
+        textMesh.position.set(
+            -textWidth / 2,
+            -textHeight / 2,
+            signDepth / 2 + 0.01 // Slightly offset from the sign base
+        );
+
+        signBase.add(textMesh); // Attach text to the sign base
+    });
+
+    return signBase;
+}
+
+// Usage Example:
+// Assuming `mesh` is your 3D object
+// const sign = createSign(mesh, mesh.position, `Position: (${mesh.position.x.toFixed(2)}, ${mesh.position.y.toFixed(2)}, ${mesh.position.z.toFixed(2)})`);
+// scene.add(sign);
+
 
 // Usage example
 for (var str of ['CYPRESSGREENS','PINEGREENS', 'OAKGREENS']) {
@@ -139,20 +207,53 @@ const alley = {
 
 
 
-class RailingCurve extends THREE.Curve {
+class WaveCurve extends THREE.Curve {
     constructor(frequency = Math.PI, amplitude) {
-        super()
-        this.frequency = frequency
-        this.amplitude = amplitude
+        super();
+        this.frequency = frequency;
+        this.amplitude = amplitude;
     }
+    
     getPoint(t) {
-        const z = t * 2
-        const y = Math.sin(this.frequency * z) * this.amplitude
-        return new THREE.Vector3(0, y, z)
+        // Create a normalized sine wave curve (0 to 1) along x-axis
+        const x = t; // t goes from 0 to 1
+        const y = Math.sin(this.frequency * t * Math.PI * 2) * this.amplitude;
+        const z = 0; // Default z-axis movement
+        return new THREE.Vector3(x, y, z);
     }
 }
 
-function RailingPost(start, end, scale = 0.01, ball, justPost = false) {
+function RailingCurve(start, end, dir) {
+    const dist = start.distanceTo(end);
+
+    // Create a normalized wave curve (0 to 1) that will be scaled to fit the distance
+    const waveCurve = new WaveCurve(Math.PI, 0.1); // Adjust amplitude as needed
+
+    // Create the tube geometry from the wave curve
+    const tubeGeometry = new THREE.TubeGeometry(waveCurve, 64, .02, 8);
+    const tubeMaterial = new THREE.MeshStandardMaterial({
+        map: TRUNKTEXTURE
+    });
+
+    // Create the tube mesh
+    const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
+
+    // Scale the tube mesh along the x-axis to match the distance between start and end
+    tubeMesh.scale.set(dist, 1, 1);
+
+    // Determine the direction vector and apply rotation to align tube mesh between start and end
+    const direction = new THREE.Vector3().subVectors(end, start).normalize();
+    const axis = new THREE.Vector3(1, 0, 0); // Default curve direction along x-axis
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(axis, direction);
+    tubeMesh.quaternion.copy(quaternion);
+
+    // Position the tube mesh at the start point
+    tubeMesh.position.copy(start);
+
+    return tubeMesh;
+}
+
+function RailingPost(start, end, scale = 0.01, ball, dir, nextY) {
 
     var post = new THREE.Mesh(
         new THREE.BoxGeometry(0.075, 0.75, 0.075),
@@ -208,9 +309,11 @@ function RailingPost(start, end, scale = 0.01, ball, justPost = false) {
     var postBall = new THREE.Mesh(
         new THREE.SphereGeometry(.075, 11, 11),
         new THREE.MeshStandardMaterial({
-            color: 'silver',
+            color: 'gold',
             roughness: 0,
-            metalness: 1
+            metalness: 1,
+            transparent: true,
+            opacity: 0.8
         }))
     postBall.castShadow = true
     postBall.receiveShadow = true
@@ -218,17 +321,19 @@ function RailingPost(start, end, scale = 0.01, ball, justPost = false) {
 
     var amplitude = 0.1
 
-    var railingCurve = new RailingCurve(11, amplitude)
+    // var railingCurve = new RailingCurve(11, amplitude, dir, nextY)
 
-    var postRailing = new THREE.Mesh(
-        new THREE.TubeGeometry(railingCurve, Math.floor(randomInRange(8, 50)), .01),
-        new THREE.MeshStandardMaterial({ 
-            map: new THREE.TextureLoader().load("/images/bark-5.jpg")
-         })
-    )
-    postRailing.position.y = 0.75; // Place on top of the post
+    // var postRailing = new THREE.Mesh(
+    //     new THREE.TubeGeometry(railingCurve, Math.floor(randomInRange(8, 50)), .01),
+    //     new THREE.MeshStandardMaterial({ 
+    //         color: 'gold',
+    //         metalness: 1,
+    //         roughness: 0
+    //      })
+    // )
+    // postRailing.position.y = 0.75; // Place on top of the post
 
-    // Group the parts together
+    // // Group the parts together
     var group = new THREE.Group();
     if (ball) {
         group.add(post);
@@ -236,9 +341,9 @@ function RailingPost(start, end, scale = 0.01, ball, justPost = false) {
         group.add(postCap2)
         group.add(postBall)
     }
-    if (!justPost) {
-        group.add(postRailing)
-    }
+    // if (!justPost) {
+    //     group.add(postRailing)
+    // }
 
 
     // Set the overall position of the group
@@ -785,7 +890,7 @@ class $ky {
             console.log("thi$ i$...$ky.$tarparis!")
         }
     }
-    time = .5
+    time = Math.PI - 0.2
     constructor(user) {
         this.counter = 0;
         this.user = user;
@@ -1523,6 +1628,45 @@ class Castle {
         scene.add(tilePlane)
 
         this.createABoardwalk(boardwalk, boardwalkTexture)
+
+        // boardwalk/cove border
+        var x = boardwalk.center.x + boardwalk.width / 2;
+        var y = boardwalk.center.y + 0.75 / 2 - boardwalk.height / 2
+        var z = boardwalk.center.z - (boardwalk.depth / 2)
+        var endZ =  boardwalk.center.z + boardwalk.depth / 2
+
+        var postPoints = []
+
+        while (z < endZ) {
+
+            var rp = RailingPost(
+                new THREE.Vector3(x, y - 0.2, z), 
+                new THREE.Vector3(x, y - 0.2, z + 2),
+                0.01, 1, 'z'
+            )
+            var ppp = rp.position.clone()
+            ppp.y += 0.65
+            postPoints.push(ppp)
+            scene.add(rp)
+            this.objects.push(rp)
+
+            z += 2
+        }
+
+        for (var i = 0; i < postPoints.length - 1; i++) {
+            console.log(postPoints[i].z)
+            if (postPoints[i].z >= -11 || postPoints[i].z < -13) {
+                for (var j = 0; j < 3; j++) {
+                    let start = postPoints[i].clone()
+                    let end = postPoints[i + 1].clone()
+                    start.y -= 0.2 * j
+                    end.y -= 0.2 * j
+                    var railing = new RailingCurve(start, end, 'z')
+                    scene.add(railing)
+                }
+            }
+        }
+
         this.createABoardwalk(boardwalk2, boardwalk2Texture)
         this.createABoardwalk(alley, alleyTexture)
 
@@ -1537,52 +1681,106 @@ class Castle {
 
         this.createRocks(dock)
 
+        // Constants for steps
+        const stepWidth = 0.3;
+        const stepHeight = 0.15;
+        const stepDepth = 2;
+        const dockStepDepth = house.width * 0.4;
+        const dockWidth = (landscape.field.width / 2) - (house.width / 2);
 
-        var dockStepDepth = house.width * .4
-        var dockWidth = (landscape.field.width / 2) - (house.width / 2)
-        var stepWidth = .3
-        var stepHeight = .15
-        var stepY = boardwalk.center.y - (stepHeight / 2)
-        var stepX = boardwalk.center.x + (boardwalk.width / 2)
-        var stepZ = boardwalk.center.z - (boardwalk.depth / 2.5)
-        
-        var stepCount = Math.abs(boardwalk.center.y - dock.y) / stepHeight
-        var turning = false
-        for (var i = 0; i < stepCount; i++) {
-            var stepGeo = new THREE.BoxGeometry(stepWidth, stepHeight, 2)
-            if (i > (stepCount / 2) && turning) {
-                stepGeo.rotateY(Math.PI / 2)
+        let stepY = boardwalk.center.y - stepHeight / 2;
+        let stepX = boardwalk.center.x + boardwalk.width / 2;
+        let stepZ = boardwalk.center.z - boardwalk.depth / 2.5;
+
+        // Calculate step count
+        const stepCount = Math.ceil(Math.abs(boardwalk.center.y - dock.y) / stepHeight);
+        postPoints = []
+        // Create steps and add rails
+        let turning = false;
+        for (let i = 0; i < stepCount; i++) {
+            // Create step
+            const stepGeo = new THREE.BoxGeometry(stepWidth, stepHeight, stepDepth);
+            if (i > stepCount / 2 && turning) {
+                stepGeo.rotateY(Math.PI / 2);
             }
-            var step = new THREE.Mesh(stepGeo, new THREE.MeshStandardMaterial({
-                map: steptexture,
-                side: THREE.DoubleSide
-            }))
-            step.position.set(stepX, stepY, stepZ)
-            
-            if (i > (stepCount / 2)) {
+
+            const step = new THREE.Mesh(
+                stepGeo,
+                new THREE.MeshStandardMaterial({
+                    map: steptexture,
+                    side: THREE.DoubleSide,
+                })
+            );
+            step.position.set(stepX, stepY, stepZ);
+
+            scene.add(step);
+            this.parts.push(step);
+
+            // Create turn platform
+            if (i > stepCount / 2) {
                 if (!turning) {
-                    turning = true
-                    var stepTurnPlane = new THREE.Mesh(
+                    turning = true;
+
+                    const stepTurnPlane = new THREE.Mesh(
                         new THREE.BoxGeometry(2, 0.15, 2),
                         new THREE.MeshStandardMaterial({
                             map: steptexture,
-                            side: THREE.DoubleSide
+                            side: THREE.DoubleSide,
                         })
-                    )
-                    stepTurnPlane.position.set(stepX + 1, stepY, stepZ)
-                    scene.add(stepTurnPlane)
-                    this.parts.push(stepTurnPlane)
-                    stepZ += .9
-                    stepX += 1
+                    );
+                    stepTurnPlane.geometry.computeBoundingBox();
+                    stepTurnPlane.position.set(stepX + 1, stepY, stepZ);
+                    scene.add(stepTurnPlane);
+
+                    // const sign = createSign(stepTurnPlane, stepTurnPlane.position);
+                    // scene.add(sign);
+                    this.parts.push(stepTurnPlane);
+
+                    stepZ += 0.9;
+                    stepX += 1;
                 }
-                stepZ += stepHeight
+                stepZ += stepHeight;
             } else {
-                stepX += stepWidth
+                stepX += stepWidth;
             }
 
-            stepY -= stepHeight
-            scene.add(step)
-            this.parts.push(step)
+            stepY -= stepHeight;
+
+            if (!turning && i % 5 == 0){ 
+                [stepDepth / 2, -stepDepth / 2].forEach((inc, k) => {
+                    var widthOffset = 0//k == 0 ? -.1 : .1
+                    // Add rails along each step
+                    const railingStart = new THREE.Vector3(stepX - stepWidth, stepY  + .75 / 2, stepZ + inc + widthOffset);
+                    const railingEnd = new THREE.Vector3(stepX, stepY  + .75 / 2, stepZ + inc + widthOffset);
+
+                    const rp = RailingPost(
+                        railingStart,
+                        railingEnd,
+                        0.01, // Scale
+                        1,    // Ball option
+                        false, // Just post
+                        'x'  // Direction
+                    );
+                    var rpPos = rp.position.clone()
+                    rpPos.y += 0.65
+                    postPoints.push(rpPos)
+                    if (i) {
+                        scene.add(rp);
+                        this.parts.push(rp);
+                    }
+                })
+            }
+        }
+        for (var i = 0; i < postPoints.length - 2; i++) {
+            for (var j = 0; j < 3; j++) {
+                let start = postPoints[i].clone()
+                let end = postPoints[i + 2].clone()
+                start.y -= 0.2 * j
+                end.y -= 0.2 * j
+                var railing = new RailingCurve(start, end, 'x')
+                railing.rotation.z = -0.45
+                scene.add(railing)
+            }
         }
     }
 
@@ -1661,44 +1859,6 @@ class Castle {
         this.parts.push(tilePlane)
         tilePlane.frustrumCulled = true
         scene.add(tilePlane)
-
-
-        var x = bw.center.x + bw.width / 2;
-        var y = bw.center.y + 0.75 / 2 - bw.height / 2
-        var z = bw.center.z - (bw.depth / 2.5) + 1
-        var endZ =  bw.center.z + bw.depth / 2
-        while (z < endZ) {
-            var justPost = false
-            if (Math.abs(endZ - z) <= 3) justPost = true
-
-            var rp = RailingPost(
-                new THREE.Vector3(x, y - 0.2, z), 
-                new THREE.Vector3(x, y - 0.2, z + 2),
-                0.01, 1, justPost
-            )
-            scene.add(rp)
-            this.objects.push(rp)
-
-            rp = RailingPost(
-                new THREE.Vector3(x, y - 0.4, z), 
-                new THREE.Vector3(x, y - 0.2, z + 2),
-                0.01, 0, justPost
-            )
-            scene.add(rp)
-
-            this.objects.push(rp)
-
-            rp = RailingPost(
-                new THREE.Vector3(x, y - 0.6, z), 
-                new THREE.Vector3(x, y - 0.2, z + 2),
-                0.01, 0, justPost
-            )
-            scene.add(rp)
-
-            this.objects.push(rp)
-
-            z += 2
-        }
     }
 
     buildElevator() {
@@ -2827,14 +2987,18 @@ class Terrain {
 
         // add  cypress trees
         // x: 21.334397056875094, y: 11, z: -15.511049750710187
-        for (let cx = 21; cx > 0 - landscape.field.width / 2; cx -= 5) {
-            var cypressTree = this.createCypress(cx, 9, -15.5, 'cypress')
-            this.trees.push(cypressTree)
-        }
 
-        for (let cx = 21; cx > 0 - landscape.field.width / 2; cx -= 5) {
-            var cypressTree = this.createCypress(cx, 9, 16, 'cypress')
-            this.trees.push(cypressTree)
+        if (!dev) {
+        
+            for (let cx = 21; cx > 0 - landscape.field.width / 2; cx -= 3) {
+                var cypressTree = this.createCypress(cx, 9, -15.5, 'cypress')
+                this.trees.push(cypressTree)
+            }
+
+            for (let cx = 21; cx > 0 - landscape.field.width / 2; cx -= 3) {
+                var cypressTree = this.createCypress(cx, 9, 16, 'cypress')
+                this.trees.push(cypressTree)
+            }
         }
         
 
@@ -2975,7 +3139,7 @@ class Terrain {
 
             if (HOUSE || (!COVE && !CLIFF && !HOUSE && !DOCK && !BOARDWALK)) {
                 // Number of main grass blades (each will be a "comb" of smaller blades)
-                const bladeCount = window.innerWidth < 800 ? 50 : 300;
+                const bladeCount = dev ? 0 : window.innerWidth < 800 ? 50 : 300;
 
                 // Create a single geometry and material for each small blade in a comb
                 const smallBladeGeometry = new THREE.PlaneGeometry(randomInRange(0.02, 0.03), randomInRange(0.4, 0.6)); // Smaller width
