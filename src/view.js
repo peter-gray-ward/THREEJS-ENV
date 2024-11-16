@@ -2780,12 +2780,12 @@ class Terrain {
 
         if (!dev) {
         
-            for (let cx = 21; cx > 0 - landscape.field.width / 2; cx -= 13) {
+            for (let cx = 21; cx > 0 - landscape.field.width / 2; cx -= 3) {
                 var cypressTree = this.createCypress(cx, 9, -15.5, 'cypress')
                 this.trees.push(cypressTree)
             }
 
-            for (let cx = 21; cx > 0 - landscape.field.width / 2; cx -= 13) {
+            for (let cx = 21; cx > 0 - landscape.field.width / 2; cx -= 3) {
                 var cypressTree = this.createCypress(cx, 9, 16, 'cypress')
                 this.trees.push(cypressTree)
             }
