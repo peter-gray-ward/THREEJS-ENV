@@ -36,7 +36,11 @@ window.SPACECOLORS = ['#0c2338', '#2e3d53', '#2b425c', '#708ca8']
 window.CYPRESSGREENS = ['#93b449', '#6b881c', '#a9cc4e']; // Cypress colors
 window.PINEGREENS = ['#4e8b2d', '#3b5e24', '#629441'];     // Pine colors
 window.OAKGREENS = ['#6f9e3e', '#4d7b26', '#86b454'];      // Oak colors
-
+window.posttexture = new THREE.TextureLoader().load("/images/waternormals.jpg", texture => {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(1, 3);
+})
 
 Array.prototype.mingle = function(B) {
     return Array.from(new Set([...this, ...B]))
@@ -231,8 +235,13 @@ function RailingCurve(start, end, dir) {
 
     // Create the tube geometry from the wave curve
     const tubeGeometry = new THREE.TubeGeometry(waveCurve, 64, .02, 8);
+    tubeGeometry.computeVertexNormals()
+    tubeGeometry.computeBoundingBox()
     const tubeMaterial = new THREE.MeshStandardMaterial({
-        map: TRUNKTEXTURE
+        map: posttexture,
+        metalness: 1,
+        roughness: 0,
+        side: THREE.DoubleSide
     });
 
     // Create the tube mesh
@@ -246,9 +255,9 @@ function RailingCurve(start, end, dir) {
     const axis = new THREE.Vector3(1, 0, 0); // Default curve direction along x-axis
     const quaternion = new THREE.Quaternion().setFromUnitVectors(axis, direction);
     tubeMesh.quaternion.copy(quaternion);
-
-    // Position the tube mesh at the start point
     tubeMesh.position.copy(start);
+    tubeMesh.geometry.computeBoundingBox();
+    tubeMesh.geometry.boundingBox.applyMatrix4(tubeMesh.matrixWorld);
 
     return tubeMesh;
 }
@@ -258,9 +267,12 @@ function RailingPost(start, end, scale = 0.01, ball, dir, nextY) {
     var post = new THREE.Mesh(
         new THREE.BoxGeometry(0.075, 0.75, 0.075),
         new THREE.MeshStandardMaterial({ 
-            map: CONCRETE,
+            map: new THREE.TextureLoader().load("/images/waternormals.jpg"),
+            side: THREE.DoubleSide
         })
     );
+    post.castShadow = true
+    post.receiveShadow = true
     post.position.y = 0.75 / 2;
 
     var postCapShape = new THREE.Shape();
@@ -280,9 +292,7 @@ function RailingPost(start, end, scale = 0.01, ball, dir, nextY) {
             bevelSegments: 11
         }),
         new THREE.MeshStandardMaterial({ 
-            color: 'red',
-            roughness: 0,
-            metalness: 1
+            map: posttexture
         })
     );
     postCap.rotation.x = Math.PI / 2
@@ -298,9 +308,7 @@ function RailingPost(start, end, scale = 0.01, ball, dir, nextY) {
             bevelSegments: 11
         }),
         new THREE.MeshStandardMaterial({ 
-            color: 'red',
-            roughness: 0,
-            metalness: 1
+            map: posttexture
          })
     );
     postCap2.rotation.x = Math.PI / 2
@@ -309,30 +317,14 @@ function RailingPost(start, end, scale = 0.01, ball, dir, nextY) {
     var postBall = new THREE.Mesh(
         new THREE.SphereGeometry(.075, 11, 11),
         new THREE.MeshStandardMaterial({
-            color: 'gold',
-            roughness: 0,
-            metalness: 1,
-            transparent: true,
-            opacity: 0.8
+            // color: 'gold',
+            map: posttexture
         }))
     postBall.castShadow = true
     postBall.receiveShadow = true
     postBall.position.y = .85
 
     var amplitude = 0.1
-
-    // var railingCurve = new RailingCurve(11, amplitude, dir, nextY)
-
-    // var postRailing = new THREE.Mesh(
-    //     new THREE.TubeGeometry(railingCurve, Math.floor(randomInRange(8, 50)), .01),
-    //     new THREE.MeshStandardMaterial({ 
-    //         color: 'gold',
-    //         metalness: 1,
-    //         roughness: 0
-    //      })
-    // )
-    // postRailing.position.y = 0.75; // Place on top of the post
-
     // // Group the parts together
     var group = new THREE.Group();
     if (ball) {
@@ -348,6 +340,7 @@ function RailingPost(start, end, scale = 0.01, ball, dir, nextY) {
 
     // Set the overall position of the group
     group.position.set(start.x - .2, start.y, start.z);
+    group.name = 'railing-group'
 
     for (var child of group.children) {
         child.castShadow = true
@@ -1561,6 +1554,7 @@ class ObjectEdit {
 class Castle {
     offsetY = 1.5
     elevatorSpeed = 0.2
+    parts = []
 
     constructor(castleBaseCenter) {
         for (var key in VM.map.structures[0]) {
@@ -1614,18 +1608,19 @@ class Castle {
         })
         
 
-        var opts = {}
-        opts.map = boardwalkTexture;
-        var tilePlane = new THREE.Mesh(
-            new THREE.BoxGeometry(boardwalk.width, boardwalk.height, boardwalk.depth),
-            new THREE.MeshStandardMaterial(opts)
-        );
-        tilePlane.receiveShadow = true;
-        tilePlane.castShadow = true
-        tilePlane.position.set(boardwalk.center.x, boardwalk.center.y, boardwalk.center.z);
-        this.parts.push(tilePlane)
-        tilePlane.frustrumCulled = true
-        scene.add(tilePlane)
+        // var opts = {}
+        // opts.map = boardwalkTexture;
+        // var tilePlane = new THREE.Mesh(
+        //     new THREE.BoxGeometry(boardwalk.width, boardwalk.height, boardwalk.depth),
+        //     new THREE.MeshStandardMaterial(opts)
+        // );
+        // tilePlane.receiveShadow = true;
+        // tilePlane.castShadow = true
+        // tilePlane.position.set(boardwalk.center.x, boardwalk.center.y, boardwalk.center.z);
+        // tilePlane.name = 'boardwalk:' + boardwalk.center.x.toFixed(2) + '_' + boardwalk.center.y.toFixed(2) + '_' + boardwalk.center.z.toFixed(2)
+        // tilePlane.frustrumCulled = true
+        // tilePlane.massive = true
+        // scene.add(tilePlane)
 
         this.createABoardwalk(boardwalk, boardwalkTexture)
 
@@ -1648,13 +1643,12 @@ class Castle {
             ppp.y += 0.65
             postPoints.push(ppp)
             scene.add(rp)
-            this.objects.push(rp)
+            this.parts.push(rp)
 
             z += 2
         }
 
         for (var i = 0; i < postPoints.length - 1; i++) {
-            console.log(postPoints[i].z)
             if (postPoints[i].z >= -11 || postPoints[i].z < -13) {
                 for (var j = 0; j < 3; j++) {
                     let start = postPoints[i].clone()
@@ -1662,6 +1656,8 @@ class Castle {
                     start.y -= 0.2 * j
                     end.y -= 0.2 * j
                     var railing = new RailingCurve(start, end, 'z')
+                    railing.name = 'railing-' + i + '_' + j
+                    this.parts.push(railing)
                     scene.add(railing)
                 }
             }
@@ -1712,7 +1708,7 @@ class Castle {
                 })
             );
             step.position.set(stepX, stepY, stepZ);
-
+            step.massive = true
             scene.add(step);
             this.parts.push(step);
 
@@ -1730,6 +1726,7 @@ class Castle {
                     );
                     stepTurnPlane.geometry.computeBoundingBox();
                     stepTurnPlane.position.set(stepX + 1, stepY, stepZ);
+                    stepTurnPlane.massive = true
                     scene.add(stepTurnPlane);
 
                     // const sign = createSign(stepTurnPlane, stepTurnPlane.position);
@@ -1779,6 +1776,7 @@ class Castle {
                 end.y -= 0.2 * j
                 var railing = new RailingCurve(start, end, 'x')
                 railing.rotation.z = -0.45
+                railing.name = 'railing:' + railing.position.x.toFixed(2) + "_" + railing.position.y.toFixed(2) + "_" + railing.position.z.toFixed(2)
                 scene.add(railing)
             }
         }
@@ -1792,6 +1790,7 @@ class Castle {
         const postMaterial = new THREE.MeshStandardMaterial({ color: 'black' });
         const lampPost = new THREE.Mesh(postGeometry, postMaterial);
         lampPost.position.set(x, y + lampHeight / 2, z); // Position it so the base is at the given coordinates
+        lampPost.massive = true
         scene.add(lampPost);
 
         // Create the top cap of the lamp post (a sphere)
@@ -1799,6 +1798,7 @@ class Castle {
         const capMaterial = new THREE.MeshStandardMaterial({ color: 'black' });
         const lampPostCap = new THREE.Mesh(capGeometry, capMaterial);
         lampPostCap.position.set(x, y + lampHeight, z); // Position at the top of the post
+        lampPostCap.massive = true
         scene.add(lampPostCap);
 
         // Define the lightbulb shape using LatheGeometry (profile of half-bulb)
@@ -1836,12 +1836,10 @@ class Castle {
         pointLight.castShadow = true; // Enable shadows if needed
         scene.add(pointLight);
 
-        // var group = new THREE.Group()
-        // group.add(lampPost)
-        // group.add(lampPostCap)
-        // group.add(bulb)
-        // group.add(filament)
-        // group.add(pointLight)
+        this.parts.push(lampPost)
+        this.parts.push(lampPostCap)
+        this.parts.push(bulb)
+        this.parts.push(filament)
 
         return pointLight
     }
@@ -1856,8 +1854,10 @@ class Castle {
         tilePlane.receiveShadow = true;
         tilePlane.castShadow = true
         tilePlane.position.set(bw.center.x, bw.center.y, bw.center.z);
-        this.parts.push(tilePlane)
+        // this.parts.push(tilePlane)
+        tilePlane.name = 'boardwalk:' + bw.center.x.toFixed(2) + '_' + bw.center.y.toFixed(2) + '_' + bw.center.z.toFixed(2)
         tilePlane.frustrumCulled = true
+        tilePlane.massive = true
         scene.add(tilePlane)
     }
 
@@ -2228,178 +2228,6 @@ class Castle {
         }
     }
 
-    building(floorY) {
-        floorY += boardwalk.height
-        for (var level = 0; level < 1; level++) {
-            const foundation = new THREE.Mesh(
-                new THREE.BoxGeometry(house.width, house.foundation.height, house.depth),
-                    new THREE.MeshStandardMaterial({
-                        map: CONCRETE,
-                        side: THREE.DoubleSide
-                    }),
-                    
-            )
-            foundation.position.set(0, floorY, 0)
-            
-            foundation.frustrumCulled = true
-            this.objects.push(foundation)
-            this.parts.push(foundation)
-            scene.add(foundation)
-
-            for (var i = 0; i < 4; i++) {
-                const group = new THREE.Group()
-                var canvasMaterial
-                // Create a canvas element
-                const canvas = document.createElement('canvas');
-                canvas.width = 512;
-                canvas.height = 512;
-
-                // Get the 2D context of the canvas
-                const context = canvas.getContext('2d');
-
-                // Set the background color for the canvas
-                context.fillStyle = '#A9A9A9'; // Base stone gray color
-                context.fillRect(0, 0, canvas.width, canvas.height);
-
-                // Function to draw an ornate, organic brick pattern
-                function drawBricks() {
-                    const brickWidth = randomInRange(20, 60); // Base brick width
-                    const brickHeight = randomInRange(30, 35); // Base brick height
-                    const brickOffset = 5; // Space between bricks
-
-                    for (let y = 0; y < canvas.height; y += brickHeight + brickOffset) {
-                        for (let x = 0; x < canvas.width; x += brickWidth + brickOffset) {
-                            // Randomize dimensions for organic feel
-                            const widthVariation = brickWidth * (Math.random() * 0.2 - 0.1); // ±10% width variation
-                            const heightVariation = brickHeight * (Math.random() * 0.2 - 0.1); // ±10% height variation
-                            const currentBrickWidth = brickWidth + widthVariation;
-                            const currentBrickHeight = brickHeight + heightVariation;
-
-                            // Set brick color with slight gray variations for each brick
-                            const grayValue = 120 + Math.random() * 50; // Gray color range
-                            context.fillStyle = `rgb(${grayValue}, ${grayValue}, ${grayValue})`;
-                            context.fillRect(
-                                x + Math.random() * 5, // Add slight horizontal offset for irregularity
-                                y + Math.random() * 5, // Add slight vertical offset for irregularity
-                                currentBrickWidth,
-                                currentBrickHeight
-                            );
-
-                            // Add subtle highlights and shadows to enhance texture
-                            context.lineWidth = 1;
-                            context.strokeStyle = `rgba(255, 255, 255, 0.1)`; // Subtle highlight
-                            context.beginPath();
-                            context.moveTo(x, y);
-                            context.lineTo(x + currentBrickWidth, y);
-                            context.lineTo(x + currentBrickWidth, y + currentBrickHeight);
-                            context.stroke();
-
-                            context.strokeStyle = `rgba(0, 0, 0, 0.2)`; // Subtle shadow
-                            context.beginPath();
-                            context.moveTo(x, y);
-                            context.lineTo(x, y + currentBrickHeight);
-                            context.lineTo(x + currentBrickWidth, y + currentBrickHeight);
-                            context.stroke();
-                        }
-                    }
-                }
-
-                // Draw the ornate, organic brick wall
-                drawBricks();
-
-
-       
-                // Create a texture from the canvas
-                const texture = new THREE.CanvasTexture(canvas);
-
-                // Create the plane geometry and apply the canvas texture
-                const geometry = new THREE.PlaneGeometry(i % 2 === 0 ? house.depth : house.width, house.height);
-                const material = new THREE.MeshStandardMaterial({
-                    map: texture,                  // Use the canvas texture
-                    metalness: 0,
-                    roughness: 1,
-                    side: THREE.DoubleSide,
-                    transparent: false,
-                    opacity: 1,
-                    wireframe: true
-                });
-
-                const wall = new THREE.Mesh(geometry, material);
-
-                // Position the wall
-                wall.position.set(
-                    house.center.x, 
-                    floorY + house.height / 2 + house.foundation.height / 2,
-                    house.center.z
-                );
-
-                wall.castShadow = true
-                wall.receiveShadow = true
-
-                // Add wall to the scene
-                scene.add(wall);
-
-                switch (i) {
-                    case 0:
-                        wall.rotation.y = Math.PI / 2;            // 90 degrees for left wall
-                        wall.position.x = house.width / 2;        // Position on positive X
-                        break;
-                    case 1:
-                        wall.rotation.y = 0;                      // No rotation for front wall
-                        wall.position.z = house.depth / 2;        // Position on positive Z
-                        break;
-                    case 2:
-                        wall.rotation.y = Math.PI / 2;            // 90 degrees for right wall
-                        wall.position.x = -house.width / 2;       // Position on negative X
-                        break;
-                    case 3:
-                        wall.rotation.y = Math.PI;                // 180 degrees for back wall
-                        wall.position.z = -house.depth / 2;       // Position on negative Z
-                        break;
-                }
-
-                group.add(wall)
-                scene.add(group)
-                this.parts.push(group)
-                this.objects.push(group);
-            }
-            
-
-            floorY += house.height + house.foundation.height
-
-
-
-        }
-
-        const roofVertices = [];
-        const roofIndices = [];
-        const segmentSize = 2;
-        const rows = Math.floor(house.width / segmentSize);
-        const cols = Math.floor(house.depth / segmentSize);
-
-        for (let i = 0; i <= rows; i++) {
-            for (let j = 0; j <= cols; j++) {
-                const x = house.center.x - house.width / 2 + i * segmentSize;
-                const z = house.center.z - house.depth / 2 + j * segmentSize;
-                const y = randomInRange(floorY, floorY + 10);  // Apply random height for variation
-                roofVertices.push(x, y, z);
-
-                // Skip last row/column to avoid indexing out of bounds
-                if (i < rows && j < cols) {
-                    const topLeft = i * (cols + 1) + j;
-                    const topRight = topLeft + 1;
-                    const bottomLeft = (i + 1) * (cols + 1) + j;
-                    const bottomRight = bottomLeft + 1;
-
-                    // Create two triangles for the quad
-                    roofIndices.push(topLeft, bottomLeft, bottomRight); // First triangle
-                    roofIndices.push(topLeft, bottomRight, topRight);   // Second triangle
-                }
-            }
-        }
-        
-    }
-
     createRocks(dock) {
         const width = dock.width;
         const depth = dock.depth;
@@ -2443,46 +2271,12 @@ class Castle {
             rock.frustumCulled = true;
         
             // Add the rock to the scene and to the parts array
+            rock.massive = true
             scene.add(rock);
             this.parts.push(rock);
             
             // Save the position for reference
             rockPositions.push(rockPosition);
-        }
-    }
-
-
-
-    update() {
-        for (var object of this.objects) {
-            if (object instanceof THREE.Group) {
-                if (!object.boundingBox) {
-                    object.boundingBox = new THREE.Box3().setFromObject(object)
-                }
-                if (cameraBoundingBox().intersectsBox(object.boundingBox)) {
-                    const boundingBoxCenter = new THREE.Vector3();
-                    object.boundingBox.getCenter(boundingBoxCenter);
-                    var directionFromUser = new THREE.Vector3()
-                    directionFromUser.subVectors(boundingBoxCenter, user.camera.position).normalize()
-
-                    user.camera.position.x -= directionFromUser.x
-                    // user.camera.position.y -= directionFromUser.y
-                    user.camera.position.z -= directionFromUser.z
-
-                    if (user.w) {
-                        user.wS = 0.0
-                    }
-                    if (user.a) {
-                        user.aS = 0.0
-                    }
-                    if (user.s) {
-                        user.sS = 0.0
-                    }
-                    if (user.d) {
-                        user.dS = 0.0
-                    }
-                }
-            }
         }
     }
 }
@@ -2798,11 +2592,6 @@ class Terrain {
     }
 
 
-
-
-
-
-
     generateTerrain(centerX = 0, centerY = 0, centerZ = 0) {
         const centerKey = `${centerX}_${centerZ}`;
         this.initializeTerrain();
@@ -2864,6 +2653,7 @@ class Terrain {
 
         var mesh = new THREE.Mesh(geo, mat);
         mesh.receiveShadow = true;
+        mesh.massive = true
         scene.add(mesh);
         return mesh;
     }
@@ -2990,12 +2780,12 @@ class Terrain {
 
         if (!dev) {
         
-            for (let cx = 21; cx > 0 - landscape.field.width / 2; cx -= 3) {
+            for (let cx = 21; cx > 0 - landscape.field.width / 2; cx -= 13) {
                 var cypressTree = this.createCypress(cx, 9, -15.5, 'cypress')
                 this.trees.push(cypressTree)
             }
 
-            for (let cx = 21; cx > 0 - landscape.field.width / 2; cx -= 3) {
+            for (let cx = 21; cx > 0 - landscape.field.width / 2; cx -= 13) {
                 var cypressTree = this.createCypress(cx, 9, 16, 'cypress')
                 this.trees.push(cypressTree)
             }
@@ -3121,10 +2911,13 @@ class Terrain {
         const t2 = TriangleMesh(vertices, b, c, d, this.width, this.height, groundTexture);
 
         [t1, t2].forEach((triangleMesh) => {
+            triangleMesh.massive = true
 
             var trianglePosition = this.getTriangleCenter(triangleMesh.triangle)
             var triangle = triangleMesh.triangle
 
+            triangleMesh.name = 'ground:' + trianglePosition.x.toFixed(2) + '_' + trianglePosition.y.toFixed(2) + '_' + trianglePosition.z.toFixed(2)
+            triangleMesh.triangle.normal = triangleMesh.normal
             this.grounds.push(triangleMesh)
 
             /* TERRAIN FEATURES */
@@ -3231,10 +3024,7 @@ class Terrain {
                 // }
 
             }
-        })     
-
-    
-        
+        })             
     }
 
     createInstancedMeshGrounds() {
@@ -3835,6 +3625,7 @@ class UserController {
         this.addEventListener();
         this.init();
         this.objects = []
+        this.keydown = false
     }
 
     moveForward() {
@@ -3883,12 +3674,16 @@ class UserController {
         window.addEventListener('keydown', (e) => {
             if (/object-edit/.test(e.srcElement.className)) return
             const key = e.key.toUpperCase();
+            if (this[key]) {
+                return;
+            }
+            this[key] = true
             if (key == 'META') {
                 this.meta = true
-            }
-            if (this.cmd && key == 'S') {
+            } else if (this.cmd && key == 'S') {
                 
-            } if (key == 'W') {
+            } else if (key == 'W') {
+                console.log('keying down w')
                 this.w = true;
                 this.time_held.w = new Date().getTime();
             } else if (key == 'A') {
@@ -3923,10 +3718,10 @@ class UserController {
         
         window.addEventListener('keyup', (e) => {
             const key = e.key.toUpperCase();
+            this[key] = false
             if (key == 'META') {
                 this.meta = false
-            }
-            if (key == 'W') {
+            } else if (key == 'W') {
                 user.w = false;
                 this.wS = .1
                 this.time_held.w = 0;
@@ -4037,15 +3832,20 @@ class UserController {
         this.previous = { movementX: 0, movementY: 0 }
         this.targetLook = new THREE.Vector3();
 
-        window.addEventListener('mousedown', () => { this.mouseDown = true });
+        let initialDirectionSet = false;
+        const baseSensitivity = 0.03;
+        this.maxPitch = THREE.MathUtils.degToRad(45);  // Set max pitch angle
+
+        window.addEventListener('mousedown', () => { 
+            this.mouseDown = true;
+            // Set the initial direction only once
+            if (!initialDirectionSet) {
+                initialDirectionSet = true;
+                // We don't need to explicitly set yaw and pitch here; we'll use incremental rotations
+            }
+        });
+
         window.addEventListener('mouseup', () => { this.mouseDown = false });
-
-        let lastTouchX = null;
-        let lastTouchY = null;
-
-        // Define the max angle for the arc (in radians)
-        const maxAngle = THREE.MathUtils.degToRad(45);  // 45 degrees in radians
-        const baseSensitivity = 0.03; 
 
         // Mouse move event for controlling camera rotation
         window.addEventListener('mousemove', (event) => {
@@ -4059,17 +3859,28 @@ class UserController {
                 const maxDistance = Math.sqrt(centerX * centerX + centerY * centerY);  // Max distance to edge of canvas
                 const scaledSensitivity = baseSensitivity * (distanceFromCenter / maxDistance);
 
-                // Apply scaled sensitivity to yaw and pitch adjustments
-                this.yaw -= event.movementX * scaledSensitivity;
-                this.pitch -= event.movementY * scaledSensitivity;
+                // Calculate yaw (horizontal rotation) and pitch (vertical rotation) deltas
+                const deltaYaw = -event.movementX * scaledSensitivity;
+                const deltaPitch = -event.movementY * scaledSensitivity;
 
-                // Clamp the pitch to avoid flipping
-                this.pitch = Math.max(-this.maxPitch, Math.min(this.maxPitch, this.pitch));
+                // Clamp the pitch to avoid flipping the camera
+                const currentPitch = Math.asin(this.camera.getWorldDirection(new THREE.Vector3()).y);
+                const newPitch = THREE.MathUtils.clamp(currentPitch + deltaPitch, -this.maxPitch, this.maxPitch);
 
-                const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');  // Yaw-Pitch-Roll
-                this.camera.quaternion.setFromEuler(euler);  // Apply rotation to the camera
+                const yawQuaternion = new THREE.Quaternion();
+                const pitchQuaternion = new THREE.Quaternion();
+
+                // Apply yaw rotation around the world Y-axis
+                yawQuaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), deltaYaw);
+
+                // Apply pitch rotation around the camera's local X-axis
+                pitchQuaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), deltaPitch);
+                // Combine the yaw and pitch rotations with the current camera orientation
+                this.camera.quaternion.multiplyQuaternions(yawQuaternion, this.camera.quaternion);
+                this.camera.quaternion.multiply(pitchQuaternion);
             }
         });
+
 
 
         window.addEventListener('touchstart', (event) => {
@@ -4175,6 +3986,9 @@ class UserController {
 
         // Movement (while not jumping, or with reduced movement during jumping)
         var combinedMovement = new THREE.Vector3();
+
+        document.getElementById('viz').innerHTML = `<br/>w:${this.w}`
+
         if (this.w || this.a || this.s || this.d) {
             var direction = new THREE.Vector3();
             var right = new THREE.Vector3();
@@ -4182,28 +3996,28 @@ class UserController {
             var rightMovement = new THREE.Vector3();
             var combinedMovement = new THREE.Vector3();  // To store the final movement result
 
-            if (this.w && !this._w) {
+            if (this.w) {
                 this.camera.getWorldDirection(direction);
                 direction.y = 0;  // Ignore vertical movement
                 direction.normalize();  // Ensure consistent vector length
                 forwardMovement.add(direction.multiplyScalar(this.wS + (this.run ? 0.23 : 0)));  // Move forward by this.wS
             }
 
-            if (this.s && !this._s) {
+            if (this.s) {
                 this.camera.getWorldDirection(direction);
                 direction.y = 0;
                 direction.normalize();  // Normalize for consistent movement
                 forwardMovement.sub(direction.multiplyScalar(this.sS + (this.run ? 0.23 : 0)));  // Move backward by this.sS
             }
 
-            if ((this.a && !this._a)) {
+            if (this.a) {
                 this.camera.getWorldDirection(direction);
                 direction.y = 0;  // Keep movement in the horizontal plane
                 right.crossVectors(this.camera.up, direction).normalize();  // Calculate the right vector
                 rightMovement.add(right.multiplyScalar(this.aS + (this.run ? 0.23 : 0)));  // Move right
             } 
 
-            if ((this.d && !this._d)) {
+            if (this.d) {
                 this.camera.getWorldDirection(direction);
                 direction.y = 0;  // Keep movement in the horizontal plane
                 right.crossVectors(this.camera.up, direction).normalize();  // Calculate the right vector
@@ -4250,11 +4064,13 @@ class UserController {
     }
         
     handleCollision() {
-        const cameraBox = new THREE.Box3().setFromCenterAndSize(
+        let cameraBox = new THREE.Box3().setFromCenterAndSize(
             this.camera.position.clone(),
-            new THREE.Vector3(.5, 1.2, .2)  // Adjust based on camera size
+            new THREE.Vector3(0.5, 1.2, 0.2) // Adjust based on camera size
         );
 
+        // for triangles
+          
         const directions = [
             new THREE.Vector3(0, -1, 0),   // Down
             new THREE.Vector3(0, 1, 0),    // Up
@@ -4264,95 +4080,149 @@ class UserController {
             new THREE.Vector3(0, 0, -1),   // Backward
         ];
 
+        const raycaster = new THREE.Raycaster();
 
         for (const direction of directions) {
-            var dir = direction
+            // Set up raycaster for the current direction
+            raycaster.set(this.camera.position, direction.clone().normalize());
 
-            const ray = new THREE.Ray(this.camera.position.clone(), direction.clone().normalize());
-
-            let closestIntersection = null;
-            let minDistance = .5;
-            let intersectionNormal = null;
-
-            terrain.cliffs.forEach(cliff => {
-
-                const a = cliff.triangle.a;
-                const b = cliff.triangle.b;
-                const c = cliff.triangle.c;
-
-                const intersectionPoint = new THREE.Vector3();
-
-                const intersects = ray.intersectTriangle(a, b, c, false, intersectionPoint);
-
-                if (intersects) {
-                    const distance = this.camera.position.distanceTo(intersectionPoint);
-
-                    if (distance < minDistance) {
-                        minDistance = distance;
-                        closestIntersection = { normal: cliff.triangle.normal, point: intersects }
-                    }
-                }
-            });
-
-            if (closestIntersection) {
-                const cameraToIntersection = new THREE.Vector3().subVectors(closestIntersection.point, this.camera.position);
-                const dotProduct = cameraToIntersection.dot(closestIntersection.normal);
-                const offset = user.wS * 2;  // Adjust based on your needs
-
-                const normalOffset = closestIntersection.normal.clone().multiplyScalar(offset);
-
-                if (this.floor !== null && normalOffset.y !== 0) normalOffset.y = 0
-
-                this.camera.position.add(normalOffset);
-
-                this.camera.velocity.y = 0;
-                this.isJumping = false;
-
-                break;
+            // Handle terrain cliffs
+            const closestCliff = this.getClosestTriangle(raycaster, terrain.cliffs);
+            if (closestCliff) {
+                this.floor = 'handleCollision:' + closestCliff.point.y
+                this.resolveCollisionWithTriangle(closestCliff);
+                continue;
             }
 
-            const raycaster = new THREE.Raycaster(this.camera.position, dir.normalize());
-
-            const intersectsTrees = raycaster.intersectObjects(this.terrain.trees.flatMap(tree => [tree.trunk, tree.foliage]), true);
-            if (intersectsTrees.length > 0 && intersectsTrees[0].distance < 1) {
-                console.log("intersecting a tree")
-                const responseDirection = this.camera.position.clone().sub(intersectsTrees[0].point).normalize();
-                this.camera.position.add(responseDirection.multiplyScalar(1));
-
-                if (direction.equals(new THREE.Vector3(0, -1, 0))) {
-                    this.camera.velocity.y = 0;
-                    this.camera.position.y = intersectsTrees[0].point.y + 1;
-                } else if (direction.equals(new THREE.Vector3(0, 1, 0))) {
-                    this.camera.velocity.y = Math.min(this.camera.velocity.y, 0);
-                }
-            }
-
-            const intersectsCastle = raycaster.intersectObjects(window.castle.parts, true);
-            if (intersectsCastle.length > 0 && intersectsCastle.some(i => i.distance < 0.2)) {
-                const responseDirection = this.camera.position.clone().sub(intersectsCastle[0].point).normalize();
-
-                if (isVerticalIntersection(intersectsCastle[0].face.normal)) {
-                    this.camera.velocity.y = 0;
-                    this.camera.position.y = intersectsCastle[0].point.y + 1;
-                } else {
-                    this.camera.position.add(responseDirection.multiplyScalar(1));
-                }
-            }
-
-
-            const grassBendStrength = 0.1; // Adjust this for more or less bending
-
-            // Update the camera direction vector
-            var cameraDirection = new THREE.Vector3()
-            this.camera.getWorldDirection(cameraDirection);
-
-       
-
-            if (this.isJumping) {
-                var closestGround = undefined
+            // Handle terrain cliffs
+            const closestGround = this.getClosestTriangle(raycaster, terrain.grounds);
+            if (closestGround) {
+                this.floor = 'handleCollision:' + closestGround.point.y
+                this.resolveCollisionWithTriangle(closestGround);
+                continue;
             }
         }
+
+        cameraBox = new THREE.Box3().setFromCenterAndSize(
+            this.camera.position.clone(),
+            new THREE.Vector3(0.5, 1.2, 0.2) // Adjust based on camera size
+        );
+
+        const collisionObjects = castle.parts
+
+        for (let i = 0; i < collisionObjects.length; i++) {
+            const child = collisionObjects[i];
+            const worldBoundingBox = new THREE.Box3();
+
+            if (child.isGroup) {
+                worldBoundingBox.setFromObject(child);
+            } else if (child.geometry) {
+
+                if (!child.geometry.boundingBox) {
+                    child.geometry.computeBoundingBox();
+                }
+
+                worldBoundingBox.copy(child.geometry.boundingBox).applyMatrix4(child.matrixWorld);
+            } else {
+                console.warn(`Skipping object without geometry or group: ${child.name}`);
+                continue;
+            }
+
+            if (cameraBox.intersectsBox(worldBoundingBox)) {
+                const responseDirection = new THREE.Vector3()
+                    .subVectors(this.camera.position, worldBoundingBox.getCenter(new THREE.Vector3()))
+                    .normalize();
+
+                document.getElementById('viz').innerHTML += '<br/>' + child.name;
+
+                const responseStrength = this.wS + .1; // Adjust as needed
+                this.camera.position.add(responseDirection.multiplyScalar(responseStrength));
+
+                ['a','s','d','w'].forEach(dir => {
+                    if (this[dir]) {
+                        this[dir] = false
+                    }
+                })
+
+                // user.wS = 0.0;
+                // user.aS = 0.0;
+                // user.sS = 0.0;
+                // user.dS = 0.0;
+            }
+        }
+
     }
+
+    getClosestTriangle(raycaster, objects) {
+        let closestIntersection = null;
+        let minDistance = 0.5;
+
+        objects.forEach(object => {
+            const { a, b, c } = object.triangle;
+            const intersectionPoint = new THREE.Vector3();
+
+            if (raycaster.ray.intersectTriangle(a, b, c, false, intersectionPoint)) {
+                const distance = raycaster.ray.origin.distanceTo(intersectionPoint);
+
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestIntersection = { normal: object.triangle.normal, point: intersectionPoint };
+                }
+            }
+        });
+
+        return closestIntersection;
+    }
+
+    getClosestObject(raycaster, objects, maxDistance) {
+        const intersections = raycaster.intersectObjects(objects, true);
+        if (intersections.length > 0 && intersections[0].distance < maxDistance) {
+            return intersections[0];
+        }
+        return null;
+    }
+
+    resolveCollisionWithTriangle(intersection) {
+        const cameraToIntersection = new THREE.Vector3().subVectors(intersection.point, this.camera.position);
+        const offset = user.wS * 2; // Adjust based on your needs
+
+        const normalOffset = intersection.normal.clone().multiplyScalar(offset);
+
+        if (this.floor !== null && normalOffset.y !== 0) {
+            normalOffset.y = 0;
+        }
+
+        this.camera.position.add(normalOffset);
+        this.camera.velocity.y = 0;
+        this.isJumping = false;
+    }
+
+    resolveCollisionWithTree(tree, direction) {
+        console.log("Intersecting a tree");
+        const responseDirection = this.camera.position.clone().sub(tree.point).normalize();
+        this.camera.position.add(responseDirection.multiplyScalar(1));
+
+        if (direction.equals(new THREE.Vector3(0, -1, 0))) {
+            this.camera.velocity.y = 0;
+            this.camera.position.y = tree.point.y + 1;
+        } else if (direction.equals(new THREE.Vector3(0, 1, 0))) {
+            this.camera.velocity.y = Math.min(this.camera.velocity.y, 0);
+        }
+    }
+
+    resolveCollisionWithCastle(castle, direction) {
+        console.log("Intersecting castle part");
+        const responseDirection = this.camera.position.clone().sub(castle.point).normalize();
+
+        if (isVerticalIntersection(castle.face.normal)) {
+            this.camera.velocity.y = 0;
+            this.camera.position.y = castle.point.y + 1;
+        } else {
+            this.camera.position.add(responseDirection.multiplyScalar(1));
+        }
+    }
+
+
 
     getClosestPointOnBox(box, point) {
         const clampedX = Math.max(box.min.x, Math.min(point.x, box.max.x));
@@ -4412,7 +4282,7 @@ class UserController {
 
             // Adjust the camera position to the surface plus a small offset to simulate landing
             this.camera.position.y = downIntersection.point.y + .6;
-            this.floor = this.camera.position.y ;
+            this.floor = 'handleJumping: ' + this.camera.position.y ;
             this.camera.velocity.y = 0;
             this.isJumping = false;
         } else {
@@ -4451,13 +4321,16 @@ class UserController {
         const raycaster = new THREE.Raycaster(this.camera.position, new THREE.Vector3(0, -1, 0));
         const intersection = this.findClosestIntersection(raycaster);
 
-        if (intersection && intersection.distance < 1) {
+        if (intersection && intersection.distance < 11) {
             this.intersections.push(intersection)
+
+            document.getElementById('viz').innerHTML = 'down to ' + intersection.object.name + '<br/>' +
+                'floor: ' + this.floor + '<br/>'
 
             var newY = intersection.point.y + 1
 
             this.camera.position.y = newY;
-            this.floor = intersection.point.y + 1
+            this.floor = 'applyGravity: ' + intersection.point.y + 1
 
             this.camera.velocity.y = 0;
             this.isJumping = false;
@@ -4475,6 +4348,8 @@ class UserController {
         if (upIntersection && upIntersection.distance < .5) {
             // console.log("Camera hit the ceiling");
 
+            document.getElementById('viz').innerHTML = 'up to ' + upIntersection.object.name
+
             // Prevent the camera from going through the ceiling
             this.camera.position.y = upIntersection.point.y - .5; // Adjust based on how close you want to stop
             this.camera.velocity.y = 0;
@@ -4489,7 +4364,7 @@ class UserController {
         let closestIntersection = null;
         let minDistance = 1;
 
-        for (let m of scene.children.filter(child => !child.isPerson)) {
+        for (let m of scene.children.filter(child => child.massive)) {
             var mesh = m.mesh ? m.mesh : m
             const intersects = raycaster.intersectObject(mesh, true);
             if (intersects.length > 0 && intersects[0].distance < minDistance) {
@@ -4545,7 +4420,9 @@ class View {
 
         Animate();
 
+        document.getElementById('viz').innerHTML = ''
 
+        //visualizeBoundingBoxes(window.castle.parts)
     }
 
 
@@ -4618,6 +4495,40 @@ window.view = new View();
 
 
 
+function visualizeBoundingBoxes(children) {
+    // Create a group to hold all bounding box helpers so they can be added/removed easily
+    const boundingBoxGroup = new THREE.Group();
+
+    // Loop through each child in the scene
+    children.forEach((child) => {
+        // Check if the child has a geometry to calculate the bounding box
+        if (child.geometry) {
+            // Update the geometry to ensure it has the latest transformations
+            child.geometry.computeBoundingBox();
+            
+            // Get the bounding box of the geometry
+            const boundingBox = child.geometry.boundingBox;
+            
+            // Create a Box3Helper to visualize the bounding box
+            const boxHelper = new THREE.Box3Helper(boundingBox.clone().applyMatrix4(child.matrixWorld), 0xff0000); // Red color
+
+            // Add the helper to the boundingBoxGroup
+            boundingBoxGroup.add(boxHelper);
+        } else {
+            // If the child doesn't have a geometry, try to compute a bounding box based on its world position
+            const boundingBox = new THREE.Box3().setFromObject(child);
+            if (boundingBox.isEmpty() === false) {
+                const boxHelper = new THREE.Box3Helper(boundingBox, 0x00ff00); // Green color for non-geometry objects
+                boundingBoxGroup.add(boxHelper);
+            }
+        }
+    });
+
+    // Add the group to the scene to display bounding boxes
+    scene.add(boundingBoxGroup);
+
+    return boundingBoxGroup; // Return the group so it can be removed or modified later
+}
 
 
 
@@ -4632,7 +4543,6 @@ window.Animate = function() {
         window.terrain.updateTerrain()
         window.user.handleMovement()
         UndulateWater()
-        window.castle.update()
        
         if (user.shouldMoveForward) {
             user.moveForward()
