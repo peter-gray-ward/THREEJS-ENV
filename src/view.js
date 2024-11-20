@@ -4108,10 +4108,10 @@ class UserController {
             new THREE.Vector3(0.5, 1.2, 0.2) // Adjust based on camera size
         );
 
-        const collisionObjects = castle.parts
+        [...castle.parts, ...terrain.trees].forEach(obj => {
+            const collisionObject = obj.trunk ? obj.trunk : obj
 
-        for (let i = 0; i < collisionObjects.length; i++) {
-            const child = collisionObjects[i];
+            const child = collisionObject;
             const worldBoundingBox = new THREE.Box3();
 
             if (child.isGroup) {
@@ -4125,7 +4125,7 @@ class UserController {
                 worldBoundingBox.copy(child.geometry.boundingBox).applyMatrix4(child.matrixWorld);
             } else {
                 console.warn(`Skipping object without geometry or group: ${child.name}`);
-                continue;
+                return;
             }
 
             if (cameraBox.intersectsBox(worldBoundingBox)) {
@@ -4149,7 +4149,7 @@ class UserController {
                 // user.sS = 0.0;
                 // user.dS = 0.0;
             }
-        }
+        })
 
     }
 
