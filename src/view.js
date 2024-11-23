@@ -2273,7 +2273,6 @@ class Castle {
             // Add the rock to the scene and to the parts array
             rock.massive = true
             scene.add(rock);
-            this.parts.push(rock);
             
             // Save the position for reference
             rockPositions.push(rockPosition);
